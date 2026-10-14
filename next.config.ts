@@ -1,17 +1,13 @@
-import type { NextConfig } from 'next';
+import type { Next.Config } from "next";
 
-const nextConfig: NextConfig = {
-  // ✅ TypeScript ስህተቶች በ build ጊዜ እንዳያቆሙ
+const next.config: Next.Config = {
   typescript: {
+    // ⚠️ ይህንን በመጨመር ቬርሰል ላይ የ TypeScript ኤረሮች Build እንዳያቆሙ ማድረግ ይቻላል
     ignoreBuildErrors: true,
   },
-  
-  // ✅ ESLint ስህተቶች በ build ጊዜ እንዳያቆሙ
   eslint: {
     ignoreDuringBuilds: true,
   },
-  
-  // ያለህ ሌላ config ካለ እዚህ ይቀጥል...
 };
 
-export default nextConfig;
+export default next.config;
