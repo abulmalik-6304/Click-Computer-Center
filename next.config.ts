@@ -1,8 +1,7 @@
-import type { Next.Config } from "next";
+import type { NextConfig } from "next";
 
-const next.config: Next.Config = {
+const nextConfig: NextConfig = {
   typescript: {
-    // ⚠️ ይህንን በመጨመር ቬርሰል ላይ የ TypeScript ኤረሮች Build እንዳያቆሙ ማድረግ ይቻላል
     ignoreBuildErrors: true,
   },
   eslint: {
@@ -10,4 +9,4 @@ const next.config: Next.Config = {
   },
 };
 
-export default next.config;
+export default nextConfig;
