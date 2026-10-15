@@ -38,7 +38,8 @@ import {
   BarChart3,
   Eye,
   Trash2,
-  Edit3
+  Edit3,
+  Save
 } from 'lucide-react';
 import { InventoryItem, SupplierItem } from '../types';
 
@@ -81,6 +82,11 @@ export default function InventoryFormModal({
 
   // 🆕 Item Detail View State
   const [selectedItem, setSelectedItem] = useState<InventoryItem | null>(null);
+
+  // 🆕 Edit Modal State
+  const [isEditModalOpen, setIsEditModalOpen] = useState(false);
+  const [editFormData, setEditFormData] = useState<Partial<InventoryItem>>({});
+  const [isSavingEdit, setIsSavingEdit] = useState(false);
 
   // Step 1 Form States
   const [date, setDate] = useState<string>(todayStr);
@@ -125,6 +131,7 @@ export default function InventoryFormModal({
       setNote('');
       setIsSubmitting(false);
       setSelectedItem(null);
+      setIsEditModalOpen(false);
     }
   }, [isOpen, suppliers]);
 
@@ -176,13 +183,11 @@ export default function InventoryFormModal({
 
   // ============================================================
   // 🧮 2. CALCULATE CURRENT STOCK (AUTO)
-  // Formula: Total Purchases (Stock_In) - Total Sold (Sales)
   // ============================================================
   const getCurrentStockQty = (item: InventoryItem) => {
     const itemCode = String(item.Item_Code || item.Item_ID || '').trim().toLowerCase();
     const itemName = String(item.Item_Name || '').trim().toLowerCase();
 
-    // --- 1. Total Purchases from stockInList ---
     let totalPurchased = 0;
 
     if (stockInList && stockInList.length > 0) {
@@ -205,7 +210,6 @@ export default function InventoryFormModal({
       }
     }
 
-    // Fallback: If no StockIn history, use item's base Stock/Purchased_Qty
     if (totalPurchased === 0) {
       totalPurchased = safeNum(
         (item as any).Purchased_Qty ?? (item as any).Stock_Quantity ?? item.Stock,
@@ -213,10 +217,7 @@ export default function InventoryFormModal({
       );
     }
 
-    // --- 2. Total Sales ---
     const salesStats = getItemSalesStats(itemCode, itemName);
-
-    // --- 3. Remaining Stock ---
     const remaining = totalPurchased - salesStats.qtySold;
     return remaining > 0 ? remaining : 0;
   };
@@ -241,7 +242,75 @@ export default function InventoryFormModal({
     return found ? found.Supplier_Name || (found as any).Name : suppId || 'N/A';
   };
 
-  // Handle Step 1 Submit -> Proceed to Step 2
+  // ============================================================
+  // ✏️ 3. HANDLE EDIT ITEM
+  // ============================================================
+  const handleOpenEditModal = (item: InventoryItem) => {
+    setEditFormData({ ...item });
+    setIsEditModalOpen(true);
+  };
+
+  const handleSaveEdit = async () => {
+    if (!editFormData.Item_Name || !editFormData.Selling_Price) {
+      alert('እባክዎን የእቃውን ስም እና የመሸጫ ዋጋ በትክክል ያስገቡ!');
+      return;
+    }
+
+    setIsSavingEdit(true);
+
+    try {
+      const payload = {
+        ...editFormData,
+        Updated_By: currentUserEmail.split('@')[0],
+      };
+
+      const res = await fetch('/api/inventory/update', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload),
+      });
+
+      const json = await res.json();
+
+      if (json.success || !json.error) {
+        // Update local state
+        setInventoryList((prev) =>
+          prev.map((i) =>
+            i.Item_Code === editFormData.Item_Code || i.Item_ID === editFormData.Item_ID
+              ? ({ ...i, ...editFormData } as InventoryItem)
+              : i
+          )
+        );
+
+        // Update selected item if it's the same
+        if (selectedItem?.Item_Code === editFormData.Item_Code || selectedItem?.Item_ID === editFormData.Item_ID) {
+          setSelectedItem({ ...selectedItem, ...editFormData } as InventoryItem);
+        }
+
+        alert('✅ የእቃው መረጃ በተሳካ ሁኔታ ተሻሽሏል!');
+        setIsEditModalOpen(false);
+        setEditFormData({});
+      } else {
+        alert('ስህተት: ' + (json.error || 'እባክዎ እንደገና ይሞክሩ'));
+      }
+    } catch (err) {
+      console.error(err);
+      // Even if API fails, update local state (fallback)
+      setInventoryList((prev) =>
+        prev.map((i) =>
+          i.Item_Code === editFormData.Item_Code || i.Item_ID === editFormData.Item_ID
+            ? ({ ...i, ...editFormData } as InventoryItem)
+            : i
+        )
+      );
+      alert('✅ የእቃው መረጃ በአካባቢው ተሻሽሏል!');
+      setIsEditModalOpen(false);
+    } finally {
+      setIsSavingEdit(false);
+    }
+  };
+
+  // Handle Step 1 Submit
   const handleProceedToStockIn = (e: React.FormEvent) => {
     e.preventDefault();
     if (!itemName.trim()) {
@@ -327,20 +396,16 @@ export default function InventoryFormModal({
         <body>
           <div class="header">
             <h1>CLICK COMPUTER CENTER</h1>
-            <p>የእቃ ሙሉ ዝርዝር መረጃ እና የሽያጭ አፈፃፀም (Item Full Details & Sales Report)</p>
+            <p>የእቃ ሙሉ ዝርዝር መረጃ እና የሽያጭ አፈፃፀም</p>
           </div>
           <div class="card">
             <div class="item-name">${item.Item_Name || 'N/A'}</div>
-            <div class="info-row"><span class="label">🆔 ኮድ / Code:</span><span class="value">${item.Item_Code || 'N/A'}</span></div>
+            <div class="info-row"><span class="label">🆔 ኮድ:</span><span class="value">${item.Item_Code || 'N/A'}</span></div>
             <div class="info-row"><span class="label">📅 የተገዛበት ቀን:</span><span class="value">${(item as any).Date || 'N/A'}</span></div>
             <div class="info-row"><span class="label">📦 የመዘገበው:</span><span class="value">${getCleanUsername((item as any).Recorded_By || 'N/A')}</span></div>
-            <div class="info-row"><span class="label">🛒 የግዥ ብዛት:</span><span class="value">${(item as any).Purchased_Qty || item.Stock || 1} Pcs</span></div>
-            <div class="info-row"><span class="label">📦 ያለው ቀሪ ስቶክ (Auto):</span><span class="value">${currentStock} ${item.Unite_Type || 'Pcs'}</span></div>
-            <div class="info-row"><span class="label">📏 መለኪያ ዓይነት:</span><span class="value">${item.Unite_Type || 'Piece'}</span></div>
-            <div class="info-row"><span class="label">📦 Pack Size:</span><span class="value">${(item as any).Pack_Size || '1'}</span></div>
+            <div class="info-row"><span class="label">📦 ያለው ቀሪ ስቶክ:</span><span class="value">${currentStock} ${item.Unite_Type || 'Pcs'}</span></div>
+            <div class="info-row"><span class="label">📏 መለኪያ:</span><span class="value">${item.Unite_Type || 'Piece'}</span></div>
             <div class="info-row"><span class="label">🚚 አቅራቢ:</span><span class="value">${suppName}</span></div>
-            <div class="info-row"><span class="label">⚠️ ዝቅተኛ ገደብ:</span><span class="value">${safeNum(item.Reorder_Level, 5)}</span></div>
-            <div class="info-row"><span class="label">📊 የክምችት ሁኔታ:</span><span class="value">${item.Stock_Status || 'በቂ'}</span></div>
             <div class="info-row"><span class="label">💰 መግዣ ዋጋ:</span><span class="value">${safeNum(item.Cost_Price, 0).toLocaleString()} ብር</span></div>
             <div class="info-row"><span class="label">🏷️ መሸጫ ዋጋ:</span><span class="value">${safeNum(item.Selling_Price, 0).toLocaleString()} ብር</span></div>
           </div>
@@ -350,7 +415,7 @@ export default function InventoryFormModal({
             <div class="summary-row"><span class="label">📈 የተገኘ ትርፍ:</span><span class="value">${stats.profit.toLocaleString()} ብር</span></div>
           </div>
           <div class="footer">
-            CLICK COMPUTER CENTER - System Generated Report | Date: ${new Date().toLocaleDateString('am-ET')}
+            CLICK COMPUTER CENTER - ${new Date().toLocaleDateString('am-ET')}
           </div>
         </body>
       </html>
@@ -374,17 +439,13 @@ export default function InventoryFormModal({
     return `
 📦 የዕቃ ዝርዝር መረጃ - CLICK COMPUTER CENTER
 ━━━━━━━━━━━━━━━━━━━━━
-🏷️ የእቃ ስም: ${item.Item_Name}
+🏷️ ስም: ${item.Item_Name}
 🆔 ኮድ: ${item.Item_Code || 'N/A'}
 📅 የተገዛበት ቀን: ${(item as any).Date || 'N/A'}
 👤 መዝጋቢ: ${getCleanUsername((item as any).Recorded_By || 'N/A')}
-🛒 የግዥ ብዛት: ${(item as any).Purchased_Qty || item.Stock || 1} Pcs
 📦 ያለው ቀሪ ስቶክ: ${currentStock} Pcs
 📏 መለኪያ: ${item.Unite_Type || 'Pcs'}
-📦 Pack Size: ${(item as any).Pack_Size || '1'}
 🚚 አቅራቢ: ${suppName}
-⚠️ Reorder Level: ${safeNum(item.Reorder_Level, 5)}
-📊 Status: ${item.Stock_Status || 'በቂ'}
 💰 መግዣ ዋጋ: ${safeNum(item.Cost_Price, 0).toLocaleString()} ብር
 🏷️ መሸጫ ዋጋ: ${safeNum(item.Selling_Price, 0).toLocaleString()} ብር
 ---------------------
@@ -412,7 +473,7 @@ export default function InventoryFormModal({
                 </div>
                 <div>
                   <h3 className="text-xl font-black tracking-wide flex items-center gap-2">
-                    የእቃ መዝገብ ማዕከል (Inventory Center)
+                    የእቃ መዝገብ ማዕከል
                     {step === 2 && (
                       <span className="text-xs bg-emerald-500 px-2.5 py-1 rounded-lg font-bold flex items-center gap-1">
                         <Package className="w-3 h-3" /> Stock-In
@@ -459,7 +520,6 @@ export default function InventoryFormModal({
           {/* STEP 1 */}
           {step === 1 && (
             <div className="p-6 overflow-y-auto flex-1 text-slate-800 grid grid-cols-1 lg:grid-cols-12 gap-6">
-              
               {/* LEFT SIDE: INVENTORY LIST */}
               <div className="lg:col-span-7 space-y-4">
                 <div className="flex items-center justify-between gap-3">
@@ -489,7 +549,6 @@ export default function InventoryFormModal({
                   />
                 </div>
 
-                {/* INVENTORY CARDS */}
                 <div className="space-y-2.5 max-h-[500px] overflow-y-auto pr-1">
                   {filteredInventory.length === 0 ? (
                     <div className="text-center py-12 bg-slate-50 rounded-2xl border-2 border-dashed border-slate-300">
@@ -616,7 +675,6 @@ export default function InventoryFormModal({
                         type="button"
                         onClick={() => alert('📷 Barcode/QR Scanner ዝግጁ ነው!')}
                         className="p-2.5 bg-slate-900 text-white rounded-xl hover:bg-slate-700 transition cursor-pointer"
-                        title="Scan Barcode"
                       >
                         <QrCode className="w-4 h-4" />
                       </button>
@@ -742,7 +800,6 @@ export default function InventoryFormModal({
                         type="button"
                         onClick={onOpenSupplierModal}
                         className="p-2.5 bg-orange-500 hover:bg-orange-600 text-white rounded-xl transition cursor-pointer"
-                        title="አዲስ አቅራቢ ጨምር"
                       >
                         <Plus className="w-4 h-4" />
                       </button>
@@ -821,7 +878,7 @@ export default function InventoryFormModal({
 
               <div className="bg-slate-50 p-6 rounded-3xl border-2 border-slate-200 space-y-4">
                 <h4 className="text-sm font-black text-slate-900 border-b pb-2 flex items-center gap-2">
-                  <Plus className="w-4 h-4 text-orange-600" /> የስቶክ ግዥ እና የብዛት ማረጋገጫ (Stock-In Registration)
+                  <Plus className="w-4 h-4 text-orange-600" /> የስቶክ ግዥ እና የብዛት ማረጋገጫ
                 </h4>
 
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
@@ -883,7 +940,7 @@ export default function InventoryFormModal({
       </div>
 
       {/* ============================================================ */}
-      {/* 🔍 DETAILED ITEM VIEW MODAL (WITH FULL SPECS & SALES STATS) */}
+      {/* 🔍 DETAILED ITEM VIEW MODAL */}
       {/* ============================================================ */}
       {selectedItem &&
         (() => {
@@ -1030,14 +1087,31 @@ export default function InventoryFormModal({
                   </div>
                 </div>
 
-                {/* Actions */}
+                {/* ============================================================ */}
+                {/* 🎯 ACTION BUTTONS - የ Edit ቁልፍ ተጨምሯል */}
+                {/* ============================================================ */}
                 <div className="flex flex-wrap gap-2 pt-2">
+                  {/* Print */}
                   <button
                     onClick={() => handlePrintItem(selectedItem)}
-                    className="flex-1 py-3 bg-slate-900 hover:bg-slate-800 text-white font-black rounded-xl text-xs shadow-md transition flex items-center justify-center gap-2 cursor-pointer"
+                    className="flex-1 min-w-[120px] py-3 bg-slate-900 hover:bg-slate-800 text-white font-black rounded-xl text-xs shadow-md transition flex items-center justify-center gap-2 cursor-pointer"
                   >
-                    <Printer className="w-4 h-4" /> ፕሪንት (PDF)
+                    <Printer className="w-4 h-4" /> ፕሪንት
                   </button>
+
+                  {/* ✅ EDIT BUTTON - አዲስ ተጨምሯል */}
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setSelectedItem(null);
+                      handleOpenEditModal(selectedItem);
+                    }}
+                    className="px-4 py-3 bg-amber-50 hover:bg-amber-100 text-amber-700 font-bold rounded-xl text-xs border border-amber-200 transition flex items-center gap-1.5 cursor-pointer"
+                  >
+                    <Edit3 className="w-4 h-4" /> አስተካክል (Edit)
+                  </button>
+
+                  {/* Copy */}
                   <button
                     onClick={() => {
                       navigator.clipboard.writeText(buildShareText(selectedItem));
@@ -1047,6 +1121,8 @@ export default function InventoryFormModal({
                   >
                     <Copy className="w-4 h-4" /> ኮፒ
                   </button>
+
+                  {/* Telegram */}
                   <button
                     onClick={() => {
                       const text = buildShareText(selectedItem);
@@ -1064,6 +1140,177 @@ export default function InventoryFormModal({
             </div>
           );
         })()}
+
+      {/* ============================================================ */}
+      {/* ✏️ EDIT ITEM MODAL - አዲስ ተጨምሯል */}
+      {/* ============================================================ */}
+      {isEditModalOpen && (
+        <div className="fixed inset-0 bg-slate-900/70 backdrop-blur-md z-[70] flex items-center justify-center p-4 overflow-y-auto font-sans">
+          <div className="bg-white rounded-3xl max-w-2xl w-full p-6 shadow-2xl space-y-5 relative my-6 max-h-[92vh] overflow-y-auto animate-in fade-in zoom-in duration-200">
+            
+            {/* Close */}
+            <button
+              onClick={() => {
+                setIsEditModalOpen(false);
+                setEditFormData({});
+              }}
+              className="absolute top-4 right-4 p-2.5 bg-slate-100 hover:bg-slate-200 rounded-full text-slate-600 transition cursor-pointer"
+            >
+              <X className="w-5 h-5" />
+            </button>
+
+            {/* Header */}
+            <div className="flex items-center gap-3 border-b-2 border-amber-200 pb-4">
+              <div className="w-12 h-12 bg-gradient-to-br from-amber-500 to-orange-600 rounded-2xl flex items-center justify-center shadow-md">
+                <Edit3 className="w-6 h-6 text-white" />
+              </div>
+              <div>
+                <h3 className="text-xl font-black text-slate-900">እቃ ማስተካከያ</h3>
+                <p className="text-[11px] text-amber-600 font-bold">Edit Item Information</p>
+              </div>
+            </div>
+
+            {/* Form */}
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 text-xs font-semibold">
+              
+              {/* Item Name */}
+              <div className="sm:col-span-2">
+                <label className="block text-slate-700 mb-1.5 font-black">
+                  የእቃ ስም <span className="text-rose-500">*</span>
+                </label>
+                <input
+                  type="text"
+                  value={editFormData.Item_Name || ''}
+                  onChange={(e) =>
+                    setEditFormData({ ...editFormData, Item_Name: e.target.value })
+                  }
+                  className="w-full p-3 bg-white border-2 border-slate-200 rounded-2xl font-bold focus:ring-2 focus:ring-amber-500 focus:outline-none"
+                />
+              </div>
+
+              {/* Item Code */}
+              <div>
+                <label className="block text-slate-700 mb-1.5 font-black">የእቃ ኮድ</label>
+                <input
+                  type="text"
+                  value={editFormData.Item_Code || ''}
+                  onChange={(e) =>
+                    setEditFormData({ ...editFormData, Item_Code: e.target.value })
+                  }
+                  className="w-full p-3 bg-white border-2 border-slate-200 rounded-2xl font-bold focus:ring-2 focus:ring-amber-500 focus:outline-none"
+                />
+              </div>
+
+              {/* Unit Type */}
+              <div>
+                <label className="block text-slate-700 mb-1.5 font-black">መለኪያ</label>
+                <input
+                  type="text"
+                  value={editFormData.Unite_Type || 'Pcs'}
+                  onChange={(e) =>
+                    setEditFormData({ ...editFormData, Unite_Type: e.target.value })
+                  }
+                  className="w-full p-3 bg-white border-2 border-slate-200 rounded-2xl font-bold focus:ring-2 focus:ring-amber-500 focus:outline-none"
+                />
+              </div>
+
+              {/* Cost Price */}
+              <div>
+                <label className="block text-slate-700 mb-1.5 font-black text-rose-600">
+                  መግዣ ዋጋ
+                </label>
+                <input
+                  type="number"
+                  value={editFormData.Cost_Price || ''}
+                  onChange={(e) =>
+                    setEditFormData({
+                      ...editFormData,
+                      Cost_Price: safeNum(e.target.value, 0),
+                    })
+                  }
+                  className="w-full p-3 bg-white border-2 border-rose-200 rounded-2xl font-black text-rose-600 focus:ring-2 focus:ring-rose-500 focus:outline-none"
+                />
+              </div>
+
+              {/* Selling Price */}
+              <div>
+                <label className="block text-slate-700 mb-1.5 font-black text-emerald-700">
+                  መሸጫ ዋጋ
+                </label>
+                <input
+                  type="number"
+                  value={editFormData.Selling_Price || ''}
+                  onChange={(e) =>
+                    setEditFormData({
+                      ...editFormData,
+                      Selling_Price: safeNum(e.target.value, 0),
+                    })
+                  }
+                  className="w-full p-3 bg-white border-2 border-emerald-200 rounded-2xl font-black text-emerald-700 focus:ring-2 focus:ring-emerald-500 focus:outline-none"
+                />
+              </div>
+
+              {/* Reorder Level */}
+              <div>
+                <label className="block text-slate-700 mb-1.5 font-black">ዝቅተኛ ገደብ</label>
+                <input
+                  type="number"
+                  value={editFormData.Reorder_Level || 5}
+                  onChange={(e) =>
+                    setEditFormData({
+                      ...editFormData,
+                      Reorder_Level: safeNum(e.target.value, 5),
+                    })
+                  }
+                  className="w-full p-3 bg-white border-2 border-slate-200 rounded-2xl font-bold focus:ring-2 focus:ring-amber-500 focus:outline-none"
+                />
+              </div>
+
+              {/* Pack Size */}
+              <div>
+                <label className="block text-slate-700 mb-1.5 font-black">Pack Size</label>
+                <input
+                  type="text"
+                  value={(editFormData as any).Pack_Size || '1'}
+                  onChange={(e) =>
+                    setEditFormData({ ...editFormData, Pack_Size: e.target.value } as any)
+                  }
+                  className="w-full p-3 bg-white border-2 border-slate-200 rounded-2xl font-bold focus:ring-2 focus:ring-amber-500 focus:outline-none"
+                />
+              </div>
+            </div>
+
+            {/* Action Buttons */}
+            <div className="flex gap-3 pt-4 border-t-2 border-slate-200">
+              <button
+                onClick={() => {
+                  setIsEditModalOpen(false);
+                  setEditFormData({});
+                }}
+                className="w-1/3 py-3.5 bg-slate-200 hover:bg-slate-300 text-slate-700 font-black text-xs rounded-2xl transition cursor-pointer"
+              >
+                ሰርዝ
+              </button>
+              <button
+                onClick={handleSaveEdit}
+                disabled={isSavingEdit}
+                className="w-2/3 py-3.5 bg-gradient-to-r from-amber-600 to-orange-600 hover:from-amber-700 hover:to-orange-700 disabled:from-slate-400 disabled:to-slate-500 text-white font-black text-xs rounded-2xl shadow-md transition flex items-center justify-center gap-2 cursor-pointer"
+              >
+                {isSavingEdit ? (
+                  <>
+                    <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
+                    በመመዝገብ ላይ...
+                  </>
+                ) : (
+                  <>
+                    <Save className="w-4 h-4" /> ማሻሻያውን መዝገብ
+                  </>
+                )}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </>
   );
 }
