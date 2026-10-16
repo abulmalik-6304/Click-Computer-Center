@@ -10,7 +10,13 @@ import {
   FileText, 
   User, 
   FileSpreadsheet,
-  Users
+  Users,
+  Eye,
+  EyeOff,
+  Lock,
+  Mail,
+  ShieldCheck,
+  Settings
 } from 'lucide-react';
 
 import { UserRole, SaleItem, InventoryItem, ExpenseItem, IncomeItem, CustomerItem, SupplierItem, UserAccount } from '../types';
@@ -20,9 +26,6 @@ import ReportsTab from '../components/ReportsTab';
 import InventoryTab from '../components/InventoryTab';
 import UserActivityTab from '../components/UserActivityTab';
 
-// ✅ SignInCard Import
-import { SignInCard, getDirectDriveImage } from '../components/SignInCard';
-
 import SalesFormModal from '../components/SalesFormModal';
 import IncomeFormModal from '../components/IncomeFormModal';
 import ExpenseFormModal from '../components/ExpenseFormModal';
@@ -31,11 +34,26 @@ import SupplierFormModal from '../components/SupplierFormModal';
 import InventoryFormModal from '../components/InventoryFormModal';
 import UserFormModal from '../components/UserFormModal';
 
+// Google Drive ምስል ማስተካከያ Helper Function
+export const getDirectDriveImage = (url: string) => {
+  if (!url) return '';
+  if (url.includes('drive.google.com')) {
+    const match = url.match(/\/d\/([a-zA-Z0-9_-]+)/) || url.match(/id=([a-zA-Z0-9_-]+)/);
+    if (match && match[1]) {
+      return `https://lh3.googleusercontent.com/d/${match[1]}=s1000`;
+    }
+  }
+  return url;
+};
+
 export default function ClickPerfectPortal() {
   const [data, setData] = useState<any>(null);
   const [loading, setLoading] = useState(true);
   
   // Login State
+  const [emailInput, setEmailInput] = useState<string>('');
+  const [passwordInput, setPasswordInput] = useState<string>('');
+  const [showPassword, setShowPassword] = useState<boolean>(false);
   const [isLoggedIn, setIsLoggedIn] = useState<boolean>(false);
   const [currentUser, setCurrentUser] = useState<UserAccount | null>(null);
   const [preselectedItem, setPreselectedItem] = useState<InventoryItem | null>(null);
@@ -67,20 +85,27 @@ export default function ClickPerfectPortal() {
 
   useEffect(() => { fetchData(); }, []);
 
-  // ✅ NEW: SignInCard Login Handler
-  const handleLoginFromCard = (email: string, role: string) => {
+  const handleLogin = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!emailInput) return;
+
     const usersList: UserAccount[] = data?.users || [];
-    const found = usersList.find(
-      (u) => (u.User_Email || (u as any).Email)?.toLowerCase().trim() === email.toLowerCase().trim()
-    );
+    const found = usersList.find(u => (u.User_Email || (u as any).Email)?.toLowerCase().trim() === emailInput.toLowerCase().trim());
 
     if (found) {
+      // የአንተ ኢሜል ከሆነ በኃይል Owner እናደርገዋለን
+      if (emailInput.toLowerCase().includes('clickcomputercenter230') || emailInput.toLowerCase().includes('abdulmelik')) {
+        found.Role = 'Owner';
+      }
       setCurrentUser(found);
     } else {
-      setCurrentUser({ 
-        User_Email: email, 
-        Role: role as UserRole 
-      });
+      let role: UserRole = 'Employee';
+      if (emailInput.toLowerCase().includes('owner') || emailInput.toLowerCase().includes('admin') || emailInput.toLowerCase().includes('clickcomputercenter230') || emailInput.toLowerCase().includes('abdulmelik')) {
+        role = 'Owner';
+      } else if (emailInput.toLowerCase().includes('tofik') || emailInput.toLowerCase().includes('tahar')) {
+        role = 'Manager';
+      }
+      setCurrentUser({ User_Email: emailInput, Role: role });
     }
     setIsLoggedIn(true);
   };
@@ -99,12 +124,66 @@ export default function ClickPerfectPortal() {
     );
   }
 
-  // ✅ NEW: Use SignInCard instead of inline form
   if (!isLoggedIn) {
-    return <SignInCard onLogin={handleLoginFromCard} />;
+    return (
+      <div className="min-h-screen bg-slate-900 flex items-center justify-center p-6 font-sans">
+        <div className="bg-white border border-slate-200 p-10 rounded-3xl shadow-2xl max-w-md w-full border-t-8 border-t-orange-500 space-y-6">
+          <div className="text-center">
+            <div className="w-20 h-20 bg-white border border-slate-200 p-2 rounded-2xl mx-auto mb-3 shadow-sm flex items-center justify-center">
+              <Image src="/logo.png" alt="Logo" width={70} height={70} className="object-contain" />
+            </div>
+            <h2 className="text-2xl font-black text-slate-900 tracking-tight">CLICK COMPUTER CENTER</h2>
+            <p className="text-xs text-orange-600 font-extrabold mt-1">የሲስተም መግቢያ ገጽ (Sign In)</p>
+          </div>
+
+          <form onSubmit={handleLogin} className="space-y-4">
+            <div>
+              <label className="block text-xs font-black text-slate-700 uppercase mb-1">ኢሜይል (System Email)</label>
+              <div className="relative">
+                <Mail className="w-5 h-5 text-slate-400 absolute left-3.5 top-3.5" />
+                <input
+                  type="email"
+                  required
+                  placeholder="clickcomputercenter230@gmail.com"
+                  value={emailInput}
+                  onChange={(e) => setEmailInput(e.target.value)}
+                  className="w-full pl-11 pr-4 py-3 bg-slate-50 border-2 border-slate-200 rounded-2xl text-xs font-bold text-slate-900 focus:ring-2 focus:ring-orange-500 focus:outline-none"
+                />
+              </div>
+            </div>
+
+            <div>
+              <label className="block text-xs font-black text-slate-700 uppercase mb-1">ፓስወርድ (Password)</label>
+              <div className="relative">
+                <Lock className="w-5 h-5 text-slate-400 absolute left-3.5 top-3.5" />
+                <input
+                  type={showPassword ? 'text' : 'password'}
+                  required
+                  placeholder="••••••••"
+                  value={passwordInput}
+                  onChange={(e) => setPasswordInput(e.target.value)}
+                  className="w-full pl-11 pr-11 py-3 bg-slate-50 border-2 border-slate-200 rounded-2xl text-xs font-bold text-slate-900 focus:ring-2 focus:ring-orange-500 focus:outline-none"
+                />
+                <button
+                  type="button"
+                  onClick={() => setShowPassword(!showPassword)}
+                  className="absolute right-3.5 top-3.5 text-slate-400 hover:text-slate-600 transition cursor-pointer"
+                >
+                  {showPassword ? <EyeOff className="w-5 h-5" /> : <Eye className="w-5 h-5" />}
+                </button>
+              </div>
+            </div>
+
+            <button type="submit" className="w-full bg-orange-600 hover:bg-orange-700 text-white py-4 rounded-2xl font-black text-xs shadow-xl transition cursor-pointer">
+              ወደ ሲስተሙ ግባ (Sign In)
+            </button>
+          </form>
+        </div>
+      </div>
+    );
   }
 
-  const role = currentUser?.Role || 'Employee';
+  const role = (currentUser?.User_Email?.toLowerCase().includes('clickcomputercenter230') || currentUser?.User_Email?.toLowerCase().includes('abdulmelik')) ? 'Owner' : (currentUser?.Role || 'Employee');
   const isAdminOrOwner = role === 'Owner' || role === 'Admin';
   const isOwnerOrManager = role === 'Owner' || role === 'Manager';
 
@@ -148,34 +227,42 @@ export default function ClickPerfectPortal() {
           </div>
 
           <div className="flex items-center gap-4">
-            <div className="bg-slate-100 p-2 pr-4 rounded-2xl border text-xs font-bold flex items-center gap-2">
-              <User className="w-5 h-5 text-orange-500" />
+            <div className="bg-slate-100 p-2 pr-4 rounded-2xl border text-xs font-bold flex items-center gap-3">
+              <div className="w-10 h-10 bg-orange-100 rounded-xl flex items-center justify-center overflow-hidden border border-orange-300">
+                {currentUser?.Profile_Image ? (
+                  <img src={getDirectDriveImage(currentUser.Profile_Image)} alt="Profile" className="w-full h-full object-cover" />
+                ) : (
+                  <User className="w-5 h-5 text-orange-600" />
+                )}
+              </div>
               <div>
-                <p className="text-slate-900">{currentUser?.User_Email}</p>
-                <span className="text-orange-600 font-black text-[10px]">{role} Account</span>
+                <p className="text-slate-900 font-black">{currentUser?.User_Email}</p>
+                <span className="text-orange-600 font-black text-[10px] bg-orange-50 px-2 py-0.5 rounded border border-orange-200">
+                  👑 {role} Account
+                </span>
               </div>
             </div>
-            <button onClick={fetchData} className="bg-blue-600 text-white p-2.5 rounded-2xl hover:bg-blue-700"><RefreshCw className="w-4 h-4" /></button>
-            <button onClick={() => setIsLoggedIn(false)} className="bg-rose-50 text-rose-600 border p-2.5 rounded-2xl hover:bg-rose-100"><LogOut className="w-4 h-4" /></button>
+            <button onClick={fetchData} className="bg-blue-600 text-white p-3 rounded-2xl hover:bg-blue-700 transition cursor-pointer" title="ዳታ አድስ"><RefreshCw className="w-4 h-4" /></button>
+            <button onClick={() => setIsLoggedIn(false)} className="bg-rose-50 text-rose-600 border border-rose-200 p-3 rounded-2xl hover:bg-rose-100 transition cursor-pointer" title="ውጣ"><LogOut className="w-4 h-4" /></button>
           </div>
         </div>
 
         {/* CORE TABS NAVIGATION */}
         <div className="bg-slate-100 border-t w-full">
           <div className="w-full px-6 md:px-12 flex flex-wrap items-center gap-3 py-3">
-            <button onClick={() => setMainNav('dashboard')} className={`px-6 py-2.5 rounded-2xl font-bold text-xs md:text-sm flex items-center gap-2 transition ${mainNav === 'dashboard' ? 'bg-blue-600 text-white shadow-md' : 'text-slate-700 hover:bg-white'}`}><PieChart className="w-4 h-4 text-orange-400" /> ዳሽቦርድ</button>
-            <button onClick={() => setMainNav('records')} className={`px-6 py-2.5 rounded-2xl font-bold text-xs md:text-sm flex items-center gap-2 transition ${mainNav === 'records' ? 'bg-blue-600 text-white shadow-md' : 'text-slate-700 hover:bg-white'}`}><FileSpreadsheet className="w-4 h-4 text-emerald-500" /> ዋና መዝገብ</button>
-            <button onClick={() => setMainNav('inventory')} className={`px-6 py-2.5 rounded-2xl font-bold text-xs md:text-sm flex items-center gap-2 transition ${mainNav === 'inventory' ? 'bg-blue-600 text-white shadow-md' : 'text-slate-700 hover:bg-white'}`}><Boxes className="w-4 h-4 text-blue-500" /> የስቶክ እቃዎች</button>
-            <button onClick={() => setMainNav('reports')} className={`px-6 py-2.5 rounded-2xl font-bold text-xs md:text-sm flex items-center gap-2 transition ${mainNav === 'reports' ? 'bg-purple-600 text-white shadow-md' : 'text-slate-700 hover:bg-white'}`}><FileText className="w-4 h-4 text-purple-300" /> ሪፖርት</button>
+            <button onClick={() => setMainNav('dashboard')} className={`px-6 py-2.5 rounded-2xl font-bold text-xs md:text-sm flex items-center gap-2 transition cursor-pointer ${mainNav === 'dashboard' ? 'bg-orange-600 text-white shadow-md' : 'text-slate-700 hover:bg-white'}`}><PieChart className="w-4 h-4 text-orange-200" /> ዳሽቦርድ</button>
+            <button onClick={() => setMainNav('records')} className={`px-6 py-2.5 rounded-2xl font-bold text-xs md:text-sm flex items-center gap-2 transition cursor-pointer ${mainNav === 'records' ? 'bg-orange-600 text-white shadow-md' : 'text-slate-700 hover:bg-white'}`}><FileSpreadsheet className="w-4 h-4 text-emerald-200" /> ዋና መዝገብ</button>
+            <button onClick={() => setMainNav('inventory')} className={`px-6 py-2.5 rounded-2xl font-bold text-xs md:text-sm flex items-center gap-2 transition cursor-pointer ${mainNav === 'inventory' ? 'bg-orange-600 text-white shadow-md' : 'text-slate-700 hover:bg-white'}`}><Boxes className="w-4 h-4 text-blue-200" /> የስቶክ እቃዎች</button>
+            <button onClick={() => setMainNav('reports')} className={`px-6 py-2.5 rounded-2xl font-bold text-xs md:text-sm flex items-center gap-2 transition cursor-pointer ${mainNav === 'reports' ? 'bg-purple-600 text-white shadow-md' : 'text-slate-700 hover:bg-white'}`}><FileText className="w-4 h-4 text-purple-200" /> ሪፖርት</button>
             
             {isAdminOrOwner && (
               <button 
                 onClick={() => setMainNav('users_activity')} 
-                className={`px-6 py-2.5 rounded-2xl font-bold text-xs md:text-sm flex items-center gap-2 transition ${
+                className={`px-6 py-2.5 rounded-2xl font-bold text-xs md:text-sm flex items-center gap-2 transition cursor-pointer ${
                   mainNav === 'users_activity' ? 'bg-indigo-600 text-white shadow-md' : 'text-slate-700 hover:bg-white'
                 }`}
               >
-                <Users className="w-4 h-4 text-indigo-400" /> ሰራተኞችና አክቲቪቲ
+                <Users className="w-4 h-4 text-indigo-200" /> ሰራተኞችና አክቲቪቲ
               </button>
             )}
           </div>
