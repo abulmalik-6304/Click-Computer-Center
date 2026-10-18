@@ -25,7 +25,7 @@ import {
 } from 'lucide-react';
 
 import { UserRole, SaleItem, InventoryItem, ExpenseItem, IncomeItem, CustomerItem, SupplierItem, UserAccount } from '../types';
-import DashboardTab from '../components/DashboardTab';
+import Link from "next/link";
 import RecordsTab from '../components/RecordsTab';
 import ReportsTab from '../components/ReportsTab';
 import InventoryTab from '../components/InventoryTab';
