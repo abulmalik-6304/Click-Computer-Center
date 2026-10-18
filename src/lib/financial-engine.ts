@@ -80,7 +80,6 @@ export function calculateNetProfit(
   const expTotal = today
     ? calculateTodaysExpensesTotal(expenses, today)
     : round2(expenses.reduce((s, x) => s + x.amount, 0));
-
   return round2(salesTotal - costTotal - expTotal);
 }
 
