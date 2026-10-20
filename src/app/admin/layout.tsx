@@ -12,28 +12,49 @@ const NAV = [
 
 export default async function AdminLayout({ children }: { children: React.ReactNode }) {
   const session = await getServerSession(authOptions);
-  if (!session) redirect("/login");
-  const role = (session.user as any).role as string;
+  if (!session || !session.user) redirect("/login");
+  
+  // ሮሉን በትክክል በ Lowercase ማመሳሰል
+  const rawRole = (session.user as any).role || "staff";
+  const role = String(rawRole).toLowerCase();
 
   return (
     <div className="min-h-screen bg-slate-100 flex">
+      {/* Sidebar */}
       <aside className="hidden lg:flex flex-col w-64 bg-slate-900 text-slate-200">
         <div className="px-5 py-6 border-b border-white/10">
           <p className="text-lg font-bold text-white">Click Computer</p>
           <p className="text-xs text-slate-400">Enterprise Console</p>
         </div>
+        
         <nav className="flex-1 px-3 py-4 space-y-1">
           {NAV.filter((n) => n.roles.includes(role)).map((n) => (
-            <Link key={n.href} href={n.href} className="flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm hover:bg-white/10 transition">
+            <Link 
+              key={n.href} 
+              href={n.href} 
+              className="flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium hover:bg-white/10 transition"
+            >
               <span>{n.icon}</span> {n.label}
             </Link>
           ))}
         </nav>
-        <div className="px-5 py-4 border-t border-white/10 text-xs">
-          <p className="text-white font-semibold">{session.user?.name}</p>
-          <p className="text-slate-400 capitalize">{role}</p>
+
+        <div className="px-5 py-4 border-t border-white/10 text-xs flex items-center justify-between">
+          <div>
+            <p className="text-white font-semibold">{session.user?.name || "User"}</p>
+            <p className="text-slate-400 capitalize">{role}</p>
+          </div>
+          <a 
+            href="/api/auth/signout" 
+            className="text-red-400 hover:text-red-300 transition p-1.5 rounded-lg hover:bg-white/5"
+            title="Sign Out"
+          >
+            🚪
+          </a>
         </div>
       </aside>
+
+      {/* Main Content */}
       <main className="flex-1 min-w-0">{children}</main>
     </div>
   );
