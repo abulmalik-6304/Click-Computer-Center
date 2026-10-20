@@ -4,33 +4,49 @@
 // ═══════════════════════════════════════════════════════════════
 
 export interface SaleRecord {
-  id: string;
-  date: string;
-  productId: string;
-  productName: string;
-  quantity: number;
-  unitPrice: number;
-  unitCost: number;
-  staffId: string;
+  id?: string;
+  date?: string;
+  Date?: string;
+  productId?: string;
+  productName?: string;
+  Item_Name?: string;
+  quantity?: number | string;
+  Quantity?: number | string;
+  unitPrice?: number | string;
+  Total_Price?: number | string;
+  unitCost?: number | string;
+  Total_Cost_Amount?: number | string;
+  staffId?: string;
+  Recorded_By?: string;
 }
 
 export interface ExpenseRecord {
-  id: string;
-  date: string;
-  category: string;
-  amount: number;
+  id?: string;
+  date?: string;
+  Date?: string;
+  category?: string;
+  amount?: number | string;
+  Amount?: number | string;
 }
 
 export function calculateLineCost(sale: SaleRecord): number {
-  return round2(sale.unitCost * sale.quantity);
+  const qty = Number(sale.quantity ?? sale.Quantity ?? 1);
+  const cost = Number(sale.unitCost ?? 0);
+  const totalCost = sale.Total_Cost_Amount !== undefined ? Number(sale.Total_Cost_Amount) : cost * qty;
+  return round2(totalCost);
 }
 
 export function calculateLineRevenue(sale: SaleRecord): number {
-  return round2(sale.unitPrice * sale.quantity);
+  const qty = Number(sale.quantity ?? sale.Quantity ?? 1);
+  const price = Number(sale.unitPrice ?? 0);
+  const totalPrice = sale.Total_Price !== undefined ? Number(sale.Total_Price) : price * qty;
+  return round2(totalPrice);
 }
 
 export function calculateLineProfit(sale: SaleRecord): number {
-  return round2((sale.unitPrice - sale.unitCost) * sale.quantity);
+  const rev = calculateLineRevenue(sale);
+  const cost = calculateLineCost(sale);
+  return round2(rev - cost);
 }
 
 export function calculateTodaysSalesTotal(
@@ -39,7 +55,10 @@ export function calculateTodaysSalesTotal(
 ): number {
   return round2(
     sales
-      .filter((s) => s.date.slice(0, 10) === today)
+      .filter((s) => {
+        const d = String(s.date ?? s.Date ?? "");
+        return d.includes(today) || d === today;
+      })
       .reduce((sum, s) => sum + calculateLineRevenue(s), 0)
   );
 }
@@ -50,7 +69,10 @@ export function calculateTodaysCostTotal(
 ): number {
   return round2(
     sales
-      .filter((s) => s.date.slice(0, 10) === today)
+      .filter((s) => {
+        const d = String(s.date ?? s.Date ?? "");
+        return d.includes(today) || d === today;
+      })
       .reduce((sum, s) => sum + calculateLineCost(s), 0)
   );
 }
@@ -61,8 +83,11 @@ export function calculateTodaysExpensesTotal(
 ): number {
   return round2(
     expenses
-      .filter((e) => e.date.slice(0, 10) === today)
-      .reduce((sum, e) => sum + e.amount, 0)
+      .filter((e) => {
+        const d = String(e.date ?? e.Date ?? "");
+        return d.includes(today) || d === today;
+      })
+      .reduce((sum, e) => sum + Number(e.amount ?? e.Amount ?? 0), 0)
   );
 }
 
@@ -74,12 +99,15 @@ export function calculateNetProfit(
   const salesTotal = today
     ? calculateTodaysSalesTotal(sales, today)
     : round2(sales.reduce((s, x) => s + calculateLineRevenue(x), 0));
+  
   const costTotal = today
     ? calculateTodaysCostTotal(sales, today)
     : round2(sales.reduce((s, x) => s + calculateLineCost(x), 0));
+  
   const expTotal = today
     ? calculateTodaysExpensesTotal(expenses, today)
-    : round2(expenses.reduce((s, x) => s + x.amount, 0));
+    : round2(expenses.reduce((s, x) => s + Number(x.amount ?? x.Amount ?? 0), 0));
+
   return round2(salesTotal - costTotal - expTotal);
 }
 
@@ -97,5 +125,5 @@ export function deductInventory(
 }
 
 function round2(n: number): number {
-  return Math.round((n + Number.EPSILON) * 100) / 100;
+  return Math.round((Number(n) + Number.EPSILON) * 100) / 100;
 }
