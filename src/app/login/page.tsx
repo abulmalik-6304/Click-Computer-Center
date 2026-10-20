@@ -14,14 +14,25 @@ export default function LoginPage() {
     setLoading(true);
     setError("");
     const fd = new FormData(e.currentTarget);
+    
+    const username = fd.get("username") as string;
+    const password = fd.get("password") as string;
+
     const res = await signIn("credentials", {
-      username: fd.get("username"),
-      password: fd.get("password"),
+      username,
+      password,
       redirect: false,
     });
+
     setLoading(false);
-    if (res?.ok) router.push("/admin/dashboard");
-    else setError("Invalid username or password");
+    
+    if (res?.ok) {
+      router.push("/admin/dashboard");
+      router.refresh();
+    } else {
+      console.error("SignIn response error:", res);
+      setError(res?.error ? `Login failed: ${res.error}` : "Invalid username or password");
+    }
   }
 
   return (
@@ -32,15 +43,15 @@ export default function LoginPage() {
           <p className="text-sm text-slate-500 mt-1">Enterprise Console Sign-In</p>
         </div>
         <div>
-          <label className="block text-sm font-semibold text-slate-900 mb-1">Username</label>
+          <label className="block text-sm font-semibold text-slate-900 mb-1">Username / Email</label>
           <input required name="username" autoComplete="username"
-            className="w-full rounded-lg border border-slate-300 px-3 py-2.5 text-slate-900 focus:ring-2 focus:ring-orange-500 focus:border-orange-500" />
+            className="w-full rounded-lg border border-slate-300 px-3 py-2.5 text-slate-900 focus:ring-2 focus:ring-orange-500 focus:border-orange-500 text-sm" />
         </div>
         <div>
           <label className="block text-sm font-semibold text-slate-900 mb-1">Password</label>
           <div className="relative">
             <input required name="password" type={show ? "text" : "password"} autoComplete="current-password"
-              className="w-full rounded-lg border border-slate-300 px-3 py-2.5 pr-11 text-slate-900 focus:ring-2 focus:ring-orange-500 focus:border-orange-500" />
+              className="w-full rounded-lg border border-slate-300 px-3 py-2.5 pr-11 text-slate-900 focus:ring-2 focus:ring-orange-500 focus:border-orange-500 text-sm" />
             <button type="button" onClick={() => setShow((s) => !s)}
               aria-label={show ? "Hide password" : "Show password"}
               className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-500 hover:text-slate-900">
@@ -48,7 +59,7 @@ export default function LoginPage() {
             </button>
           </div>
         </div>
-        {error && <p className="text-sm text-red-600">{error}</p>}
+        {error && <p className="text-sm text-red-600 font-medium bg-red-50 p-3 rounded-lg border border-red-200">{error}</p>}
         <button type="submit" disabled={loading}
           className="w-full py-3 bg-orange-500 hover:bg-orange-600 text-white font-semibold rounded-lg transition disabled:opacity-50">
           {loading ? "Signing in…" : "Sign In"}
