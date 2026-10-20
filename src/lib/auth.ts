@@ -1,6 +1,6 @@
 import type { NextAuthOptions } from "next-auth";
 import CredentialsProvider from "next-auth/providers/credentials";
-import { getSheet, SHEETS } from "./google-sheets";
+import { getSheet } from "./google-sheets";
 import bcrypt from "bcryptjs";
 
 export type Role = "owner" | "manager" | "staff" | "Employee" | "Owner" | "Manager";
@@ -11,7 +11,7 @@ export const authOptions: NextAuthOptions = {
     CredentialsProvider({
       name: "credentials",
       credentials: {
-        username: { label: "Username / Email", type: "text" },
+        username: { label: "Email / Username", type: "text" },
         password: { label: "Password", type: "password" },
       },
       async authorize(creds) {
@@ -19,7 +19,7 @@ export const authOptions: NextAuthOptions = {
 
         const inputUser = creds.username.trim().toLowerCase();
 
-        // 👑 1. የኦነር (አብዱልመሊክ) ትክክለኛ ኢሜይል ሲገባ በኃይል የ Owner ስልጣን መስጠት
+        // 👑 1. የኦነር (አብዱልመሊክ) ኢሜይል ሲገባ በኃይል የ Owner ስልጣን መስጠት
         if (inputUser === "tahareabdu24@gmail.com" || inputUser.includes("abdulmelik")) {
           return {
             id: "owner-tahar",
@@ -31,27 +31,26 @@ export const authOptions: NextAuthOptions = {
         }
 
         try {
-          // ከ Staff ወይም Users ቴብል ላይ ማረጋገጥ
-          let sheet;
-          try {
-            sheet = await getSheet(SHEETS.STAFF);
-          } catch {
-            sheet = await getSheet(SHEETS.USERS);
-          }
-
+          // ቀጥታ ከ User_Access_TBL ቴብል ማንበብ
+          const sheet = await getSheet("User_Access_TBL");
           if (!sheet) return null;
 
           const rows = await sheet.getRows();
           const userRow = rows.find((r) => {
-            const uName = (r.get("username") || r.get("email") || r.get("User_Email") || "").toLowerCase().trim();
-            return uName === inputUser;
+            const email = (r.get("User_Email") || r.get("User_Name") || "").toLowerCase().trim();
+            return email === inputUser;
           });
 
           if (!userRow) return null;
 
-          const storedPass = userRow.get("passwordHash") || userRow.get("password") || userRow.get("Password") || "";
+          // ስተተስ (Status) Active መሆኑን ማረጋገጥ (የተዘጋ ዩዘር ከሆነ እንዳይገባ)
+          const status = (userRow.get("Status") || "Active").toLowerCase();
+          if (status !== "active" && status !== "true" && status !== "1") {
+            return null; 
+          }
+
+          const storedPass = userRow.get("Password") || userRow.get("Password_Hash") || userRow.get("password") || "";
           
-          // ፓስወርዱ በ Hash ወይም በ Plaintext መሆኑን ማረጋገጥ
           let isValid = false;
           if (storedPass.startsWith("$2a$") || storedPass.startsWith("$2b$")) {
             isValid = await bcrypt.compare(creds.password, storedPass);
@@ -61,19 +60,21 @@ export const authOptions: NextAuthOptions = {
 
           if (!isValid) return null;
 
-          const userEmail = userRow.get("email") || userRow.get("User_Email") || creds.username;
-          const assignedRole = (userRow.get("role") || userRow.get("Role") || "staff").toLowerCase();
+          const userEmail = userRow.get("User_Email") || creds.username;
+          const assignedRole = (userRow.get("Role") || "staff").toLowerCase();
+          const userName = userRow.get("User_Name") || userEmail;
+          const profilePic = userRow.get("Profile Picture") || "";
 
           return {
-            id: userRow.get("id") || userEmail,
-            name: userRow.get("fullName") || userRow.get("Full_Name") || userRow.get("name") || userEmail,
+            id: userEmail,
+            name: userName,
             email: userEmail,
             role: assignedRole,
-            image: userRow.get("avatarUrl") || userRow.get("Profile_Image") || "",
+            image: profilePic,
           } as any;
 
         } catch (e) {
-          console.error("Auth Error:", e);
+          console.error("Auth Error from User_Access_TBL:", e);
           return null;
         }
       },
