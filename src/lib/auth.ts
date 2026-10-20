@@ -19,12 +19,12 @@ export const authOptions: NextAuthOptions = {
 
         const inputUser = creds.username.trim().toLowerCase();
 
-        // 👑 1. የኦነር (አብዱልመሊክ) ኢሜይል ከሆነ በኃይል የ Owner ስልጣን መስጠት
-        if (inputUser.includes("tahareabdu24") || inputUser.includes("abdulmelik")) {
+        // 👑 1. የኦነር (አብዱልመሊክ) ትክክለኛ ኢሜይል ሲገባ በኃይል የ Owner ስልጣን መስጠት
+        if (inputUser === "tahareabdu24@gmail.com" || inputUser.includes("abdulmelik")) {
           return {
-            id: "owner-1",
+            id: "owner-tahar",
             name: "Abdulmelik Tahar (Owner)",
-            email: creds.username,
+            email: "tahareabdu24@gmail.com",
             role: "owner",
             image: "",
           } as any;
