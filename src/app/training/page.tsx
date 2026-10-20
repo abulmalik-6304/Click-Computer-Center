@@ -1,5 +1,7 @@
 import Link from "next/link";
 
+export const dynamic = "force-dynamic";
+
 const COURSES = [
   { id: "web-dev", title: "Full-Stack Web Development", weeks: 12, fee: 8500, desc: "HTML, CSS, JS, React, Node, databases." },
   { id: "ccna", title: "Networking (CCNA Prep)", weeks: 10, fee: 7000, desc: "Routing, switching, and network security." },
@@ -10,21 +12,26 @@ const COURSES = [
 export default function TrainingPage() {
   return (
     <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-16">
-      <h1 className="text-4xl font-bold text-slate-900">Computer Training Center</h1>
+      <h1 className="text-4xl font-bold text-slate-900">Click Computer Center — Training</h1>
       <p className="mt-3 text-slate-600 max-w-2xl">
-        Industry-aligned programs taught by certified instructors.
+        Industry-aligned programs taught by certified instructors. Register online to secure your spot.
       </p>
+      
       <div className="mt-10 grid sm:grid-cols-2 lg:grid-cols-3 gap-6">
         {COURSES.map((c) => (
           <article key={c.id} className="bg-white rounded-2xl border border-slate-200 shadow-sm hover:shadow-lg transition p-6 flex flex-col">
             <h2 className="text-xl font-bold text-slate-900">{c.title}</h2>
             <p className="mt-2 text-slate-600 flex-1">{c.desc}</p>
+            
             <div className="mt-4 flex items-center justify-between text-sm text-slate-500">
-              <span>{c.weeks} weeks</span>
-              <span className="font-semibold text-emerald-700">{c.fee.toLocaleString()} ETB</span>
+              <span className="bg-slate-100 px-2.5 py-1 rounded-md font-medium text-slate-700">{c.weeks} weeks</span>
+              <span className="font-bold text-emerald-700">{c.fee.toLocaleString()} ETB</span>
             </div>
-            <Link href={`/training/register?course=${c.id}`}
-              className="mt-5 px-4 py-2.5 bg-orange-500 hover:bg-orange-600 text-white font-semibold rounded-lg text-center transition">
+
+            <Link 
+              href={`/training/register?course=${c.id}`}
+              className="mt-5 px-4 py-2.5 bg-orange-500 hover:bg-orange-600 text-white font-semibold rounded-lg text-center transition shadow-sm"
+            >
               Register Now
             </Link>
           </article>
