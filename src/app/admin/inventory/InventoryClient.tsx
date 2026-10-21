@@ -2,7 +2,7 @@
 
 import { useMemo, useState } from "react";
 import { InventoryItem } from "@/lib/data-mappers";
-import { toDriveImageUrl } from "@/lib/drive-url";
+import { toDriveImageUrl as formatDriveUrl } from "@/lib/drive-url";
 
 type ModalMode = "add" | "edit" | "stock-in" | null;
 
@@ -133,7 +133,7 @@ export default function InventoryClient({ initialItems }: { initialItems: Invent
                       <td className="px-4 py-3">
                         <div className="flex items-center gap-3">
                           <img
-                            src={toDriveImageUrl(i.image)}
+                            src={formatDriveUrl(i.image)}
                             alt={i.name}
                             className="w-10 h-10 rounded-lg object-cover bg-slate-100"
                             onError={(e) => ((e.target as HTMLImageElement).src = "/placeholder.png")}
