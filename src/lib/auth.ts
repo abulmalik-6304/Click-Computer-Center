@@ -7,6 +7,7 @@ export type Role = "owner" | "manager" | "staff" | "Employee" | "Owner" | "Manag
 
 export const authOptions: NextAuthOptions = {
   session: { strategy: "jwt" },
+  secret: process.env.NEXTAUTH_SECRET || "click-computer-center-secret-key-2026",
   providers: [
     CredentialsProvider({
       name: "credentials",
@@ -43,7 +44,6 @@ export const authOptions: NextAuthOptions = {
 
           if (!userRow) return null;
 
-          // ስተተስ (Status) Active መሆኑን ማረጋገጥ (የተዘጋ ዩዘር ከሆነ እንዳይገባ)
           const status = (userRow.get("Status") || "Active").toLowerCase();
           if (status !== "active" && status !== "true" && status !== "1") {
             return null; 
@@ -97,5 +97,4 @@ export const authOptions: NextAuthOptions = {
     },
   },
   pages: { signIn: "/login" },
-  secret: process.env.NEXTAUTH_SECRET || "click-computer-center-secret-key-2026",
 };
