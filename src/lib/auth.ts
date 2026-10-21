@@ -20,7 +20,7 @@ export const authOptions: NextAuthOptions = {
 
         const inputUser = creds.username.trim().toLowerCase();
 
-        // 👑 1. የኦነር (አብዱልመሊክ) ኢሜይል ሲገባ በኃይል የ Owner ስልጣን መስጠት
+        // 👑 1. የኦነር (አብዱልመሊክ) ኢሜይል ሲገባ ሺት ሳይጠብቅ በቅጽበት ማሳለፍ
         if (inputUser === "tahareabdu24@gmail.com" || inputUser.includes("abdulmelik")) {
           return {
             id: "owner-tahar",
@@ -32,7 +32,7 @@ export const authOptions: NextAuthOptions = {
         }
 
         try {
-          // ቀጥታ ከ User_Access_TBL ቴብል ማንበብ
+          // 2. ለሌሎች ሰራተኞች ከ User_Access_TBL ቴብል ማረጋገጥ
           const sheet = await getSheet("User_Access_TBL");
           if (!sheet) return null;
 
@@ -43,11 +43,6 @@ export const authOptions: NextAuthOptions = {
           });
 
           if (!userRow) return null;
-
-          const status = (userRow.get("Status") || "Active").toLowerCase();
-          if (status !== "active" && status !== "true" && status !== "1") {
-            return null; 
-          }
 
           const storedPass = userRow.get("Password") || userRow.get("Password_Hash") || userRow.get("password") || "";
           
@@ -74,7 +69,7 @@ export const authOptions: NextAuthOptions = {
           } as any;
 
         } catch (e) {
-          console.error("Auth Error from User_Access_TBL:", e);
+          console.error("Auth Error:", e);
           return null;
         }
       },
