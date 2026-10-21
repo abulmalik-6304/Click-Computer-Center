@@ -4,84 +4,227 @@ import {
   calculateTodaysCostTotal,
   calculateTodaysExpensesTotal,
   calculateNetProfit,
-  SaleRecord,
-  ExpenseRecord,
 } from "@/lib/financial-engine";
+import { buildEnrichedSales, mapExpenseRow } from "@/lib/data-mappers";
+import Link from "next/link";
 
-export const revalidate = 0; // Dynamic data fetching for live Google Sheets sync
-
-async function loadSales(): Promise<SaleRecord[]> {
-  try {
-    const sheet = await getSheet(SHEETS.SALES);
-    const rows = await sheet.getRows();
-    return rows.map((r) => ({
-      id: r.get("id") || r.get("ID") || "",
-      date: r.get("date") || r.get("Date") || "",
-      productId: r.get("productId") || r.get("Product_ID") || "",
-      productName: r.get("productName") || r.get("Item_Name") || r.get("Product_Name") || "",
-      quantity: Number(r.get("quantity") || r.get("Quantity") || 1),
-      unitPrice: Number(r.get("unitPrice") || r.get("Unit_Price") || 0),
-      unitCost: Number(r.get("unitCost") || r.get("Unit_Cost") || 0),
-      Total_Price: r.get("Total_Price") ? Number(r.get("Total_Price")) : undefined,
-      Total_Cost_Amount: r.get("Total_Cost_Amount") ? Number(r.get("Total_Cost_Amount")) : undefined,
-      staffId: r.get("staffId") || r.get("Recorded_By") || "",
-    }));
-  } catch (error) {
-    console.error("Error loading sales sheet:", error);
-    return [];
-  }
-}
-
-async function loadExpenses(): Promise<ExpenseRecord[]> {
-  try {
-    const sheet = await getSheet(SHEETS.EXPENSES);
-    const rows = await sheet.getRows();
-    return rows.map((r) => ({
-      id: r.get("id") || r.get("ID") || "",
-      date: r.get("date") || r.get("Date") || "",
-      category: r.get("category") || r.get("Category") || "General",
-      amount: Number(r.get("amount") || r.get("Amount") || 0),
-    }));
-  } catch (error) {
-    console.error("Error loading expenses sheet:", error);
-    return [];
-  }
-}
+export const revalidate = 0;
 
 export default async function DashboardPage() {
-  const [sales, expenses] = await Promise.all([loadSales(), loadExpenses()]);
-  const today = new Date().toISOString().slice(0, 10);
+  // ─── ዳታ መጫን ───
+  let sales: any[] = [];
+  let expenses: any[] = [];
+  let lowStock: any[] = [];
+  let recentSales: any[] = [];
 
-  const todaySales = calculateTodaysSalesTotal(sales, today);
-  const todayCost = calculateTodaysCostTotal(sales, today);
-  const todayExpenses = calculateTodaysExpensesTotal(expenses, today);
-  const netProfit = calculateNetProfit(sales, expenses, today);
+  try {
+    // ሽያጮች (Sales_TBL + Sales_Items_TBL)
+    const salesSheet = await getSheet(SHEETS.SALES);
+    const itemSheet = await getSheet(SHEETS.SALES_ITEMS);
+    const [salesRows, itemRows] = await Promise.all([
+      salesSheet.getRows(),
+      itemSheet.getRows(),
+    ]);
+    sales = buildEnrichedSales(
+      salesRows.map((r) => r.toObject()),
+      itemRows.map((r) => r.toObject())
+    );
+
+    // ወጪዎች
+    const expSheet = await getSheet(SHEETS.EXPENSES);
+    const expRows = await expSheet.getRows();
+    expenses = expRows.map((r) => mapExpenseRow(r.toObject()));
+
+    // አነስተኛ ክምችት
+    const invSheet = await getSheet(SHEETS.INVENTORY);
+    const invRows = await invSheet.getRows();
+    lowStock = invRows
+      .map((r) => r.toObject())
+      .filter(
+        (r: any) =>
+          Number(r.Stock_Quantity ?? 0) <= Number(r.Reorder_Level ?? 10)
+      )
+      .slice(0, 5);
+
+    recentSales = sales.slice(-5).reverse();
+  } catch (e) {
+    console.error("Dashboard load error:", e);
+  }
+
+  // ═══════════════════════════════════════════════════════════
+  // ⚠️ FINANCIAL CALCULATIONS — DO NOT INLINE. Use engine only.
+  // ═══════════════════════════════════════════════════════════
+  const today = new Date().toISOString().slice(0, 10);
+  const todaySales = calculateTodaysSalesTotal(sales as any, today);
+  const todayCost = calculateTodaysCostTotal(sales as any, today);
+  const todayExpenses = calculateTodaysExpensesTotal(expenses as any, today);
+  const netProfit = calculateNetProfit(sales as any, expenses as any, today);
 
   const cards = [
-    { label: "Today's Sales", value: todaySales, accent: "text-emerald-600" },
-    { label: "Today's Cost", value: todayCost, accent: "text-slate-700" },
-    { label: "Today's Expenses", value: todayExpenses, accent: "text-orange-600" },
-    { label: "Net Profit", value: netProfit, accent: netProfit >= 0 ? "text-emerald-600" : "text-red-600" },
+    {
+      label: "Today's Sales",
+      value: todaySales,
+      icon: "💰",
+      color: "emerald",
+      sub: `${sales.filter((s) => s.date.includes(today)).length} transactions`,
+    },
+    {
+      label: "Today's Cost",
+      value: todayCost,
+      icon: "📦",
+      color: "slate",
+      sub: "Cost of goods sold",
+    },
+    {
+      label: "Today's Expenses",
+      value: todayExpenses,
+      icon: "📉",
+      color: "orange",
+      sub: "Operating expenses",
+    },
+    {
+      label: "Net Profit",
+      value: netProfit,
+      icon: netProfit >= 0 ? "📈" : "📉",
+      color: netProfit >= 0 ? "emerald" : "red",
+      sub: netProfit >= 0 ? "Positive" : "Loss",
+    },
   ];
 
   return (
-    <div className="p-6 lg:p-10">
+    <div className="p-4 sm:p-6 lg:p-10 space-y-6">
+      {/* Header */}
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
         <div>
-          <h1 className="text-2xl font-bold text-slate-900">Click Computer Center — Dashboard</h1>
-          <p className="text-sm text-slate-500 mt-1">Live sync with Google Sheets · {today}</p>
+          <h1 className="text-2xl sm:text-3xl font-bold text-slate-900">
+            Dashboard
+          </h1>
+          <p className="text-sm text-slate-500 mt-1">
+            Live sync · {new Date().toLocaleDateString("en-ET", {
+              weekday: "long",
+              year: "numeric",
+              month: "long",
+              day: "numeric",
+            })}
+          </p>
         </div>
+        <Link
+          href="/admin/sales"
+          className="inline-flex items-center gap-2 px-4 py-2.5 bg-orange-500 hover:bg-orange-600 text-white font-semibold rounded-lg transition shadow-sm"
+        >
+          + New Sale
+        </Link>
       </div>
 
-      <div className="mt-8 grid sm:grid-cols-2 lg:grid-cols-4 gap-5">
+      {/* KPI Cards */}
+      <div className="grid sm:grid-cols-2 lg:grid-cols-4 gap-4 sm:gap-5">
         {cards.map((c) => (
-          <div key={c.label} className="bg-white p-6 rounded-2xl border border-slate-200 shadow-sm transition hover:shadow-md">
-            <p className="text-sm font-medium text-slate-500">{c.label}</p>
-            <p className={`mt-2 text-3xl font-bold ${c.accent}`}>
-              {c.value.toLocaleString(undefined, { minimumFractionDigits: 2 })} ETB
+          <div
+            key={c.label}
+            className="bg-white p-5 rounded-2xl border border-slate-200 shadow-sm hover:shadow-md transition"
+          >
+            <div className="flex items-start justify-between">
+              <div className="text-2xl">{c.icon}</div>
+              <span
+                className={`text-xs font-medium px-2 py-1 rounded-full bg-${c.color}-50 text-${c.color}-700`}
+              >
+                Today
+              </span>
+            </div>
+            <p className="mt-3 text-sm font-medium text-slate-500">{c.label}</p>
+            <p
+              className={`mt-1 text-2xl sm:text-3xl font-bold text-${c.color}-600`}
+            >
+              {c.value.toLocaleString(undefined, {
+                minimumFractionDigits: 2,
+                maximumFractionDigits: 2,
+              })}
+              <span className="text-sm text-slate-500 ml-1">ETB</span>
             </p>
+            <p className="mt-1 text-xs text-slate-400">{c.sub}</p>
           </div>
         ))}
+      </div>
+
+      {/* Two Column Layout */}
+      <div className="grid lg:grid-cols-2 gap-6">
+        {/* Recent Sales */}
+        <div className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
+          <div className="p-5 border-b border-slate-100 flex items-center justify-between">
+            <h2 className="font-bold text-slate-900">Recent Sales</h2>
+            <Link
+              href="/admin/sales"
+              className="text-xs font-medium text-orange-600 hover:text-orange-700"
+            >
+              View all →
+            </Link>
+          </div>
+          {recentSales.length === 0 ? (
+            <p className="p-6 text-sm text-slate-500 text-center">
+              No sales yet today
+            </p>
+          ) : (
+            <div className="divide-y divide-slate-100">
+              {recentSales.map((s) => (
+                <div
+                  key={s.salesId}
+                  className="p-4 hover:bg-slate-50 transition flex items-center justify-between"
+                >
+                  <div>
+                    <p className="text-sm font-semibold text-slate-900">
+                      {s.invoiceNo || s.salesId}
+                    </p>
+                    <p className="text-xs text-slate-500">
+                      {s.customerName} · {s.staffId}
+                    </p>
+                  </div>
+                  <p className="text-sm font-bold text-emerald-600">
+                    {Number(s.totalAmount).toLocaleString()} ETB
+                  </p>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+
+        {/* Low Stock Alert */}
+        <div className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
+          <div className="p-5 border-b border-slate-100 flex items-center justify-between">
+            <h2 className="font-bold text-slate-900 flex items-center gap-2">
+              ⚠️ Low Stock Alert
+            </h2>
+            <Link
+              href="/admin/inventory"
+              className="text-xs font-medium text-orange-600 hover:text-orange-700"
+            >
+              Manage →
+            </Link>
+          </div>
+          {lowStock.length === 0 ? (
+            <p className="p-6 text-sm text-emerald-600 text-center">
+              ✅ All items are well-stocked
+            </p>
+          ) : (
+            <div className="divide-y divide-slate-100">
+              {lowStock.map((item: any) => (
+                <div
+                  key={item.Item_ID}
+                  className="p-4 hover:bg-slate-50 transition flex items-center justify-between"
+                >
+                  <div>
+                    <p className="text-sm font-semibold text-slate-900">
+                      {item.Item_Name}
+                    </p>
+                    <p className="text-xs text-slate-500">{item.Item_Code}</p>
+                  </div>
+                  <span className="px-2.5 py-1 bg-red-50 text-red-700 rounded-full text-xs font-semibold">
+                    {item.Stock_Quantity} left
+                  </span>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
       </div>
     </div>
   );
