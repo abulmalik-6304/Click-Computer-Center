@@ -1,6 +1,6 @@
 "use client";
 import { useEffect, useMemo, useState } from "react";
-import { formatDriveUrl } from "@/lib/drive-url";
+import { toDriveImageUrl } from "@/lib/drive-url";
 
 interface InventoryItem {
   id: string;
@@ -18,8 +18,22 @@ export default function InventoryPage() {
   const [q, setQ] = useState("");
   const [selectedCategory, setSelectedCategory] = useState("all");
   const [loading, setLoading] = useState(true);
+  const [showModal, setShowModal] = useState(false);
+  const [submitting, setSubmitting] = useState(false);
 
-  useEffect(() => {
+  // Form states for new item
+  const [form, setForm] = useState({
+    name: "",
+    category: "",
+    stock: "",
+    minStock: "5",
+    unitPrice: "",
+    unitCost: "",
+    imageUrl: "",
+  });
+
+  const fetchInventory = () => {
+    setLoading(true);
     fetch("/api/sheets?name=Inventory")
       .then((r) => r.json())
       .then((d) => {
@@ -41,6 +55,10 @@ export default function InventoryPage() {
         setItems([]);
         setLoading(false);
       });
+  };
+
+  useEffect(() => {
+    fetchInventory();
   }, []);
 
   const categories = useMemo(() => {
@@ -59,6 +77,31 @@ export default function InventoryPage() {
     });
   }, [items, q, selectedCategory]);
 
+  const handleAddItem = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setSubmitting(true);
+    try {
+      const res = await fetch("/api/inventory", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(form),
+      });
+
+      if (res.ok) {
+        setShowModal(false);
+        setForm({ name: "", category: "", stock: "", minStock: "5", unitPrice: "", unitCost: "", imageUrl: "" });
+        fetchInventory(); // Reload list
+      } else {
+        alert("Failed to add inventory item.");
+      }
+    } catch (err) {
+      console.error(err);
+      alert("An error occurred.");
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
   return (
     <div className="p-6 lg:p-10 space-y-6">
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
@@ -66,14 +109,18 @@ export default function InventoryPage() {
           <h1 className="text-2xl font-bold text-slate-900">Inventory Management</h1>
           <p className="text-sm text-slate-500 mt-1">Live stock list synced directly from Google Sheets</p>
         </div>
-        <div className="bg-slate-900 text-white px-4 py-2 rounded-xl text-sm font-semibold">
-          Total Items: {filtered.length}
-        </div>
+        <button
+          onClick={() => setShowModal(true)}
+          className="px-4 py-2.5 bg-orange-500 hover:bg-orange-600 text-white font-semibold rounded-xl text-sm transition shadow-sm flex items-center justify-center gap-2"
+        >
+          ➕ Add New Item
+        </button>
       </div>
 
+      {/* Search & Filters */}
       <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-3 bg-white p-4 rounded-2xl border border-slate-200 shadow-sm">
         <input
-          placeholder="Search by product name, category, ID…"
+          placeholder="Search product, category, ID…"
           value={q}
           onChange={(e) => setQ(e.target.value)}
           className="rounded-lg border border-slate-300 px-3 py-2 text-slate-900 text-sm focus:outline-none focus:ring-2 focus:ring-slate-900"
@@ -93,10 +140,11 @@ export default function InventoryPage() {
           onClick={() => navigator.clipboard.writeText(JSON.stringify(filtered, null, 2))}
           className="px-3 py-2 bg-slate-100 hover:bg-slate-200 text-slate-800 rounded-lg text-sm font-medium transition flex items-center justify-center gap-2 border border-slate-300"
         >
-          📋 Copy Inventory Data
+          📋 Copy Inventory JSON
         </button>
       </div>
 
+      {/* Inventory Table */}
       <div className="bg-white rounded-2xl border border-slate-200 overflow-x-auto shadow-sm">
         <table className="w-full text-sm">
           <thead className="bg-slate-100 text-slate-700">
@@ -123,7 +171,7 @@ export default function InventoryPage() {
                       <div className="flex items-center gap-3">
                         {item.imageUrl ? (
                           <img
-                            src={formatDriveUrl(item.imageUrl)}
+                            src={toDriveImageUrl(item.imageUrl)}
                             alt={item.name}
                             className="w-10 h-10 object-cover rounded-lg border border-slate-200"
                           />
@@ -164,6 +212,60 @@ export default function InventoryPage() {
           </tbody>
         </table>
       </div>
+
+      {/* Add New Item Modal */}
+      {showModal && (
+        <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center p-4 z-50">
+          <div className="bg-white rounded-2xl max-w-lg w-full p-6 space-y-5 shadow-xl">
+            <div className="flex items-center justify-between border-b border-slate-100 pb-3">
+              <h2 className="text-lg font-bold text-slate-900">Add New Inventory Item</h2>
+              <button onClick={() => setShowModal(false)} className="text-slate-400 hover:text-slate-700 text-xl font-bold">✕</button>
+            </div>
+            <form onSubmit={handleAddItem} className="space-y-4">
+              <div>
+                <label className="block text-xs font-semibold text-slate-700 mb-1">Product Name</label>
+                <input required placeholder="e.g. Core i5 Laptop" value={form.name} onChange={(e) => setForm({...form, name: e.target.value})}
+                  className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm text-slate-900" />
+              </div>
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-xs font-semibold text-slate-700 mb-1">Category</label>
+                  <input placeholder="e.g. Laptops / Accessories" value={form.category} onChange={(e) => setForm({...form, category: e.target.value})}
+                    className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm text-slate-900" />
+                </div>
+                <div>
+                  <label className="block text-xs font-semibold text-slate-700 mb-1">Initial Stock Qty</label>
+                  <input required type="number" placeholder="10" value={form.stock} onChange={(e) => setForm({...form, stock: e.target.value})}
+                    className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm text-slate-900" />
+                </div>
+              </div>
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-xs font-semibold text-slate-700 mb-1">Unit Cost (ETB)</label>
+                  <input required type="number" step="0.01" placeholder="45000" value={form.unitCost} onChange={(e) => setForm({...form, unitCost: e.target.value})}
+                    className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm text-slate-900" />
+                </div>
+                <div>
+                  <label className="block text-xs font-semibold text-slate-700 mb-1">Selling Price (ETB)</label>
+                  <input required type="number" step="0.01" placeholder="55000" value={form.unitPrice} onChange={(e) => setForm({...form, unitPrice: e.target.value})}
+                    className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm text-slate-900" />
+                </div>
+              </div>
+              <div>
+                <label className="block text-xs font-semibold text-slate-700 mb-1">Image URL (Google Drive or Direct)</label>
+                <input placeholder="https://..." value={form.imageUrl} onChange={(e) => setForm({...form, imageUrl: e.target.value})}
+                  className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm text-slate-900" />
+              </div>
+              <div className="flex justify-end gap-3 pt-3 border-t border-slate-100">
+                <button type="button" onClick={() => setShowModal(false)} className="px-4 py-2 bg-slate-100 text-slate-700 rounded-lg text-sm font-medium">Cancel</button>
+                <button type="submit" disabled={submitting} className="px-5 py-2 bg-slate-900 text-white rounded-lg text-sm font-medium hover:bg-slate-800 disabled:opacity-50">
+                  {submitting ? "Saving..." : "Save Item"}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
