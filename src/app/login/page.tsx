@@ -3,6 +3,8 @@ import { useState } from "react";
 import { signIn } from "next-auth/react";
 import { useRouter } from "next/navigation";
 
+export const dynamic = "force-dynamic";
+
 export default function LoginPage() {
   const router = useRouter();
   const [show, setShow] = useState(false);
@@ -30,8 +32,7 @@ export default function LoginPage() {
       router.push("/admin/dashboard");
       router.refresh();
     } else {
-      console.error("SignIn response error:", res);
-      setError(res?.error ? `Login failed: ${res.error}` : "Invalid username or password");
+      setError("Invalid username or password");
     }
   }
 
