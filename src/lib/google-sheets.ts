@@ -23,7 +23,6 @@ function getJwt(): JWT {
   return cachedJwt;
 }
 
-// 1. Google Spreadsheet Document ን የሚጭን ፊንክሽን
 export async function getDoc() {
   const sheetId = process.env.GOOGLE_SHEET_ID;
   if (!sheetId) throw new Error("Missing GOOGLE_SHEET_ID environment variable");
@@ -32,7 +31,6 @@ export async function getDoc() {
   return doc;
 }
 
-// 2. የተወሰነውን ሺት በስም ለይቶ የሚያመጣ ፊንክሽን
 export async function getSheet(title: string) {
   const doc = await getDoc();
   const sheet = doc.sheetsByTitle[title];
@@ -40,21 +38,26 @@ export async function getSheet(title: string) {
   return sheet;
 }
 
-// 3. የሁሉም ሺቶቻችን የቴብል ስሞች
+// ═══════════════════════════════════════════════════════════════
+// ✅ የእውነተኛ Sheet ስሞች (ከGoogle Sheet ጋር ይገጥማሉ)
+// ═══════════════════════════════════════════════════════════════
 export const SHEETS = {
-  SALES: "Sales",
-  INVENTORY: "Inventory",
-  EXPENSES: "Expenses",
-  STAFF: "Staff",
-  TRAINING: "Training_Registrations",
-  SERVICES: "Service_Requests",
-  BADGES: "Badges",
-  CUSTOMERS: "Customers",
-  SUPPLIERS: "Suppliers",
-  USERS: "Users",
+  INVENTORY: "Inventory_TBL",
+  STOCK_IN: "Stock_In_TBL",
+  SALES: "Sales_TBL",
+  SALES_ITEMS: "Sales_Items_TBL",
+  INCOME: "Income_TBL",
+  PAYMENTS: "Payments_TBL",
+  USERS: "User_Access_TBL",
+  EXPENSES: "Expense_TBL",
+  EMPLOYEES: "Employee_TBL",
+  CUSTOMERS: "Customer_TBL",
+  SUPPLIERS: "Supplier_TBL",
+  ANNOUNCEMENTS: "Announcements_TBL",
 } as const;
 
-// 4. ከሺቱ ላይ ዳታዎችን ማንበብ (GET Data)
+// ─── አጋዥ ፋንክሽኖች ───
+
 export async function getTableData(title: string) {
   try {
     const sheet = await getSheet(title);
@@ -66,8 +69,10 @@ export async function getTableData(title: string) {
   }
 }
 
-// 5. ወደ ሺቱ አዲስ ዳታ ጽፎ መጨመር (POST / Append Data)
-export async function appendRowToTable(title: string, rowData: Record<string, any>) {
+export async function appendRowToTable(
+  title: string,
+  rowData: Record<string, any>
+) {
   try {
     const sheet = await getSheet(title);
     await sheet.addRow(rowData);
@@ -76,4 +81,11 @@ export async function appendRowToTable(title: string, rowData: Record<string, an
     console.error(`Error appending row to sheet "${title}":`, error);
     return { success: false, error: error.message };
   }
+}
+
+// የረድፍ መጠን በመጠቀም መፈለግ (ለማረም/መሰረዝ)
+export async function findRowById(title: string, idColumn: string, id: string) {
+  const sheet = await getSheet(title);
+  const rows = await sheet.getRows();
+  return rows.find((r) => String(r.get(idColumn)) === String(id)) || null;
 }
