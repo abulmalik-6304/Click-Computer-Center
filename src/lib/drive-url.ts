@@ -1,32 +1,52 @@
 // src/lib/drive-url.ts
 
 /**
- * ✅ PRIMARY export — used by new code
- * Accepts any Google Drive share link and returns the CDN URL
+ * Convert any Google Drive share link into a direct CDN URL
+ * that can be rendered in <img src="...">.
+ *
+ * Accepts:
+ *   - https://drive.google.com/file/d/FILE_ID/view
+ *   - https://drive.google.com/open?id=FILE_ID
+ *   - https://lh3.googleusercontent.com/d/FILE_ID
+ *   - plain FILE_ID
+ *
+ * Returns:
+ *   - https://lh3.googleusercontent.com/d/FILE_ID=w1000
+ *   - or the original URL if already valid
+ *   - or "/placeholder.png" if empty/invalid
  */
 export function toDriveImageUrl(raw: string | undefined | null): string {
-  if (!raw || !raw.trim()) return "/placeholder.png";
-  if (raw.startsWith("/")) return raw;
+  if (!raw || !String(raw).trim()) return "/placeholder.png";
+
+  const str = String(raw).trim();
+  if (str.startsWith("/")) return str;
 
   const match =
-    raw.match(/\/d\/([a-zA-Z0-9_-]{10,})/) ||
-    raw.match(/[?&]id=([a-zA-Z0-9_-]{10,})/);
-  if (match) return `https://lh3.googleusercontent.com/d/${match[1]}=w1000`;
-  return raw.startsWith("http") ? raw : "/placeholder.png";
+    str.match(/\/d\/([a-zA-Z0-9_-]{10,})/) ||
+    str.match(/[?&]id=([a-zA-Z0-9_-]{10,})/);
+
+  if (match) {
+    return `https://lh3.googleusercontent.com/d/${match[1]}=w1000`;
+  }
+
+  if (str.startsWith("http")) return str;
+
+  // Assume raw is a bare file ID (e.g. 1a2b3c4d5e6f...)
+  if (/^[a-zA-Z0-9_-]{20,}$/.test(str)) {
+    return `https://lh3.googleusercontent.com/d/${str}=w1000`;
+  }
+
+  return "/placeholder.png";
 }
 
-/**
- * ✅ ALIAS export — for older code that imports `formatDriveUrl`
- * Kept for backward compatibility. Same behavior as toDriveImageUrl.
- */
+// ═══════════════════════════════════════════════════════════════
+// ✅ BACKWARD-COMPATIBLE ALIASES
+// Existing code uses these names. All map to toDriveImageUrl().
+// ═══════════════════════════════════════════════════════════════
 export const formatDriveUrl = toDriveImageUrl;
-
-/**
- * ✅ ALSO alias for any code using `getDriveImageUrl`
- */
 export const getDriveImageUrl = toDriveImageUrl;
+export const convertDriveUrl = toDriveImageUrl;
+export const driveImageUrl = toDriveImageUrl;
 
-/**
- * Default export for `import formatDriveUrl from "@/lib/drive-url"`
- */
+// ✅ Default export too
 export default toDriveImageUrl;
