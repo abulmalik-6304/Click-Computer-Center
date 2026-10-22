@@ -42,7 +42,7 @@ export default async function DashboardPage() {
       .map((r) => r.toObject())
       .filter(
         (r: any) =>
-          Number(r.Stock_Quantity ?? 0) <= Number(r.Reorder_Level ?? 10)
+          Number(r.Stock_Quantity ?? r.stock ?? 0) <= Number(r.Reorder_Level ?? r.minStock ?? 10)
       )
       .slice(0, 5);
 
@@ -65,29 +65,33 @@ export default async function DashboardPage() {
       label: "Today's Sales",
       value: todaySales,
       icon: "💰",
-      color: "emerald",
-      sub: `${sales.filter((s) => s.date.includes(today)).length} transactions`,
+      badgeBg: "bg-emerald-50 text-emerald-700",
+      valueColor: "text-emerald-600",
+      sub: `${sales.filter((s) => s.date?.includes(today)).length} transactions`,
     },
     {
       label: "Today's Cost",
       value: todayCost,
       icon: "📦",
-      color: "slate",
+      badgeBg: "bg-slate-100 text-slate-700",
+      valueColor: "text-slate-700",
       sub: "Cost of goods sold",
     },
     {
       label: "Today's Expenses",
       value: todayExpenses,
       icon: "📉",
-      color: "orange",
+      badgeBg: "bg-orange-50 text-orange-700",
+      valueColor: "text-orange-600",
       sub: "Operating expenses",
     },
     {
       label: "Net Profit",
       value: netProfit,
       icon: netProfit >= 0 ? "📈" : "📉",
-      color: netProfit >= 0 ? "emerald" : "red",
-      sub: netProfit >= 0 ? "Positive" : "Loss",
+      badgeBg: netProfit >= 0 ? "bg-emerald-50 text-emerald-700" : "bg-red-50 text-red-700",
+      valueColor: netProfit >= 0 ? "text-emerald-600" : "text-red-600",
+      sub: netProfit >= 0 ? "Positive Net Profit" : "Operating Loss",
     },
   ];
 
@@ -110,7 +114,7 @@ export default async function DashboardPage() {
         </div>
         <Link
           href="/admin/sales"
-          className="inline-flex items-center gap-2 px-4 py-2.5 bg-orange-500 hover:bg-orange-600 text-white font-semibold rounded-lg transition shadow-sm"
+          className="inline-flex items-center justify-center gap-2 px-4 py-2.5 bg-orange-500 hover:bg-orange-600 text-white font-semibold rounded-lg transition shadow-sm text-sm"
         >
           + New Sale
         </Link>
@@ -125,21 +129,17 @@ export default async function DashboardPage() {
           >
             <div className="flex items-start justify-between">
               <div className="text-2xl">{c.icon}</div>
-              <span
-                className={`text-xs font-medium px-2 py-1 rounded-full bg-${c.color}-50 text-${c.color}-700`}
-              >
+              <span className={`text-xs font-medium px-2 py-1 rounded-full ${c.badgeBg}`}>
                 Today
               </span>
             </div>
             <p className="mt-3 text-sm font-medium text-slate-500">{c.label}</p>
-            <p
-              className={`mt-1 text-2xl sm:text-3xl font-bold text-${c.color}-600`}
-            >
+            <p className={`mt-1 text-2xl sm:text-3xl font-bold ${c.valueColor}`}>
               {c.value.toLocaleString(undefined, {
                 minimumFractionDigits: 2,
                 maximumFractionDigits: 2,
               })}
-              <span className="text-sm text-slate-500 ml-1">ETB</span>
+              <span className="text-xs sm:text-sm text-slate-400 ml-1">ETB</span>
             </p>
             <p className="mt-1 text-xs text-slate-400">{c.sub}</p>
           </div>
@@ -175,11 +175,11 @@ export default async function DashboardPage() {
                       {s.invoiceNo || s.salesId}
                     </p>
                     <p className="text-xs text-slate-500">
-                      {s.customerName} · {s.staffId}
+                      {s.customerName || "Cash Customer"} · {s.staffId || "Admin"}
                     </p>
                   </div>
                   <p className="text-sm font-bold text-emerald-600">
-                    {Number(s.totalAmount).toLocaleString()} ETB
+                    {Number(s.totalAmount || 0).toLocaleString()} ETB
                   </p>
                 </div>
               ))}
@@ -206,19 +206,19 @@ export default async function DashboardPage() {
             </p>
           ) : (
             <div className="divide-y divide-slate-100">
-              {lowStock.map((item: any) => (
+              {lowStock.map((item: any, idx: number) => (
                 <div
-                  key={item.Item_ID}
+                  key={item.Item_ID || item.id || idx}
                   className="p-4 hover:bg-slate-50 transition flex items-center justify-between"
                 >
                   <div>
                     <p className="text-sm font-semibold text-slate-900">
-                      {item.Item_Name}
+                      {item.Item_Name || item.name}
                     </p>
-                    <p className="text-xs text-slate-500">{item.Item_Code}</p>
+                    <p className="text-xs text-slate-500">{item.Item_Code || item.category || "General"}</p>
                   </div>
                   <span className="px-2.5 py-1 bg-red-50 text-red-700 rounded-full text-xs font-semibold">
-                    {item.Stock_Quantity} left
+                    {item.Stock_Quantity ?? item.stock} left
                   </span>
                 </div>
               ))}
