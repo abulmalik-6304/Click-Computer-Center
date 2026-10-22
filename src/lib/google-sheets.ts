@@ -54,6 +54,8 @@ export const SHEETS = {
   CUSTOMERS: "Customer_TBL",
   SUPPLIERS: "Supplier_TBL",
   ANNOUNCEMENTS: "Announcements_TBL",
+  SERVICES: "Services_TBL",
+  TRAINING: "Training_TBL",
 } as const;
 
 // ─── አጋዥ ፋንክሽኖች ───
