@@ -1,8 +1,7 @@
-// src/app/admin/sales/SalesPOS.tsx (ወይም የፋይሉ ትክክለኛ ቦታ)
 "use client";
 
 import { useMemo, useState } from "react";
-import SalesHistory from "./SalesHistory"; // ✅ አዲሱ Imported ታብ
+import SalesHistory from "./SalesHistory";
 
 type CartItem = { itemId: string; name: string; price: number; qty: number; maxStock: number };
 
@@ -27,20 +26,24 @@ export default function SalesPOS({
         <div className="flex gap-2 bg-slate-100 rounded-lg p-1">
           <button
             onClick={() => setTab("pos")}
-            className={`px-4 py-2 rounded-md text-sm font-medium transition ${tab === "pos" ? "bg-white shadow-sm text-slate-900" : "text-slate-600"}`}
+            className={`px-4 py-2 rounded-md text-sm font-medium transition ${
+              tab === "pos" ? "bg-white shadow-sm text-slate-900" : "text-slate-600"
+            }`}
           >
             🛒 New Sale
           </button>
           <button
             onClick={() => setTab("history")}
-            className={`px-4 py-2 rounded-md text-sm font-medium transition ${tab === "history" ? "bg-white shadow-sm text-slate-900" : "text-slate-600"}`}
+            className={`px-4 py-2 rounded-md text-sm font-medium transition ${
+              tab === "history" ? "bg-white shadow-sm text-slate-900" : "text-slate-600"
+            }`}
           >
             📜 History
           </button>
         </div>
       </div>
 
-      {tab === "pos" ? <POS inventory={inventory} /> : <SalesHistory sales={recentSales} />}
+      {tab === "pos" ? <POS inventory={inventory} /> : <SalesHistory />}
     </div>
   );
 }
@@ -59,7 +62,9 @@ function POS({ inventory }: { inventory: any[] }) {
     if (!q) return inventory;
     const lq = q.toLowerCase();
     return inventory.filter(
-      (i) => String(i.Item_Name ?? "").toLowerCase().includes(lq) || String(i.Item_Code ?? "").toLowerCase().includes(lq)
+      (i) =>
+        String(i.Item_Name ?? "").toLowerCase().includes(lq) ||
+        String(i.Item_Code ?? "").toLowerCase().includes(lq)
     );
   }, [inventory, q]);
 
@@ -73,15 +78,18 @@ function POS({ inventory }: { inventory: any[] }) {
     const maxStock = Number(item.Stock_Quantity ?? 0);
     if (existing) {
       if (existing.qty >= maxStock) return;
-      setCart(cart.map((c) => c.itemId === id ? { ...c, qty: c.qty + 1 } : c));
+      setCart(cart.map((c) => (c.itemId === id ? { ...c, qty: c.qty + 1 } : c)));
     } else {
-      setCart([...cart, {
-        itemId: id,
-        name: item.Item_Name,
-        price: Number(item.Selling_Price ?? 0),
-        qty: 1,
-        maxStock,
-      }]);
+      setCart([
+        ...cart,
+        {
+          itemId: id,
+          name: item.Item_Name,
+          price: Number(item.Selling_Price ?? 0),
+          qty: 1,
+          maxStock,
+        },
+      ]);
     }
   }
 
@@ -90,7 +98,7 @@ function POS({ inventory }: { inventory: any[] }) {
       setCart(cart.filter((c) => c.itemId !== id));
       return;
     }
-    setCart(cart.map((c) => c.itemId === id ? { ...c, qty: Math.min(qty, c.maxStock) } : c));
+    setCart(cart.map((c) => (c.itemId === id ? { ...c, qty: Math.min(qty, c.maxStock) } : c)));
   }
 
   async function checkout() {
@@ -121,7 +129,15 @@ function POS({ inventory }: { inventory: any[] }) {
   }
 
   if (receipt) {
-    return <ReceiptView data={receipt} onClose={() => { setReceipt(null); window.location.reload(); }} />;
+    return (
+      <ReceiptView
+        data={receipt}
+        onClose={() => {
+          setReceipt(null);
+          window.location.reload();
+        }}
+      />
+    );
   }
 
   return (
@@ -171,9 +187,19 @@ function POS({ inventory }: { inventory: any[] }) {
                   <p className="text-xs text-slate-500">{c.price.toLocaleString()} ETB</p>
                 </div>
                 <div className="flex items-center gap-1">
-                  <button onClick={() => updateQty(c.itemId, c.qty - 1)} className="w-6 h-6 bg-slate-200 rounded text-slate-700 text-xs">−</button>
+                  <button
+                    onClick={() => updateQty(c.itemId, c.qty - 1)}
+                    className="w-6 h-6 bg-slate-200 rounded text-slate-700 text-xs"
+                  >
+                    −
+                  </button>
                   <span className="text-sm font-semibold w-6 text-center">{c.qty}</span>
-                  <button onClick={() => updateQty(c.itemId, c.qty + 1)} className="w-6 h-6 bg-slate-200 rounded text-slate-700 text-xs">+</button>
+                  <button
+                    onClick={() => updateQty(c.itemId, c.qty + 1)}
+                    className="w-6 h-6 bg-slate-200 rounded text-slate-700 text-xs"
+                  >
+                    +
+                  </button>
                 </div>
               </div>
             ))
@@ -181,8 +207,17 @@ function POS({ inventory }: { inventory: any[] }) {
         </div>
 
         <div className="space-y-2 pt-3 border-t border-slate-100">
-          <input value={customer} onChange={(e) => setCustomer(e.target.value)} placeholder="Customer (optional)" className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm text-slate-900" />
-          <select value={paymentMethod} onChange={(e) => setPaymentMethod(e.target.value)} className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm text-slate-900">
+          <input
+            value={customer}
+            onChange={(e) => setCustomer(e.target.value)}
+            placeholder="Customer (optional)"
+            className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm text-slate-900"
+          />
+          <select
+            value={paymentMethod}
+            onChange={(e) => setPaymentMethod(e.target.value)}
+            className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm text-slate-900"
+          >
             <option>Cash</option>
             <option>Telebirr</option>
             <option>CBE Birr</option>
@@ -192,11 +227,21 @@ function POS({ inventory }: { inventory: any[] }) {
           <div className="flex gap-2">
             <div className="flex-1">
               <label className="text-xs text-slate-500">Discount</label>
-              <input type="number" value={discount} onChange={(e) => setDiscount(+e.target.value)} className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm text-slate-900" />
+              <input
+                type="number"
+                value={discount}
+                onChange={(e) => setDiscount(+e.target.value)}
+                className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm text-slate-900"
+              />
             </div>
             <div className="flex-1">
               <label className="text-xs text-slate-500">Paid</label>
-              <input type="number" value={paid} onChange={(e) => setPaidAmount(+e.target.value)} className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm text-slate-900" />
+              <input
+                type="number"
+                value={paid}
+                onChange={(e) => setPaidAmount(+e.target.value)}
+                className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm text-slate-900"
+              />
             </div>
           </div>
 
@@ -238,7 +283,9 @@ function ReceiptView({ data, onClose }: { data: any; onClose: () => void }) {
         <div className="border-t border-slate-200 pt-2 space-y-1 text-sm">
           {data.cart.map((c: any) => (
             <div key={c.itemId} className="flex justify-between">
-              <span>{c.name} × {c.qty}</span>
+              <span>
+                {c.name} × {c.qty}
+              </span>
               <span>{(c.price * c.qty).toLocaleString()}</span>
             </div>
           ))}
@@ -250,8 +297,18 @@ function ReceiptView({ data, onClose }: { data: any; onClose: () => void }) {
           <Row label="Paid" value={`${data.paid.toLocaleString()} ETB`} />
         </div>
         <div className="flex gap-2 pt-2">
-          <button onClick={() => window.print()} className="flex-1 py-2 rounded-lg border border-slate-300 text-slate-700 font-medium">🖨 Print</button>
-          <button onClick={onClose} className="flex-1 py-2 rounded-lg bg-orange-500 hover:bg-orange-600 text-white font-semibold">Done</button>
+          <button
+            onClick={() => window.print()}
+            className="flex-1 py-2 rounded-lg border border-slate-300 text-slate-700 font-medium"
+          >
+            🖨 Print
+          </button>
+          <button
+            onClick={onClose}
+            className="flex-1 py-2 rounded-lg bg-orange-500 hover:bg-orange-600 text-white font-semibold"
+          >
+            Done
+          </button>
         </div>
       </div>
     </div>
