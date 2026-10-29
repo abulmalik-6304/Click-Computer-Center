@@ -3,8 +3,9 @@
 import { useMemo, useState } from "react";
 import { toDriveImageUrl as formatDriveUrl } from "@/lib/drive-url";
 import { StaffDisplay } from "./page";
+import ResetPasswordModal from "@/components/admin/ResetPasswordModal"; // ✅ አዲስ
 
-type ModalMode = "profile" | "badge" | null;
+type ModalMode = "profile" | "badge" | "reset-password" | null; // ✅ አዲስ
 
 export default function StaffClient({ initialStaff }: { initialStaff: StaffDisplay[] }) {
   const [staff] = useState(initialStaff);
@@ -92,55 +93,64 @@ export default function StaffClient({ initialStaff }: { initialStaff: StaffDispl
           {filtered.map((s) => (
             <div
               key={s.id}
-              className="bg-white rounded-2xl border border-slate-200 p-5 shadow-sm hover:shadow-md transition"
+              className="bg-white rounded-2xl border border-slate-200 p-5 shadow-sm hover:shadow-md transition flex flex-col justify-between"
             >
-              <div className="flex items-start gap-4">
-                <img
-                  src={formatDriveUrl(s.photo)}
-                  alt={s.fullName}
-                  className="w-14 h-14 rounded-full object-cover ring-2 ring-orange-500 bg-slate-100 flex-shrink-0"
-                  onError={(e) => ((e.target as HTMLImageElement).src = "/placeholder.png")}
-                />
-                <div className="flex-1 min-w-0">
-                  <p className="font-bold text-slate-900 truncate">{s.fullName}</p>
-                  <p className="text-sm text-slate-500 truncate">{s.email}</p>
-                  <div className="mt-2 flex items-center gap-2 flex-wrap">
-                    <span
-                      className={`px-2 py-0.5 rounded-full text-xs font-semibold capitalize ${
-                        s.role.toLowerCase() === "owner"
-                          ? "bg-orange-100 text-orange-700"
-                          : s.role.toLowerCase() === "manager"
-                          ? "bg-emerald-100 text-emerald-700"
-                          : "bg-slate-100 text-slate-700"
-                      }`}
-                    >
-                      {s.role}
-                    </span>
-                    <span
-                      className={`px-2 py-0.5 rounded-full text-xs font-semibold ${
-                        s.status.toLowerCase() === "active"
-                          ? "bg-emerald-100 text-emerald-700"
-                          : "bg-red-100 text-red-700"
-                      }`}
-                    >
-                      {s.status}
-                    </span>
+              <div>
+                <div className="flex items-start gap-4">
+                  <img
+                    src={formatDriveUrl(s.photo)}
+                    alt={s.fullName}
+                    className="w-14 h-14 rounded-full object-cover ring-2 ring-orange-500 bg-slate-100 flex-shrink-0"
+                    onError={(e) => ((e.target as HTMLImageElement).src = "/placeholder.png")}
+                  />
+                  <div className="flex-1 min-w-0">
+                    <p className="font-bold text-slate-900 truncate">{s.fullName}</p>
+                    <p className="text-sm text-slate-500 truncate">{s.email}</p>
+                    <div className="mt-2 flex items-center gap-2 flex-wrap">
+                      <span
+                        className={`px-2 py-0.5 rounded-full text-xs font-semibold capitalize ${
+                          s.role.toLowerCase() === "owner"
+                            ? "bg-orange-100 text-orange-700"
+                            : s.role.toLowerCase() === "manager"
+                            ? "bg-emerald-100 text-emerald-700"
+                            : "bg-slate-100 text-slate-700"
+                        }`}
+                      >
+                        {s.role}
+                      </span>
+                      <span
+                        className={`px-2 py-0.5 rounded-full text-xs font-semibold ${
+                          s.status.toLowerCase() === "active"
+                            ? "bg-emerald-100 text-emerald-700"
+                            : "bg-red-100 text-red-700"
+                        }`}
+                      >
+                        {s.status}
+                      </span>
+                    </div>
                   </div>
                 </div>
               </div>
 
-              <div className="mt-4 pt-4 border-t border-slate-100 flex gap-2">
+              {/* Action Buttons */}
+              <div className="mt-4 pt-4 border-t border-slate-100 grid grid-cols-3 gap-2">
                 <button
                   onClick={() => { setActive(s); setModal("profile"); }}
-                  className="flex-1 py-2 text-sm bg-slate-100 hover:bg-slate-200 text-slate-700 font-medium rounded-lg transition"
+                  className="py-2 text-xs bg-slate-100 hover:bg-slate-200 text-slate-700 font-medium rounded-lg transition"
                 >
                   👤 Profile
                 </button>
                 <button
                   onClick={() => { setActive(s); setModal("badge"); }}
-                  className="flex-1 py-2 text-sm bg-orange-100 hover:bg-orange-200 text-orange-700 font-medium rounded-lg transition"
+                  className="py-2 text-xs bg-orange-100 hover:bg-orange-200 text-orange-700 font-medium rounded-lg transition"
                 >
                   🏅 Badge
+                </button>
+                <button
+                  onClick={() => { setActive(s); setModal("reset-password"); }}
+                  className="py-2 text-xs bg-red-100 hover:bg-red-200 text-red-700 font-medium rounded-lg transition"
+                >
+                  🔑 Reset
                 </button>
               </div>
             </div>
@@ -158,6 +168,13 @@ export default function StaffClient({ initialStaff }: { initialStaff: StaffDispl
       {modal === "badge" && active && (
         <BadgeModal
           staff={active}
+          onClose={() => { setModal(null); setActive(null); }}
+        />
+      )}
+      {modal === "reset-password" && active && (
+        <ResetPasswordModal
+          targetEmail={active.email}
+          targetName={active.fullName}
           onClose={() => { setModal(null); setActive(null); }}
         />
       )}
