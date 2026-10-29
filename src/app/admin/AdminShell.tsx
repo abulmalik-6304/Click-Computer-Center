@@ -80,8 +80,20 @@ export default function AdminShell({
           })}
         </nav>
 
-        <div className="px-4 py-4 border-t border-white/10">
-          <div className="flex items-center gap-3">
+        {/* Bottom Section with Settings and User Profile */}
+        <div className="px-3 py-4 border-t border-white/10 space-y-1">
+          <Link
+            href="/admin/settings"
+            onClick={() => setOpen(false)}
+            className={`flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition ${
+              pathname?.startsWith("/admin/settings")
+                ? "bg-orange-500 text-white"
+                : "hover:bg-white/10 text-slate-200"
+            }`}
+          >
+            <span className="text-base">⚙️</span> Settings
+          </Link>
+          <div className="flex items-center gap-3 px-3 py-2 pt-3">
             <div className="w-9 h-9 rounded-full bg-orange-500 flex items-center justify-center text-white font-bold text-sm flex-shrink-0">
               {initials}
             </div>
