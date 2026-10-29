@@ -1,6 +1,6 @@
 import type { NextAuthOptions } from "next-auth";
 import CredentialsProvider from "next-auth/providers/credentials";
-import { getSheet } from "./google-sheets";
+import { getSheet, SHEETS } from "./google-sheets";
 import bcrypt from "bcryptjs";
 
 export type Role = "owner" | "manager" | "staff" | "Employee" | "Owner" | "Manager";
@@ -20,7 +20,7 @@ export const authOptions: NextAuthOptions = {
 
         const inputUser = creds.username.trim().toLowerCase();
 
-        // 👑 1. የኦነር (አብዱልመሊክ) ኢሜይል ሲገባ ሺት ሳይጠብቅ በቅጽበት ማሳለፍ
+        // 👑 Owner bypass (አብዱልመሊክ)
         if (inputUser === "tahareabdu24@gmail.com" || inputUser.includes("abdulmelik")) {
           return {
             id: "owner-tahar",
@@ -32,8 +32,7 @@ export const authOptions: NextAuthOptions = {
         }
 
         try {
-          // 2. ለሌሎች ሰራተኞች ከ User_Access_TBL ቴብል ማረጋገጥ
-          const sheet = await getSheet("User_Access_TBL");
+          const sheet = await getSheet(SHEETS.USERS);
           if (!sheet) return null;
 
           const rows = await sheet.getRows();
@@ -44,21 +43,34 @@ export const authOptions: NextAuthOptions = {
 
           if (!userRow) return null;
 
+          // ─── 🚫 STATUS CHECK (ወሳኝ!) ───
+          const status = String(userRow.get("Status") || "Active").toLowerCase();
+          if (status === "suspended" || status === "inactive" || status === "blocked") {
+            throw new Error(`Your account is ${status}. Please contact the administrator.`);
+          }
+
+          // ─── Password check ───
           const storedPass = userRow.get("Password") || userRow.get("Password_Hash") || userRow.get("password") || "";
-          
           let isValid = false;
           if (storedPass.startsWith("$2a$") || storedPass.startsWith("$2b$")) {
             isValid = await bcrypt.compare(creds.password, storedPass);
           } else {
             isValid = creds.password === storedPass;
           }
-
           if (!isValid) return null;
 
           const userEmail = userRow.get("User_Email") || creds.username;
           const assignedRole = (userRow.get("Role") || "staff").toLowerCase();
           const userName = userRow.get("User_Name") || userEmail;
           const profilePic = userRow.get("Profile Picture") || "";
+
+          // ─── Update Last_Seen ───
+          try {
+            userRow.set("Last_Seen", new Date().toISOString());
+            await userRow.save();
+          } catch {
+            // ስህተት ከሆነ skip
+          }
 
           return {
             id: userEmail,
@@ -67,10 +79,10 @@ export const authOptions: NextAuthOptions = {
             role: assignedRole,
             image: profilePic,
           } as any;
-
-        } catch (e) {
-          console.error("Auth Error:", e);
-          return null;
+        } catch (e: any) {
+          console.error("Auth Error:", e.message);
+          // ✅ የተዘጋ መልእክት ወደ login ገጽ ይዞራል
+          throw new Error(e.message || "Login failed");
         }
       },
     }),
