@@ -1,3 +1,4 @@
+// src/app/admin/sales/page.tsx
 import { getSheet, SHEETS } from "@/lib/google-sheets";
 import SalesPOS from "./SalesPOS";
 
