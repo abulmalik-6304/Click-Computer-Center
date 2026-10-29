@@ -53,7 +53,7 @@ export default function ExportClient({
   const preparedRows = useMemo(() => {
     if (kind === "sales") {
       const all = normalizeSalesRows(sales);
-      if (kind === "sales" && range !== "all") {
+      if (range !== "all") {
         return all.filter((r) => inRange(r.Date, from, to));
       }
       return all;
@@ -132,7 +132,7 @@ export default function ExportClient({
       URL.revokeObjectURL(url);
     } catch (e: any) {
       alert(`Export failed: ${e.message}`);
-    } finally {
+    } fontally {
       setBusy(false);
     }
   }
@@ -176,7 +176,6 @@ export default function ExportClient({
 
       {/* Options */}
       <div className="grid sm:grid-cols-2 gap-4 print:hidden">
-        {/* Date range (only for sales & expenses) */}
         {(kind === "sales" || kind === "expenses") && (
           <div className="bg-white p-4 rounded-2xl border border-slate-200">
             <label className="block text-sm font-semibold text-slate-900 mb-2">
@@ -303,7 +302,7 @@ export default function ExportClient({
                         key={c.key}
                         className={`px-3 py-2 text-slate-700 text-${c.align ?? "left"} whitespace-nowrap`}
                       >
-                        {formatCell(r[c.key], c.key)}
+                        {formatCell((r as Record<string, any>)[c.key], c.key)}
                       </td>
                     ))}
                   </tr>
