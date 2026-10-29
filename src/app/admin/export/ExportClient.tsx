@@ -132,7 +132,7 @@ export default function ExportClient({
       URL.revokeObjectURL(url);
     } catch (e: any) {
       alert(`Export failed: ${e.message}`);
-    } fontally {
+    } finally {
       setBusy(false);
     }
   }
