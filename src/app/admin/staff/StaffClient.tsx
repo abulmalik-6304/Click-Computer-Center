@@ -3,12 +3,12 @@
 import { useMemo, useState } from "react";
 import { useSession } from "next-auth/react";
 import { toDriveImageUrl as formatDriveUrl } from "@/lib/drive-url";
-import { StaffDisplay } from "./page";
+import { StaffDisplay, AwardedBadgeDisplay } from "./page";
 import ResetPasswordModal from "@/components/admin/ResetPasswordModal";
 import SuspendModal from "@/components/admin/SuspendModal";
 import EditProfileModal from "@/components/admin/EditProfileModal";
 import {
-  BADGES, BADGE_MAP, AwardedBadge,
+  BADGES, BADGE_MAP,
   groupBadgesByStaff, countBadgeTypes,
 } from "@/lib/badge-utils";
 import {
@@ -18,12 +18,15 @@ import {
 
 type ModalMode = "profile" | "badge" | "reset-password" | "suspend" | "edit" | null;
 
+// Local alias — AwardedBadgeDisplay ከ page.tsx
+type AwardedBadge = AwardedBadgeDisplay;
+
 export default function StaffClient({
   initialStaff,
   initialBadges,
 }: {
   initialStaff: StaffDisplay[];
-  initialBadges: AwardedBadge[];
+  initialBadges: AwardedBadgeDisplay[];
 }) {
   const { data: session } = useSession();
   const callerRole = String((session?.user as any)?.role || "staff").toLowerCase();
@@ -37,8 +40,8 @@ export default function StaffClient({
   const [modal, setModal] = useState<ModalMode>(null);
   const [active, setActive] = useState<StaffDisplay | null>(null);
 
-  const badgesByStaff = useMemo(() => groupBadgesByStaff(badges), [badges]);
-  const badgeTypeCounts = useMemo(() => countBadgeTypes(badges), [badges]);
+  const badgesByStaff = useMemo(() => groupBadgesByStaff(badges as any), [badges]);
+  const badgeTypeCounts = useMemo(() => countBadgeTypes(badges as any), [badges]);
 
   const filtered = useMemo(() => {
     let out = staff;
@@ -126,14 +129,22 @@ export default function StaffClient({
             <div className="space-y-3">
               {leaderboard.map((s, i) => (
                 <div key={s.id} className="flex items-center gap-3">
-                  <span className={`w-7 h-7 rounded-full flex items-center justify-center text-sm font-bold flex-shrink-0 ${
-                    i === 0 ? "bg-amber-400 text-white" :
-                    i === 1 ? "bg-slate-300 text-slate-800" :
-                    i === 2 ? "bg-orange-300 text-white" :
-                    "bg-slate-100 text-slate-600"
-                  }`}>{i + 1}</span>
-                  <img src={formatDriveUrl(s.photo)} alt={s.fullName} className="w-9 h-9 rounded-full object-cover bg-slate-100"
-                    onError={(e) => ((e.target as HTMLImageElement).src = "/placeholder.png")} />
+                  <span
+                    className={`w-7 h-7 rounded-full flex items-center justify-center text-sm font-bold flex-shrink-0 ${
+                      i === 0 ? "bg-amber-400 text-white" :
+                      i === 1 ? "bg-slate-300 text-slate-800" :
+                      i === 2 ? "bg-orange-300 text-white" :
+                      "bg-slate-100 text-slate-600"
+                    }`}
+                  >
+                    {i + 1}
+                  </span>
+                  <img
+                    src={formatDriveUrl(s.photo)}
+                    alt={s.fullName}
+                    className="w-9 h-9 rounded-full object-cover bg-slate-100"
+                    onError={(e) => ((e.target as HTMLImageElement).src = "/placeholder.png")}
+                  />
                   <div className="flex-1 min-w-0">
                     <p className="text-sm font-semibold text-slate-900 truncate">{s.fullName}</p>
                   </div>
@@ -178,19 +189,25 @@ export default function StaffClient({
         <div className="flex flex-wrap gap-2">
           <span className="text-xs font-semibold text-slate-500 self-center">Role:</span>
           {(["all", "owner", "manager", "staff"] as const).map((f) => (
-            <button key={f} onClick={() => setRoleFilter(f)}
+            <button
+              key={f}
+              onClick={() => setRoleFilter(f)}
               className={`px-3 py-1.5 rounded-lg text-xs font-medium capitalize ${
                 roleFilter === f ? "bg-slate-900 text-white" : "bg-slate-100 text-slate-700"
-              }`}>
+              }`}
+            >
               {f}
             </button>
           ))}
           <span className="text-xs font-semibold text-slate-500 self-center ml-2">Status:</span>
           {(["all", "active", "suspended"] as const).map((f) => (
-            <button key={f} onClick={() => setStatusFilter(f)}
+            <button
+              key={f}
+              onClick={() => setStatusFilter(f)}
               className={`px-3 py-1.5 rounded-lg text-xs font-medium capitalize ${
                 statusFilter === f ? "bg-slate-900 text-white" : "bg-slate-100 text-slate-700"
-              }`}>
+              }`}
+            >
               {f}
             </button>
           ))}
@@ -206,17 +223,22 @@ export default function StaffClient({
           const can = canManage(callerRole, s.role, callerEmail, s.email);
 
           return (
-            <div key={s.id}
+            <div
+              key={s.id}
               className={`bg-white rounded-2xl border p-5 shadow-sm transition ${
                 isSuspended ? "border-red-200 bg-red-50/30" : "border-slate-200"
-              }`}>
+              }`}
+            >
               <div className="flex items-start gap-4">
                 <div className="relative">
-                  <img src={formatDriveUrl(s.photo)} alt={s.fullName}
+                  <img
+                    src={formatDriveUrl(s.photo)}
+                    alt={s.fullName}
                     className={`w-14 h-14 rounded-full object-cover bg-slate-100 flex-shrink-0 ${
                       isSuspended ? "ring-2 ring-red-400 grayscale" : "ring-2 ring-orange-500"
                     }`}
-                    onError={(e) => ((e.target as HTMLImageElement).src = "/placeholder.png")} />
+                    onError={(e) => ((e.target as HTMLImageElement).src = "/placeholder.png")}
+                  />
                   {sBadges.length > 0 && (
                     <span className="absolute -bottom-1 -right-1 bg-amber-400 text-white text-xs font-bold rounded-full w-6 h-6 flex items-center justify-center ring-2 ring-white">
                       {sBadges.length}
@@ -244,7 +266,10 @@ export default function StaffClient({
                       const def = BADGE_MAP[b.badgeId];
                       if (!def) return null;
                       return (
-                        <span key={idx} className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium ${def.color} ${def.textColor}`}>
+                        <span
+                          key={idx}
+                          className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium ${def.color} ${def.textColor}`}
+                        >
                           {def.emoji} {def.label}
                         </span>
                       );
@@ -259,31 +284,41 @@ export default function StaffClient({
               {/* Actions */}
               <div className="mt-4 pt-4 border-t border-slate-100 space-y-2">
                 <div className="grid grid-cols-3 gap-1">
-                  <button onClick={() => { setActive(s); setModal("profile"); }}
-                    className="py-2 text-xs bg-slate-100 hover:bg-slate-200 text-slate-700 font-medium rounded">
+                  <button
+                    onClick={() => { setActive(s); setModal("profile"); }}
+                    className="py-2 text-xs bg-slate-100 hover:bg-slate-200 text-slate-700 font-medium rounded"
+                  >
                     👤 View
                   </button>
-                  <button onClick={() => { setActive(s); setModal("badge"); }}
-                    className="py-2 text-xs bg-orange-100 hover:bg-orange-200 text-orange-700 font-medium rounded">
+                  <button
+                    onClick={() => { setActive(s); setModal("badge"); }}
+                    className="py-2 text-xs bg-orange-100 hover:bg-orange-200 text-orange-700 font-medium rounded"
+                  >
                     🏅 Badge
                   </button>
-                  <button onClick={() => { setActive(s); setModal("reset-password"); }}
-                    className="py-2 text-xs bg-blue-100 hover:bg-blue-200 text-blue-700 font-medium rounded">
+                  <button
+                    onClick={() => { setActive(s); setModal("reset-password"); }}
+                    className="py-2 text-xs bg-blue-100 hover:bg-blue-200 text-blue-700 font-medium rounded"
+                  >
                     🔑 Reset
                   </button>
                 </div>
                 {can.allowed && (
                   <div className="grid grid-cols-2 gap-1">
-                    <button onClick={() => { setActive(s); setModal("edit"); }}
-                      className="py-2 text-xs bg-slate-700 hover:bg-slate-800 text-white font-medium rounded">
+                    <button
+                      onClick={() => { setActive(s); setModal("edit"); }}
+                      className="py-2 text-xs bg-slate-700 hover:bg-slate-800 text-white font-medium rounded"
+                    >
                       ✏️ Edit
                     </button>
-                    <button onClick={() => { setActive(s); setModal("suspend"); }}
+                    <button
+                      onClick={() => { setActive(s); setModal("suspend"); }}
                       className={`py-2 text-xs font-medium rounded ${
                         isSuspended
                           ? "bg-emerald-600 hover:bg-emerald-700 text-white"
                           : "bg-red-600 hover:bg-red-700 text-white"
-                      }`}>
+                      }`}
+                    >
                       {isSuspended ? "✅ Activate" : "🚫 Block"}
                     </button>
                   </div>
@@ -296,13 +331,25 @@ export default function StaffClient({
 
       {/* Modals */}
       {modal === "profile" && active && (
-        <ProfileModal staff={active} badges={badgesByStaff[active.id] ?? []} onClose={() => { setModal(null); setActive(null); }} />
+        <ProfileModal
+          staff={active}
+          badges={badgesByStaff[active.id] ?? []}
+          onClose={() => { setModal(null); setActive(null); }}
+        />
       )}
       {modal === "badge" && active && (
-        <BadgeModal staff={active} onClose={() => { setModal(null); setActive(null); }} onAwarded={refresh} />
+        <BadgeModal
+          staff={active}
+          onClose={() => { setModal(null); setActive(null); }}
+          onAwarded={refresh}
+        />
       )}
       {modal === "reset-password" && active && (
-        <ResetPasswordModal targetEmail={active.email} targetName={active.fullName} onClose={() => { setModal(null); setActive(null); }} />
+        <ResetPasswordModal
+          targetEmail={active.email}
+          targetName={active.fullName}
+          onClose={() => { setModal(null); setActive(null); }}
+        />
       )}
       {modal === "suspend" && active && (
         <SuspendModal
@@ -333,9 +380,11 @@ export default function StaffClient({
   );
 }
 
-// ─── Profile + Badge modals (from previous version, unchanged) ───
+// ─── Modal components ───
 
-function ProfileModal({ staff, badges, onClose }: { staff: StaffDisplay; badges: AwardedBadge[]; onClose: () => void }) {
+function ProfileModal({
+  staff, badges, onClose,
+}: { staff: StaffDisplay; badges: AwardedBadge[]; onClose: () => void }) {
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60">
       <div className="bg-white rounded-2xl shadow-2xl w-full max-w-lg max-h-[90vh] overflow-y-auto p-6 space-y-4">
@@ -344,9 +393,12 @@ function ProfileModal({ staff, badges, onClose }: { staff: StaffDisplay; badges:
           <button onClick={onClose} className="text-slate-400 hover:text-slate-900 text-xl">✕</button>
         </div>
         <div className="flex items-center gap-4 pb-4 border-b border-slate-100">
-          <img src={formatDriveUrl(staff.photo)} alt={staff.fullName}
+          <img
+            src={formatDriveUrl(staff.photo)}
+            alt={staff.fullName}
             className="w-20 h-20 rounded-full object-cover ring-2 ring-orange-500 bg-slate-100"
-            onError={(e) => ((e.target as HTMLImageElement).src = "/placeholder.png")} />
+            onError={(e) => ((e.target as HTMLImageElement).src = "/placeholder.png")}
+          />
           <div>
             <p className="font-bold text-slate-900 text-lg">{staff.fullName}</p>
             <p className="text-sm text-slate-500">{staff.email}</p>
@@ -384,7 +436,10 @@ function ProfileModal({ staff, badges, onClose }: { staff: StaffDisplay; badges:
             </div>
           )}
         </div>
-        <button onClick={onClose} className="w-full py-2.5 rounded-lg bg-slate-900 hover:bg-slate-800 text-white font-semibold">
+        <button
+          onClick={onClose}
+          className="w-full py-2.5 rounded-lg bg-slate-900 hover:bg-slate-800 text-white font-semibold"
+        >
           Close
         </button>
       </div>
@@ -392,7 +447,9 @@ function ProfileModal({ staff, badges, onClose }: { staff: StaffDisplay; badges:
   );
 }
 
-function BadgeModal({ staff, onClose, onAwarded }: { staff: StaffDisplay; onClose: () => void; onAwarded: () => void }) {
+function BadgeModal({
+  staff, onClose, onAwarded,
+}: { staff: StaffDisplay; onClose: () => void; onAwarded: () => void }) {
   const [selected, setSelected] = useState<string[]>([]);
   const [note, setNote] = useState("");
   const [saving, setSaving] = useState(false);
@@ -405,14 +462,24 @@ function BadgeModal({ staff, onClose, onAwarded }: { staff: StaffDisplay; onClos
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          staffId: staff.id, staffName: staff.fullName,
-          badges: selected, note, assignedAt: new Date().toISOString(),
+          staffId: staff.id,
+          staffName: staff.fullName,
+          badges: selected,
+          note,
+          assignedAt: new Date().toISOString(),
         }),
       });
-      if (res.ok) { onAwarded(); onClose(); }
-      else alert("Could not save badge");
-    } catch (e: any) { alert(e.message); }
-    finally { setSaving(false); }
+      if (res.ok) {
+        onAwarded();
+        onClose();
+      } else {
+        alert("Could not save badge");
+      }
+    } catch (e: any) {
+      alert(e.message);
+    } finally {
+      setSaving(false);
+    }
   }
 
   return (
@@ -425,14 +492,17 @@ function BadgeModal({ staff, onClose, onAwarded }: { staff: StaffDisplay; onClos
         <p className="text-sm text-slate-500">Award to: <strong>{staff.fullName}</strong></p>
         <div className="grid grid-cols-2 gap-2">
           {BADGES.map((b) => (
-            <button key={b.id} onClick={() =>
-              setSelected((s) => s.includes(b.id) ? s.filter((x) => x !== b.id) : [...s, b.id])
-            }
+            <button
+              key={b.id}
+              onClick={() =>
+                setSelected((s) => (s.includes(b.id) ? s.filter((x) => x !== b.id) : [...s, b.id]))
+              }
               className={`p-3 rounded-lg text-sm font-medium border text-left ${
                 selected.includes(b.id)
                   ? "bg-orange-500 text-white border-orange-500"
                   : "bg-slate-50 text-slate-700 border-slate-200"
-              }`}>
+              }`}
+            >
               <div className="flex items-center gap-2">
                 <span className="text-lg">{b.emoji}</span>
                 <span className="truncate">{b.label}</span>
@@ -440,15 +510,25 @@ function BadgeModal({ staff, onClose, onAwarded }: { staff: StaffDisplay; onClos
             </button>
           ))}
         </div>
-        <textarea value={note} onChange={(e) => setNote(e.target.value)}
+        <textarea
+          value={note}
+          onChange={(e) => setNote(e.target.value)}
           placeholder="Recognition note (optional)"
-          className="w-full rounded-lg border border-slate-300 px-3 py-2 text-slate-900" rows={2} />
+          className="w-full rounded-lg border border-slate-300 px-3 py-2 text-slate-900"
+          rows={2}
+        />
         <div className="flex gap-2">
-          <button onClick={onClose} className="flex-1 py-2.5 rounded-lg border border-slate-300 text-slate-700 font-medium">
+          <button
+            onClick={onClose}
+            className="flex-1 py-2.5 rounded-lg border border-slate-300 text-slate-700 font-medium"
+          >
             Cancel
           </button>
-          <button onClick={award} disabled={selected.length === 0 || saving}
-            className="flex-1 py-2.5 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white font-semibold disabled:opacity-50">
+          <button
+            onClick={award}
+            disabled={selected.length === 0 || saving}
+            className="flex-1 py-2.5 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white font-semibold disabled:opacity-50"
+          >
             {saving ? "Saving…" : `Award (${selected.length})`}
           </button>
         </div>
