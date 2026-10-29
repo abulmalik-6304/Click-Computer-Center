@@ -1,9 +1,4 @@
 // src/lib/staff-control.ts
-// ═══════════════════════════════════════════════════════════════
-// 🔒 STAFF CONTROL HELPERS
-// - Status normalization
-// - Role permission checks
-// ═══════════════════════════════════════════════════════════════
 
 export type StaffStatus = "active" | "inactive" | "suspended";
 
@@ -18,12 +13,6 @@ export function isActive(raw: string | undefined | null): boolean {
   return normalizeStatus(raw) === "active";
 }
 
-/**
- * የትኛው ተጠቃሚ ማንን ማስተዳደር ይችላል?
- * - owner: ሁሉንም (ከራሱ በስተቀር)
- * - manager: staff ብቻ (owner/manager አይችልም)
- * - staff: ማንንም አይችልም
- */
 export function canManage(
   callerRole: string,
   targetRole: string,
@@ -34,11 +23,9 @@ export function canManage(
   const target = targetRole.toLowerCase();
 
   if (callerEmail.toLowerCase() === targetEmail.toLowerCase()) {
-    return { allowed: false, reason: "You cannot manage your own account here" };
+    return { allowed: false, reason: "You cannot manage your own account" };
   }
-  if (caller === "owner") {
-    return { allowed: true };
-  }
+  if (caller === "owner") return { allowed: true };
   if (caller === "manager") {
     if (target === "staff") return { allowed: true };
     return { allowed: false, reason: "Managers can only manage staff" };
@@ -46,11 +33,6 @@ export function canManage(
   return { allowed: false, reason: "Insufficient permissions" };
 }
 
-/**
- * ሚና መቀየር ይቻላል?
- * - owner: ማንኛውንም (ከራሱ በስተቀር)
- * - manager: ❌ ሚና መቀየር አይችልም
- */
 export function canChangeRole(
   callerRole: string,
   callerEmail: string,
