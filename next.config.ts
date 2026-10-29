@@ -7,6 +7,17 @@ const nextConfig: NextConfig = {
       { protocol: "https", hostname: "drive.google.com" },
     ],
   },
+
+  // ✅ pdfkit ን ከTurbopack ሸሽግ (fontkit compatibility)
+  serverExternalPackages: ["pdfkit"],
+
+  // ✅ የPDF ፎንት ፋይሎች ከbuild ጋር እንዲካተቱ
+  outputFileTracingIncludes: {
+    "/api/export": [
+      "node_modules/pdfkit/js/data/*.afm",
+      "node_modules/pdfkit/js/standard-fonts/*.cjs",
+    ],
+  },
 };
 
 export default nextConfig;
