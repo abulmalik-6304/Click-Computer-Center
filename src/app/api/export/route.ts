@@ -1,13 +1,8 @@
 // src/app/api/export/route.ts
 import { NextRequest, NextResponse } from "next/server";
 import * as XLSX from "xlsx";
-import PDFDocument from "pdfkit";
-import {
-  ExportPayload,
-  ExportColumn,
-} from "@/lib/export-utils";
+import { ExportPayload } from "@/lib/export-utils";
 
-// ⚠️ Node runtime required for pdfkit buffer streams
 export const runtime = "nodejs";
 
 export async function POST(req: NextRequest) {
@@ -34,13 +29,10 @@ export async function POST(req: NextRequest) {
 
 // ─── Spreadsheet (XLSX / CSV) ───
 function exportSpreadsheet(payload: ExportPayload) {
-  const columnHeaders: Record<string, string> = {};
-  for (const c of payload.columns) columnHeaders[c.key] = c.label;
-
   const rowsForSheet = payload.rows.map((row) => {
     const out: Record<string, any> = {};
     for (const c of payload.columns) {
-      out[c.label] = row[c.key] ?? "";
+      out[c.label] = (row as Record<string, any>)[c.key] ?? "";
     }
     return out;
   });
@@ -60,7 +52,8 @@ function exportSpreadsheet(payload: ExportPayload) {
       ? "text/csv; charset=utf-8"
       : "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet";
 
-  return new NextResponse(buf, {
+  // 🎯 Fix 1: Buffer ን ወደ Uint8Array በመቀየር የ TypeScript ኤረርን ማስወገድ
+  return new NextResponse(new Uint8Array(buf), {
     headers: {
       "Content-Type": contentType,
       "Content-Disposition": `attachment; filename="${filename}.${payload.format}"`,
@@ -70,7 +63,10 @@ function exportSpreadsheet(payload: ExportPayload) {
 }
 
 // ─── PDF ───
-function exportPdf(payload: ExportPayload): NextResponse {
+async function exportPdf(payload: ExportPayload): Promise<NextResponse> {
+  // 🎯 Fix 2: Turbopack Build ግጭትን ለመከላከል pdfkit ን በ Dynamic Import መጥራት
+  const PDFDocument = (await import("pdfkit")).default;
+
   const doc = new PDFDocument({
     size: "A4",
     margin: 30,
@@ -89,9 +85,7 @@ function exportPdf(payload: ExportPayload): NextResponse {
   });
 
   // ─── Header banner ───
-  doc
-    .rect(0, 0, doc.page.width, 70)
-    .fill("#0f172a");
+  doc.rect(0, 0, doc.page.width, 70).fill("#0f172a");
   doc
     .fillColor("#ffffff")
     .fontSize(18)
@@ -155,7 +149,6 @@ function exportPdf(payload: ExportPayload): NextResponse {
     if (r > 0 && r % rowsPerPage === 0) {
       doc.addPage();
       y = 40;
-      // Repeat header on new page
       let hx = startX;
       doc.rect(startX, y, usableWidth, rowHeight).fill("#1e293b");
       doc.fillColor("#ffffff").fontSize(8).font("Helvetica-Bold");
@@ -179,7 +172,7 @@ function exportPdf(payload: ExportPayload): NextResponse {
     doc.fillColor("#0f172a").fontSize(7.5).font("Helvetica");
     for (let i = 0; i < payload.columns.length; i++) {
       const col = payload.columns[i];
-      const raw = row[col.key];
+      const raw = (row as Record<string, any>)[col.key];
       const text = formatCell(raw, col.key);
       doc.text(text, cx + 4, y + 6, {
         width: widths[i] - 8,
@@ -190,7 +183,6 @@ function exportPdf(payload: ExportPayload): NextResponse {
     }
 
     y += rowHeight;
-    // Page overflow guard
     if (y > doc.page.height - 60) {
       doc.addPage();
       y = 40;
@@ -215,20 +207,17 @@ function exportPdf(payload: ExportPayload): NextResponse {
 
   doc.end();
 
-  return new Promise<NextResponse>((resolve) => {
-    done.then((buf) => {
-      const filename = `${payload.kind}-${payload.generatedAt.slice(0, 10)}`;
-      resolve(
-        new NextResponse(buf, {
-          headers: {
-            "Content-Type": "application/pdf",
-            "Content-Disposition": `attachment; filename="${filename}.pdf"`,
-            "Cache-Control": "no-store",
-          },
-        })
-      );
-    });
-  }) as any;
+  const buf = await done;
+  const filename = `${payload.kind}-${payload.generatedAt.slice(0, 10)}`;
+
+  // 🎯 Fix 3: Buffer ን ወደ Uint8Array ቀይሮ በ Clean Async/Await መመለስ
+  return new NextResponse(new Uint8Array(buf), {
+    headers: {
+      "Content-Type": "application/pdf",
+      "Content-Disposition": `attachment; filename="${filename}.pdf"`,
+      "Cache-Control": "no-store",
+    },
+  });
 }
 
 function formatCell(raw: any, key: string): string {
@@ -236,7 +225,6 @@ function formatCell(raw: any, key: string): string {
   if (typeof raw === "number") {
     if (key.toLowerCase().includes("margin")) return raw.toFixed(2) + "%";
     if (key.toLowerCase().includes("date")) return String(raw);
-    // Money or count — compact
     return raw.toLocaleString(undefined, { maximumFractionDigits: 2 });
   }
   return String(raw);
