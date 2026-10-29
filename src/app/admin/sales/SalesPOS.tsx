@@ -1,6 +1,8 @@
+// src/app/admin/sales/SalesPOS.tsx (ወይም የፋይሉ ትክክለኛ ቦታ)
 "use client";
 
 import { useMemo, useState } from "react";
+import SalesHistory from "./SalesHistory"; // ✅ አዲሱ Imported ታብ
 
 type CartItem = { itemId: string; name: string; price: number; qty: number; maxStock: number };
 
@@ -17,9 +19,9 @@ export default function SalesPOS({
     <div className="p-4 sm:p-6 lg:p-10 space-y-6">
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
         <div>
-          <h1 className="text-2xl sm:text-3xl font-bold text-slate-900">🧾 Sales / POS</h1>
+          <h1 className="text-2xl sm:text-3xl font-bold text-slate-900">🧾 Sales</h1>
           <p className="text-sm text-slate-500 mt-1">
-            {inventory.length} items available · {recentSales.length} recent sales
+            {inventory.length} items · {recentSales.length} recent
           </p>
         </div>
         <div className="flex gap-2 bg-slate-100 rounded-lg p-1">
@@ -38,7 +40,7 @@ export default function SalesPOS({
         </div>
       </div>
 
-      {tab === "pos" ? <POS inventory={inventory} /> : <History sales={recentSales} />}
+      {tab === "pos" ? <POS inventory={inventory} /> : <SalesHistory sales={recentSales} />}
     </div>
   );
 }
@@ -215,49 +217,6 @@ function POS({ inventory }: { inventory: any[] }) {
             {submitting ? "Processing…" : `Checkout · ${total.toLocaleString()} ETB`}
           </button>
         </div>
-      </div>
-    </div>
-  );
-}
-
-function History({ sales }: { sales: any[] }) {
-  return (
-    <div className="bg-white rounded-2xl border border-slate-200 overflow-hidden">
-      <div className="overflow-x-auto">
-        <table className="w-full text-sm">
-          <thead className="bg-slate-50 text-slate-700">
-            <tr>
-              <th className="text-left px-4 py-3 font-semibold">Invoice</th>
-              <th className="text-left px-4 py-3 font-semibold">Date</th>
-              <th className="text-left px-4 py-3 font-semibold">Customer</th>
-              <th className="text-right px-4 py-3 font-semibold">Total</th>
-              <th className="text-right px-4 py-3 font-semibold">Paid</th>
-              <th className="text-left px-4 py-3 font-semibold">Status</th>
-            </tr>
-          </thead>
-          <tbody>
-            {sales.length === 0 ? (
-              <tr><td colSpan={6} className="text-center py-10 text-slate-500">No sales yet</td></tr>
-            ) : (
-              sales.map((s) => (
-                <tr key={s.Sales_ID} className="border-t border-slate-100 hover:bg-slate-50">
-                  <td className="px-4 py-3 font-medium">{s.Invoice_No || s.Sales_ID}</td>
-                  <td className="px-4 py-3 text-slate-600">{String(s.Date).slice(0, 10)}</td>
-                  <td className="px-4 py-3">{s.Customer_Name}</td>
-                  <td className="px-4 py-3 text-right font-semibold">{Number(s.Total_Amount ?? 0).toLocaleString()}</td>
-                  <td className="px-4 py-3 text-right">{Number(s.Paid_Amount ?? 0).toLocaleString()}</td>
-                  <td className="px-4 py-3">
-                    <span className={`px-2 py-1 rounded-full text-xs font-semibold ${
-                      s.Payment_Status === "Paid" ? "bg-emerald-100 text-emerald-700"
-                        : s.Payment_Status === "Partial" ? "bg-orange-100 text-orange-700"
-                        : "bg-red-100 text-red-700"
-                    }`}>{s.Payment_Status}</span>
-                  </td>
-                </tr>
-              ))
-            )}
-          </tbody>
-        </table>
       </div>
     </div>
   );
