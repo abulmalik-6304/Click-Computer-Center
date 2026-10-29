@@ -293,6 +293,75 @@ function Mini({ label, value, color = "slate" }: { label: string; value: any; co
 }
 
 function SaleDetailModal({ sale, onClose }: { sale: Sale; onClose: () => void }) {
+  const [copied, setCopied] = useState(false);
+
+  // ─── የጽሑፍ ደረሰኝ መፍጠሪያ (ለ Copy & Share) ───
+  function buildReceiptText(): string {
+    const items = sale.items
+      .map((i) => `  • ${i.itemName} × ${i.quantity} = ${i.totalPrice.toLocaleString()} ETB`)
+      .join("\n");
+    const outstanding = sale.totalAmount - sale.paidAmount;
+    return [
+      "🧾 *CLICK COMPUTER CENTER*",
+      "───────────────────────",
+      `📄 Invoice: ${sale.invoiceNo || sale.salesId}`,
+      `📅 Date: ${formatDate(sale.date)}`,
+      `👤 Customer: ${sale.customerName}`,
+      `👨‍💼 Staff: ${sale.staffName || "—"}`,
+      `💳 Payment: ${sale.paymentMethod} (${sale.paymentStatus})`,
+      "───────────────────────",
+      "📦 *Items:*",
+      items,
+      "───────────────────────",
+      `Subtotal: ${sale.items.reduce((s, i) => s + i.totalPrice, 0).toLocaleString()} ETB`,
+      sale.discount > 0 ? `Discount: -${sale.discount.toLocaleString()} ETB` : "",
+      `*TOTAL: ${sale.totalAmount.toLocaleString()} ETB*`,
+      `Paid: ${sale.paidAmount.toLocaleString()} ETB`,
+      outstanding > 0 ? `⚠️ Outstanding: ${outstanding.toLocaleString()} ETB` : "",
+      "───────────────────────",
+      "🙏 Thank you for your business!",
+    ]
+      .filter(Boolean)
+      .join("\n");
+  }
+
+  // ─── Copy ───
+  async function copyReceipt() {
+    const text = buildReceiptText();
+    try {
+      await navigator.clipboard.writeText(text);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2500);
+    } catch {
+      const ta = document.createElement("textarea");
+      ta.value = text;
+      document.body.appendChild(ta);
+      ta.select();
+      document.execCommand("copy");
+      document.body.removeChild(ta);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2500);
+    }
+  }
+
+  // ─── Share ───
+  async function shareReceipt() {
+    const text = buildReceiptText();
+    if (navigator.share) {
+      try {
+        await navigator.share({
+          title: `Receipt ${sale.invoiceNo || sale.salesId}`,
+          text,
+        });
+      } catch {
+        // user cancelled
+      }
+    } else {
+      await copyReceipt();
+      alert("Share not supported on this browser. Receipt copied to clipboard instead.");
+    }
+  }
+
   function printReceipt() {
     const html = `
       <html><head><title>Receipt ${sale.invoiceNo}</title>
@@ -315,7 +384,7 @@ function SaleDetailModal({ sale, onClose }: { sale: Sale; onClose: () => void })
         <table>
           <thead><tr><td><strong>Item</strong></td><td class="right"><strong>Qty</strong></td><td class="right"><strong>Price</strong></td></tr></thead>
           <tbody>
-            ${sale.items.map(i => `<tr><td>${i.itemName}</td><td class="right">${i.quantity}</td><td class="right">${i.totalPrice.toLocaleString()}</td></tr>`).join("")}
+            ${sale.items.map((i) => `<tr><td>${i.itemName}</td><td class="right">${i.quantity}</td><td class="right">${i.totalPrice.toLocaleString()}</td></tr>`).join("")}
           </tbody>
         </table>
         <hr/>
@@ -384,20 +453,41 @@ function SaleDetailModal({ sale, onClose }: { sale: Sale; onClose: () => void })
           <Row label="Outstanding" value={sale.totalAmount - sale.paidAmount} />
         </div>
 
-        <div className="flex gap-2 pt-2">
+        {/* ─── Action Buttons ─── */}
+        <div className="grid grid-cols-3 gap-2 pt-2">
           <button
             onClick={printReceipt}
-            className="flex-1 py-2.5 rounded-lg bg-slate-900 hover:bg-slate-800 text-white font-semibold"
+            className="py-2.5 rounded-lg bg-slate-900 hover:bg-slate-800 text-white font-semibold text-sm transition"
+            title="Print Receipt"
           >
-            🖨 Print Receipt
+            🖨 Print
           </button>
           <button
-            onClick={onClose}
-            className="flex-1 py-2.5 rounded-lg border border-slate-300 text-slate-700 font-medium"
+            onClick={copyReceipt}
+            className={`py-2.5 rounded-lg font-semibold text-sm transition ${
+              copied
+                ? "bg-emerald-600 text-white"
+                : "bg-slate-100 hover:bg-slate-200 text-slate-700"
+            }`}
+            title="Copy receipt text"
           >
-            Close
+            {copied ? "✅ Copied!" : "📋 Copy"}
+          </button>
+          <button
+            onClick={shareReceipt}
+            className="py-2.5 rounded-lg bg-orange-500 hover:bg-orange-600 text-white font-semibold text-sm transition"
+            title="Share receipt"
+          >
+            🔗 Share
           </button>
         </div>
+
+        <button
+          onClick={onClose}
+          className="w-full py-2 rounded-lg border border-slate-300 text-slate-700 font-medium text-sm"
+        >
+          Close
+        </button>
       </div>
     </div>
   );
