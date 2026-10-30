@@ -1,3 +1,4 @@
+// src/app/admin/AdminShell.tsx
 "use client";
 
 import { useState } from "react";
@@ -9,6 +10,8 @@ const NAV = [
   { href: "/admin/dashboard", label: "Dashboard", icon: "📊", roles: ["owner", "manager", "staff"] },
   { href: "/admin/inventory", label: "Inventory", icon: "📦", roles: ["owner", "manager", "staff"] },
   { href: "/admin/sales", label: "Sales / POS", icon: "🧾", roles: ["owner", "manager", "staff"] },
+  { href: "/admin/customers", label: "Customers", icon: "🧑", roles: ["owner", "manager", "staff"] },
+  { href: "/admin/suppliers", label: "Suppliers", icon: "🏭", roles: ["owner", "manager"] },
   { href: "/admin/reports", label: "Reports", icon: "📈", roles: ["owner", "manager"] },
   { href: "/admin/export", label: "Export Center", icon: "📤", roles: ["owner", "manager"] },
   { href: "/admin/announcements", label: "Announcements", icon: "📢", roles: ["owner", "manager", "staff"] },
