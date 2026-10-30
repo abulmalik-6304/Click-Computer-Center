@@ -6,7 +6,7 @@ import { useSearchParams } from "next/navigation";
 import Link from "next/link";
 import PublicNav from "@/components/public/PublicNav";
 import PublicFooter from "@/components/public/PublicFooter";
-import { TRAINING_COURSES } from "@/lib/public-data";
+import { TRAINING_COURSES } from "@/lib/public-constants";
 
 function RegisterForm() {
   const params = useSearchParams();
