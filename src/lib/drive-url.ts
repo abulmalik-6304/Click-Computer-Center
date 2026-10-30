@@ -13,10 +13,10 @@
  * Returns:
  *   - https://lh3.googleusercontent.com/d/FILE_ID=w1000
  *   - or the original URL if already valid
- *   - or "/placeholder.png" if empty/invalid
+ *   - or "/placeholder.svg" if empty/invalid
  */
 export function toDriveImageUrl(raw: string | undefined | null): string {
-  if (!raw || !String(raw).trim()) return "/placeholder.png";
+  if (!raw || !String(raw).trim()) return "/placeholder.svg";
 
   const str = String(raw).trim();
   if (str.startsWith("/")) return str;
@@ -36,7 +36,7 @@ export function toDriveImageUrl(raw: string | undefined | null): string {
     return `https://lh3.googleusercontent.com/d/${str}=w1000`;
   }
 
-  return "/placeholder.png";
+  return "/placeholder.svg";
 }
 
 // ═══════════════════════════════════════════════════════════════
