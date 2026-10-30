@@ -1,3 +1,7 @@
+// src/app/admin/dashboard/page.tsx
+import { getServerSession } from "next-auth";
+import { authOptions } from "@/lib/auth";
+import { redirect } from "next/navigation";
 import { getSheet, SHEETS } from "@/lib/google-sheets";
 import {
   calculateTodaysSalesTotal,
@@ -6,7 +10,7 @@ import {
   calculateNetProfit,
 } from "@/lib/financial-engine";
 import { buildEnrichedSales, mapExpenseRow } from "@/lib/data-mappers";
-import Link from "next/link";
+import DashboardClient from "./DashboardClient";
 
 export const revalidate = 0;
 
@@ -59,23 +63,15 @@ async function loadAnnouncements(role: string): Promise<AnnouncementSummary[]> {
 }
 
 export default async function DashboardPage() {
+  const session = await getServerSession(authOptions);
+  if (!session?.user) redirect("/login");
+
+  const userRole = String((session.user as any).role || "staff").toLowerCase();
+
   // ─── ዳታ መጫን ───
   let sales: any[] = [];
   let expenses: any[] = [];
-  let lowStock: any[] = [];
-  let recentSales: any[] = [];
-  let announcements: AnnouncementSummary[] = [];
-
-  // ለ role ማወቅ (auth session)
-  let userRole = "staff";
-  try {
-    const { getServerSession } = await import("next-auth");
-    const { authOptions } = await import("@/lib/auth");
-    const session = await getServerSession(authOptions);
-    userRole = String((session?.user as any)?.role || "staff").toLowerCase();
-  } catch {
-    userRole = "staff";
-  }
+  let inventory: any[] = [];
 
   try {
     // ሽያጮች (Sales_TBL + Sales_Items_TBL)
@@ -95,247 +91,119 @@ export default async function DashboardPage() {
     const expRows = await expSheet.getRows();
     expenses = expRows.map((r) => mapExpenseRow(r.toObject()));
 
-    // አነስተኛ ክምችት
+    // ኢንቨንትሪ
     const invSheet = await getSheet(SHEETS.INVENTORY);
     const invRows = await invSheet.getRows();
-    lowStock = invRows
-      .map((r) => r.toObject())
-      .filter(
-        (r: any) =>
-          Number(r.Stock_Quantity ?? r.stock ?? 0) <=
-          Number(r.Reorder_Level ?? r.minStock ?? 10)
-      )
-      .slice(0, 5);
-
-    recentSales = sales.slice(-5).reverse();
+    inventory = invRows.map((r) => r.toObject());
   } catch (e) {
     console.error("Dashboard load error:", e);
   }
 
   // ─── Announcements ───
-  announcements = await loadAnnouncements(userRole);
+  const announcements = await loadAnnouncements(userRole);
 
   // ═══════════════════════════════════════════════════════════
   // ⚠️ FINANCIAL CALCULATIONS — DO NOT INLINE. Use engine only.
   // ═══════════════════════════════════════════════════════════
   const today = new Date().toISOString().slice(0, 10);
+  const yesterday = new Date();
+  yesterday.setDate(yesterday.getDate() - 1);
+  const yesterdayStr = yesterday.toISOString().slice(0, 10);
+
   const todaySales = calculateTodaysSalesTotal(sales as any, today);
   const todayCost = calculateTodaysCostTotal(sales as any, today);
   const todayExpenses = calculateTodaysExpensesTotal(expenses as any, today);
   const netProfit = calculateNetProfit(sales as any, expenses as any, today);
 
-  const cards = [
-    {
-      label: "Today's Sales",
-      value: todaySales,
-      icon: "💰",
-      badgeBg: "bg-emerald-50 text-emerald-700",
-      valueColor: "text-emerald-600",
-      sub: `${sales.filter((s) => s.date?.includes(today)).length} transactions`,
+  const yestSales = calculateTodaysSalesTotal(sales as any, yesterdayStr);
+  const yestCost = calculateTodaysCostTotal(sales as any, yesterdayStr);
+  const yestExpenses = calculateTodaysExpensesTotal(expenses as any, yesterdayStr);
+  const yestProfit = calculateNetProfit(sales as any, expenses as any, yesterdayStr);
+
+  // ─── 7-day trend ───
+  const trend7d: { date: string; revenue: number; profit: number }[] = [];
+  for (let i = 6; i >= 0; i--) {
+    const d = new Date();
+    d.setDate(d.getDate() - i);
+    const key = d.toISOString().slice(0, 10);
+    trend7d.push({
+      date: key,
+      revenue: calculateTodaysSalesTotal(sales as any, key),
+      profit: calculateNetProfit(sales as any, expenses as any, key),
+    });
+  }
+
+  // ─── Low stock ───
+  const lowStock = inventory
+    .filter(
+      (r: any) =>
+        Number(r.Stock_Quantity ?? r.stock ?? 0) <=
+        Number(r.Reorder_Level ?? r.minStock ?? 10)
+    )
+    .slice(0, 5)
+    .map((r: any) => ({
+      id: String(r.Item_ID || ""),
+      name: String(r.Item_Name || ""),
+      code: String(r.Item_Code || ""),
+      stock: Number(r.Stock_Quantity ?? r.stock ?? 0),
+    }));
+
+  // ─── Recent sales ───
+  const recentSales = sales
+    .slice()
+    .sort((a: any, b: any) =>
+      String(b.date).localeCompare(String(a.date))
+    )
+    .slice(0, 5)
+    .map((s: any) => ({
+      id: s.salesId,
+      invoiceNo: s.invoiceNo || s.salesId,
+      date: s.date,
+      customer: s.customerName || "Walk-in",
+      staff: s.staffId || "—",
+      amount: Number(s.totalAmount || 0),
+    }));
+
+  // ─── Recent announcements ───
+  const recentAnnouncements = announcements.map((a) => ({
+    id: a.id,
+    title: a.title,
+    date: a.date,
+  }));
+
+  // ─── Deltas ───
+  const pct = (curr: number, prev: number) => {
+    if (prev === 0) return curr > 0 ? 100 : 0;
+    return Math.round(((curr - prev) / Math.abs(prev)) * 1000) / 10;
+  };
+
+  // ─── Initial data for client ───
+  const initialData = {
+    ts: Date.now(),
+    today: {
+      sales: todaySales,
+      cost: todayCost,
+      expenses: todayExpenses,
+      profit: netProfit,
+      transactions: sales.filter((s: any) => s.date?.includes(today)).length,
     },
-    {
-      label: "Today's Cost",
-      value: todayCost,
-      icon: "📦",
-      badgeBg: "bg-slate-100 text-slate-700",
-      valueColor: "text-slate-700",
-      sub: "Cost of goods sold",
+    yesterday: {
+      sales: yestSales,
+      cost: yestCost,
+      expenses: yestExpenses,
+      profit: yestProfit,
     },
-    {
-      label: "Today's Expenses",
-      value: todayExpenses,
-      icon: "📉",
-      badgeBg: "bg-orange-50 text-orange-700",
-      valueColor: "text-orange-600",
-      sub: "Operating expenses",
+    deltas: {
+      sales: pct(todaySales, yestSales),
+      cost: pct(todayCost, yestCost),
+      expenses: pct(todayExpenses, yestExpenses),
+      profit: pct(netProfit, yestProfit),
     },
-    {
-      label: "Net Profit",
-      value: netProfit,
-      icon: netProfit >= 0 ? "📈" : "📉",
-      badgeBg:
-        netProfit >= 0
-          ? "bg-emerald-50 text-emerald-700"
-          : "bg-red-50 text-red-700",
-      valueColor: netProfit >= 0 ? "text-emerald-600" : "text-red-600",
-      sub: netProfit >= 0 ? "Positive Net Profit" : "Operating Loss",
-    },
-  ];
+    trend7d,
+    lowStock,
+    recentSales,
+    recentAnnouncements,
+  };
 
-  return (
-    <div className="p-4 sm:p-6 lg:p-10 space-y-6">
-      {/* Header */}
-      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
-        <div>
-          <h1 className="text-2xl sm:text-3xl font-bold text-slate-900">
-            Dashboard
-          </h1>
-          <p className="text-sm text-slate-500 mt-1">
-            Live sync ·{" "}
-            {new Date().toLocaleDateString("en-ET", {
-              weekday: "long",
-              year: "numeric",
-              month: "long",
-              day: "numeric",
-            })}
-          </p>
-        </div>
-        <Link
-          href="/admin/sales"
-          className="inline-flex items-center justify-center gap-2 px-4 py-2.5 bg-orange-500 hover:bg-orange-600 text-white font-semibold rounded-lg transition shadow-sm text-sm"
-        >
-          + New Sale
-        </Link>
-      </div>
-
-      {/* KPI Cards */}
-      <div className="grid sm:grid-cols-2 lg:grid-cols-4 gap-4 sm:gap-5">
-        {cards.map((c) => (
-          <div
-            key={c.label}
-            className="bg-white p-5 rounded-2xl border border-slate-200 shadow-sm hover:shadow-md transition"
-          >
-            <div className="flex items-start justify-between">
-              <div className="text-2xl">{c.icon}</div>
-              <span
-                className={`text-xs font-medium px-2 py-1 rounded-full ${c.badgeBg}`}
-              >
-                Today
-              </span>
-            </div>
-            <p className="mt-3 text-sm font-medium text-slate-500">{c.label}</p>
-            <p className={`mt-1 text-2xl sm:text-3xl font-bold ${c.valueColor}`}>
-              {c.value.toLocaleString(undefined, {
-                minimumFractionDigits: 2,
-                maximumFractionDigits: 2,
-              })}
-              <span className="text-xs sm:text-sm text-slate-400 ml-1">ETB</span>
-            </p>
-            <p className="mt-1 text-xs text-slate-400">{c.sub}</p>
-          </div>
-        ))}
-      </div>
-
-      {/* ─── Announcements Widget ─── */}
-      {announcements.length > 0 && (
-        <div className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
-          <div className="p-5 border-b border-slate-100 flex items-center justify-between">
-            <h2 className="font-bold text-slate-900 flex items-center gap-2">
-              📢 Announcements
-            </h2>
-            <Link
-              href="/admin/announcements"
-              className="text-xs font-medium text-orange-600 hover:text-orange-700"
-            >
-              View all →
-            </Link>
-          </div>
-          <div className="divide-y divide-slate-100">
-            {announcements.map((a) => (
-              <div key={a.id} className="p-4 hover:bg-slate-50 transition">
-                <div className="flex items-start gap-3">
-                  <span className="text-2xl flex-shrink-0">📢</span>
-                  <div className="flex-1 min-w-0">
-                    <div className="flex items-start justify-between gap-2">
-                      <p className="font-semibold text-slate-900">{a.title}</p>
-                      <p className="text-xs text-slate-400 flex-shrink-0">
-                        {new Date(a.date).toLocaleDateString()}
-                      </p>
-                    </div>
-                    <p className="text-sm text-slate-600 mt-0.5 line-clamp-2">
-                      {a.message}
-                    </p>
-                  </div>
-                </div>
-              </div>
-            ))}
-          </div>
-        </div>
-      )}
-
-      {/* Two Column Layout */}
-      <div className="grid lg:grid-cols-2 gap-6">
-        {/* Recent Sales */}
-        <div className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
-          <div className="p-5 border-b border-slate-100 flex items-center justify-between">
-            <h2 className="font-bold text-slate-900">Recent Sales</h2>
-            <Link
-              href="/admin/sales"
-              className="text-xs font-medium text-orange-600 hover:text-orange-700"
-            >
-              View all →
-            </Link>
-          </div>
-          {recentSales.length === 0 ? (
-            <p className="p-6 text-sm text-slate-500 text-center">
-              No sales yet today
-            </p>
-          ) : (
-            <div className="divide-y divide-slate-100">
-              {recentSales.map((s) => (
-                <div
-                  key={s.salesId}
-                  className="p-4 hover:bg-slate-50 transition flex items-center justify-between"
-                >
-                  <div>
-                    <p className="text-sm font-semibold text-slate-900">
-                      {s.invoiceNo || s.salesId}
-                    </p>
-                    <p className="text-xs text-slate-500">
-                      {s.customerName || "Cash Customer"} ·{" "}
-                      {s.staffId || "Admin"}
-                    </p>
-                  </div>
-                  <p className="text-sm font-bold text-emerald-600">
-                    {Number(s.totalAmount || 0).toLocaleString()} ETB
-                  </p>
-                </div>
-              ))}
-            </div>
-          )}
-        </div>
-
-        {/* Low Stock Alert */}
-        <div className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
-          <div className="p-5 border-b border-slate-100 flex items-center justify-between">
-            <h2 className="font-bold text-slate-900 flex items-center gap-2">
-              ⚠️ Low Stock Alert
-            </h2>
-            <Link
-              href="/admin/inventory"
-              className="text-xs font-medium text-orange-600 hover:text-orange-700"
-            >
-              Manage →
-            </Link>
-          </div>
-          {lowStock.length === 0 ? (
-            <p className="p-6 text-sm text-emerald-600 text-center">
-              ✅ All items are well-stocked
-            </p>
-          ) : (
-            <div className="divide-y divide-slate-100">
-              {lowStock.map((item: any, idx: number) => (
-                <div
-                  key={item.Item_ID || item.id || idx}
-                  className="p-4 hover:bg-slate-50 transition flex items-center justify-between"
-                >
-                  <div>
-                    <p className="text-sm font-semibold text-slate-900">
-                      {item.Item_Name || item.name}
-                    </p>
-                    <p className="text-xs text-slate-500">
-                      {item.Item_Code || item.category || "General"}
-                    </p>
-                  </div>
-                  <span className="px-2.5 py-1 bg-red-50 text-red-700 rounded-full text-xs font-semibold">
-                    {item.Stock_Quantity ?? item.stock} left
-                  </span>
-                </div>
-              ))}
-            </div>
-          )}
-        </div>
-      </div>
-    </div>
-  );
+  return <DashboardClient initialData={initialData} />;
 }
