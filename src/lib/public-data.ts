@@ -5,7 +5,6 @@
 //     For static data (courses, services), use public-constants.ts.
 // ═══════════════════════════════════════════════════════════════
 
-import "server-only";
 import { getSheet, SHEETS } from "./google-sheets";
 
 export interface PublicProduct {
