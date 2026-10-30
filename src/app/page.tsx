@@ -2,7 +2,7 @@
 import Link from "next/link";
 import PublicNav from "@/components/public/PublicNav";
 import PublicFooter from "@/components/public/PublicFooter";
-import { TRAINING_COURSES, SERVICES } from "@/lib/public-data";
+import { TRAINING_COURSES, SERVICES } from "@/lib/public-constants";
 
 export default function HomePage() {
   return (
