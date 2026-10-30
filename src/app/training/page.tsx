@@ -1,42 +1,74 @@
+// src/app/training/page.tsx
 import Link from "next/link";
-
-export const dynamic = "force-dynamic";
-
-const COURSES = [
-  { id: "web-dev", title: "Full-Stack Web Development", weeks: 12, fee: 8500, desc: "HTML, CSS, JS, React, Node, databases." },
-  { id: "ccna", title: "Networking (CCNA Prep)", weeks: 10, fee: 7000, desc: "Routing, switching, and network security." },
-  { id: "office", title: "MS Office & Digital Literacy", weeks: 6, fee: 3500, desc: "Word, Excel, PowerPoint, internet skills." },
-  { id: "graphic", title: "Graphic Design Essentials", weeks: 8, fee: 6000, desc: "Photoshop, Illustrator, branding." },
-];
+import PublicNav from "@/components/public/PublicNav";
+import PublicFooter from "@/components/public/PublicFooter";
+import { TRAINING_COURSES } from "@/lib/public-data";
 
 export default function TrainingPage() {
   return (
-    <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-16">
-      <h1 className="text-4xl font-bold text-slate-900">Click Computer Center — Training</h1>
-      <p className="mt-3 text-slate-600 max-w-2xl">
-        Industry-aligned programs taught by certified instructors. Register online to secure your spot.
-      </p>
-      
-      <div className="mt-10 grid sm:grid-cols-2 lg:grid-cols-3 gap-6">
-        {COURSES.map((c) => (
-          <article key={c.id} className="bg-white rounded-2xl border border-slate-200 shadow-sm hover:shadow-lg transition p-6 flex flex-col">
-            <h2 className="text-xl font-bold text-slate-900">{c.title}</h2>
-            <p className="mt-2 text-slate-600 flex-1">{c.desc}</p>
-            
-            <div className="mt-4 flex items-center justify-between text-sm text-slate-500">
-              <span className="bg-slate-100 px-2.5 py-1 rounded-md font-medium text-slate-700">{c.weeks} weeks</span>
-              <span className="font-bold text-emerald-700">{c.fee.toLocaleString()} ETB</span>
-            </div>
+    <>
+      <PublicNav />
 
-            <Link 
-              href={`/training/register?course=${c.id}`}
-              className="mt-5 px-4 py-2.5 bg-orange-500 hover:bg-orange-600 text-white font-semibold rounded-lg text-center transition shadow-sm"
+      <section className="bg-gradient-to-br from-slate-900 to-emerald-900 text-white py-16">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+          <span className="inline-block px-3 py-1 rounded-full bg-orange-500/20 text-orange-300 text-sm font-semibold mb-3">
+            🎓 Training Center
+          </span>
+          <h1 className="text-4xl sm:text-5xl font-bold">
+            Build a career in tech
+          </h1>
+          <p className="mt-4 text-lg text-slate-200 max-w-2xl">
+            Industry-aligned programs taught by certified instructors. Small
+            classes, hands-on labs, and job-ready portfolios.
+          </p>
+        </div>
+      </section>
+
+      <section className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-16">
+        <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-6">
+          {TRAINING_COURSES.map((c) => (
+            <article
+              key={c.id}
+              className="bg-white rounded-2xl border border-slate-200 shadow-sm hover:shadow-lg transition p-6 flex flex-col"
             >
-              Register Now
-            </Link>
-          </article>
-        ))}
-      </div>
-    </div>
+              <div className="text-5xl mb-4">{c.icon}</div>
+              <h2 className="text-xl font-bold text-slate-900">{c.title}</h2>
+              <p className="mt-2 text-slate-600 text-sm flex-1">{c.description}</p>
+
+              <div className="mt-4 space-y-2 text-sm text-slate-600">
+                <p>⏱ Duration: <span className="font-semibold text-slate-900">{c.duration}</span></p>
+                <p>📊 Level: <span className="font-semibold text-slate-900">{c.level}</span></p>
+              </div>
+
+              <div className="mt-4 flex flex-wrap gap-1">
+                {c.highlights.map((h, i) => (
+                  <span
+                    key={i}
+                    className="px-2 py-0.5 bg-emerald-100 text-emerald-700 rounded-full text-xs font-medium"
+                  >
+                    ✓ {h}
+                  </span>
+                ))}
+              </div>
+
+              <div className="mt-6 pt-4 border-t border-slate-100 flex items-center justify-between">
+                <span className="text-2xl font-bold text-emerald-600">
+                  {c.fee.toLocaleString()}
+                  <span className="text-sm text-slate-400 ml-1">ETB</span>
+                </span>
+                <Link
+                  href={`/training/register?course=${c.id}`}
+                  className="px-4 py-2 bg-orange-500 hover:bg-orange-600 text-white font-semibold rounded-lg text-sm"
+                >
+                  Enroll →
+                </Link>
+              </div>
+            </article>
+          ))}
+        </div>
+      </section>
+
+      <PublicFooter />
+    </>
   );
 }
