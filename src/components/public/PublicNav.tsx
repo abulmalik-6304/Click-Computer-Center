@@ -54,12 +54,6 @@ export default function PublicNav() {
           {/* Right actions */}
           <div className="flex items-center gap-2">
             <Link
-              href="/login"
-              className="hidden sm:inline-block px-4 py-2 text-sm font-semibold text-slate-700 hover:text-slate-900 rounded-lg hover:bg-slate-100"
-            >
-              Sign In
-            </Link>
-            <Link
               href="/training/register"
               className="hidden sm:inline-block px-4 py-2 text-sm font-semibold text-white bg-orange-500 hover:bg-orange-600 rounded-lg"
             >
@@ -95,13 +89,6 @@ export default function PublicNav() {
                 </Link>
               );
             })}
-            <Link
-              href="/login"
-              onClick={() => setOpen(false)}
-              className="block px-4 py-2.5 rounded-lg text-sm font-medium text-slate-700 hover:bg-slate-100"
-            >
-              Sign In
-            </Link>
             <Link
               href="/training/register"
               onClick={() => setOpen(false)}
