@@ -1,116 +1,154 @@
+// src/app/api/inventory/stock-in/route.ts
 import { NextRequest, NextResponse } from "next/server";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { getSheet, SHEETS } from "@/lib/google-sheets";
 
-// ─── GET: ሁሉንም inventory ምርቶች ───
-export async function GET() {
-  try {
-    const sheet = await getSheet(SHEETS.INVENTORY);
-    const rows = await sheet.getRows();
-    return NextResponse.json(rows.map((r) => r.toObject()));
-  } catch (e: any) {
-    return NextResponse.json({ error: e.message }, { status: 500 });
-  }
-}
+export const revalidate = 0;
 
-// ─── POST: አዲስ ምርት መጨመር ───
+// ─── POST: Stock-In (add quantity) ───
 export async function POST(req: NextRequest) {
   const session = await getServerSession(authOptions);
   if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
+  const role = String((session.user as any).role || "").toLowerCase();
+  if (!["owner", "manager", "employee", "staff"].includes(role)) {
+    return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+  }
+
   try {
     const body = await req.json();
-    const sheet = await getSheet(SHEETS.INVENTORY);
-    const rows = await sheet.getRows();
-    const nextNum = rows.length + 1;
-    const itemId = `ITM-${String(nextNum).padStart(4, "0")}`;
+    const {
+      itemId,
+      quantity,
+      buyingPrice,
+      note,
+      supplierId,
+      paymentMonth,
+    } = body;
 
-    await sheet.addRow({
-      Item_ID: itemId,
-      Item_Name: body.name,
-      Cost_Price: body.costPrice,
-      Selling_Price: body.sellingPrice,
-      Stock_Quantity: body.stock,
-      Item_Image: body.image || "",
-      Unit_Type: body.unitType || "pcs",
-      Pack_Size: body.packSize || 1,
-      Supplier_ID: body.supplierId || "",
-      Date: new Date().toISOString().slice(0, 10),
-      Item_Code: body.itemCode || itemId,
-      Avg_Cost: body.costPrice,
-      Reorder_Level: body.reorderLevel || 10,
-      Status: "Active",
-    });
-
-    // የመጀመሪያ ክምችት ካለ → Stock_In_TBL ላይም መዝግብ
-    if (Number(body.stock) > 0) {
-      const stockSheet = await getSheet(SHEETS.STOCK_IN);
-      const stockRows = await stockSheet.getRows();
-      await stockSheet.addRow({
-        Stock_In_ID: `STK-${String(stockRows.length + 1).padStart(4, "0")}`,
-        Date: new Date().toISOString().slice(0, 10),
-        Item_ID: itemId,
-        Quantity_In: body.stock,
-        Buying_Price: body.costPrice,
-        Recorded_By: session.user?.email ?? "",
-        Note: "Initial stock entry",
-      });
+    if (!itemId) {
+      return NextResponse.json({ error: "Item ID required" }, { status: 400 });
+    }
+    const qty = Number(quantity);
+    if (!qty || qty <= 0) {
+      return NextResponse.json(
+        { error: "Quantity must be greater than 0" },
+        { status: 400 }
+      );
     }
 
-    return NextResponse.json({ ok: true, itemId });
+    // ─── Load Inventory ───
+    const invSheet = await getSheet(SHEETS.INVENTORY);
+    const invRows = await invSheet.getRows();
+    const invRow = invRows.find(
+      (r) => String(r.get("Item_ID")) === String(itemId)
+    );
+    if (!invRow) {
+      return NextResponse.json({ error: "Item not found" }, { status: 404 });
+    }
+
+    const oldStock = Number(invRow.get("Stock_Quantity") ?? 0);
+    const oldAvgCost = Number(invRow.get("Avg_Cost") ?? invRow.get("Cost_Price") ?? 0);
+    const newBuyPrice = Number(buyingPrice ?? oldAvgCost) || oldAvgCost;
+
+    // ═══════════════════════════════════════════════════════════
+    // Weighted average cost — DO NOT change formula
+    // ═══════════════════════════════════════════════════════════
+    const totalOldValue = oldStock * oldAvgCost;
+    const totalNewValue = qty * newBuyPrice;
+    const newStock = oldStock + qty;
+    const newAvgCost =
+      newStock > 0
+        ? Math.round(((totalOldValue + totalNewValue) / newStock) * 100) / 100
+        : 0;
+
+    // ─── Write Stock_In_TBL ───
+    let stockSheet;
+    try {
+      stockSheet = await getSheet(SHEETS.STOCK_IN);
+    } catch {
+      const { getDoc } = await import("@/lib/google-sheets");
+      const doc = await getDoc();
+      stockSheet = await doc.addSheet({
+        title: SHEETS.STOCK_IN,
+        headerValues: [
+          "Stock_In_ID",
+          "Date",
+          "Item_ID",
+          "Quantity_In",
+          "Buying_Price",
+          "Recorded_By",
+          "Note",
+        ],
+      });
+    }
+    const stockRows = await stockSheet.getRows();
+    const stockId = `STK-${String(stockRows.length + 1).padStart(5, "0")}`;
+
+    await stockSheet.addRow({
+      Stock_In_ID: stockId,
+      Date: new Date().toISOString().slice(0, 10),
+      Item_ID: itemId,
+      Quantity_In: qty,
+      Buying_Price: newBuyPrice,
+      Recorded_By: session.user?.name ?? session.user?.email ?? "",
+      Note: note || supplierId || paymentMonth || "",
+    });
+
+    // ─── Update Inventory ───
+    invRow.set("Stock_Quantity", newStock);
+    invRow.set("Avg_Cost", newAvgCost);
+    if (buyingPrice) invRow.set("Cost_Price", newBuyPrice);
+    await invRow.save();
+
+    return NextResponse.json({
+      ok: true,
+      stockId,
+      newStock,
+      newAvgCost,
+      added: qty,
+    });
   } catch (e: any) {
+    console.error("Stock-in error:", e);
     return NextResponse.json({ error: e.message }, { status: 500 });
   }
 }
 
-// ─── PUT: ምርት ማረም ───
-export async function PUT(req: NextRequest) {
+// ─── GET: Stock-In history for an item ───
+export async function GET(req: NextRequest) {
   const session = await getServerSession(authOptions);
   if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
   try {
-    const body = await req.json();
-    const sheet = await getSheet(SHEETS.INVENTORY);
+    const { searchParams } = new URL(req.url);
+    const itemId = searchParams.get("itemId") || "";
+
+    const sheet = await getSheet(SHEETS.STOCK_IN);
     const rows = await sheet.getRows();
-    const row = rows.find((r) => String(r.get("Item_ID")) === String(body.id));
-    if (!row) return NextResponse.json({ error: "Item not found" }, { status: 404 });
+    let logs = rows.map((r) => {
+      const obj = r.toObject() as any;
+      return {
+        id: String(obj.Stock_In_ID || ""),
+        date: String(obj.Date || ""),
+        itemId: String(obj.Item_ID || ""),
+        quantity: Number(obj.Quantity_In || 0),
+        buyingPrice: Number(obj.Buying_Price || 0),
+        recordedBy: String(obj.Recorded_By || ""),
+        note: String(obj.Note || ""),
+      };
+    });
 
-    if (body.name !== undefined) row.set("Item_Name", body.name);
-    if (body.costPrice !== undefined) row.set("Cost_Price", body.costPrice);
-    if (body.sellingPrice !== undefined) row.set("Selling_Price", body.sellingPrice);
-    if (body.stock !== undefined) row.set("Stock_Quantity", body.stock);
-    if (body.image !== undefined) row.set("Item_Image", body.image);
-    if (body.unitType !== undefined) row.set("Unit_Type", body.unitType);
-    if (body.packSize !== undefined) row.set("Pack_Size", body.packSize);
-    if (body.supplierId !== undefined) row.set("Supplier_ID", body.supplierId);
-    if (body.itemCode !== undefined) row.set("Item_Code", body.itemCode);
-    if (body.reorderLevel !== undefined) row.set("Reorder_Level", body.reorderLevel);
-    if (body.status !== undefined) row.set("Status", body.status);
-    await row.save();
+    if (itemId) {
+      logs = logs.filter((l) => l.itemId === itemId);
+    }
+    logs.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
 
-    return NextResponse.json({ ok: true });
+    return NextResponse.json({ logs });
   } catch (e: any) {
-    return NextResponse.json({ error: e.message }, { status: 500 });
-  }
-}
-
-// ─── DELETE: ምርት መሰረዝ (soft delete → status "Archived") ───
-export async function DELETE(req: NextRequest) {
-  const session = await getServerSession(authOptions);
-  if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-
-  try {
-    const { id } = await req.json();
-    const sheet = await getSheet(SHEETS.INVENTORY);
-    const rows = await sheet.getRows();
-    const row = rows.find((r) => String(r.get("Item_ID")) === String(id));
-    if (!row) return NextResponse.json({ error: "Item not found" }, { status: 404 });
-
-    row.set("Status", "Archived");
-    await row.save();
-    return NextResponse.json({ ok: true });
-  } catch (e: any) {
+    if (String(e.message).includes("not found")) {
+      return NextResponse.json({ logs: [] });
+    }
     return NextResponse.json({ error: e.message }, { status: 500 });
   }
 }
