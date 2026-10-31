@@ -1,5 +1,8 @@
+// src/app/login/page.tsx (ወይም የፋይሉ ትክክለኛ ቦታ)
 "use client";
+
 import { useState } from "react";
+import Link from "next/link";
 import { signIn } from "next-auth/react";
 import { useRouter } from "next/navigation";
 
@@ -27,6 +30,22 @@ export default function LoginPage() {
     setLoading(false);
     
     if (res?.ok) {
+      // ✅ Log the successful sign-in
+      try {
+        await fetch("/api/auth/signin-log", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            email: fd.get("username"),
+            name: "",
+            role: "staff",
+            status: "success",
+          }),
+        });
+      } catch {
+        // Don't block login if log fails
+      }
+
       router.push("/admin/dashboard");
       router.refresh();
     } else {
