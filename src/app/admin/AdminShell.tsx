@@ -10,8 +10,7 @@ const NAV = [
   { href: "/admin/dashboard", label: "Dashboard", icon: "📊", roles: ["owner", "manager", "staff"] },
   { href: "/admin/inventory", label: "Inventory", icon: "📦", roles: ["owner", "manager", "staff"] },
   { href: "/admin/sales", label: "Sales / POS", icon: "🧾", roles: ["owner", "manager", "staff"] },
-  { href: "/admin/customers", label: "Customers", icon: "🧑", roles: ["owner", "manager", "staff"] },
-  { href: "/admin/suppliers", label: "Suppliers", icon: "🏭", roles: ["owner", "manager"] },
+  { href: "/admin/expenses", label: "Expenses", icon: "📉", roles: ["owner", "manager"] }, // ✅ አዲስ
   { href: "/admin/reports", label: "Reports", icon: "📈", roles: ["owner", "manager"] },
   { href: "/admin/export", label: "Export Center", icon: "📤", roles: ["owner", "manager"] },
   { href: "/admin/announcements", label: "Announcements", icon: "📢", roles: ["owner", "manager", "staff"] },
@@ -123,7 +122,7 @@ export default function AdminShell({
       {/* Main */}
       <div className="flex-1 flex flex-col min-w-0">
         {/* Mobile Top Bar */}
-        <header className="lg:hidden bg-white border-b border-slate-200 px-4 py-3 flex items-center justify-between sticky top-0 z-20">
+        <header className="lg:hidden bg-white border-b border-slate-200 px-4 py-3 flex items-center justify-between sticky top-0 z-25">
           <button
             onClick={() => setOpen(true)}
             className="p-2 -ml-2 text-slate-700 hover:bg-slate-100 rounded-lg"
