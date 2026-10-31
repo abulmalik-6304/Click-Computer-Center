@@ -8,6 +8,7 @@ import MiniSparkline from "@/components/admin/dashboard/MiniSparkline";
 import ActivityFeed from "@/components/admin/dashboard/ActivityFeed";
 import QuickActions from "@/components/admin/dashboard/QuickActions";
 import LiveClock from "@/components/admin/dashboard/LiveClock";
+import OnlineStaff from "@/components/admin/dashboard/OnlineStaff"; // ✅ አዲስ ኢምፖርት
 
 const REFRESH_MS = 30_000;
 
@@ -161,12 +162,14 @@ export default function DashboardClient({ initialData }: { initialData: LiveData
       {/* 7-day trend */}
       <MiniSparkline data={data.trend7d} title="📈 7-Day Revenue & Profit" />
 
-      {/* Activity + Low Stock */}
-      <div className="grid lg:grid-cols-2 gap-6">
+      {/* Activity + Online Staff + Low Stock */}
+      <div className="grid lg:grid-cols-3 gap-6">
         <ActivityFeed
           recentSales={data.recentSales}
           recentAnnouncements={data.recentAnnouncements}
         />
+
+        <OnlineStaff />
 
         <div className="bg-white rounded-2xl border border-slate-200 overflow-hidden">
           <div className="p-5 border-b border-slate-100 flex items-center justify-between">
