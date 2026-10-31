@@ -10,7 +10,8 @@ const NAV = [
   { href: "/admin/dashboard", label: "Dashboard", icon: "📊", roles: ["owner", "manager", "staff"] },
   { href: "/admin/inventory", label: "Inventory", icon: "📦", roles: ["owner", "manager", "staff"] },
   { href: "/admin/sales", label: "Sales / POS", icon: "🧾", roles: ["owner", "manager", "staff"] },
-  { href: "/admin/expenses", label: "Expenses", icon: "📉", roles: ["owner", "manager"] }, // ✅ አዲስ
+  { href: "/admin/expenses", label: "Expenses", icon: "📉", roles: ["owner", "manager"] },
+  { href: "/admin/income", label: "Income", icon: "💰", roles: ["owner", "manager"] }, // ✅ አዲስ
   { href: "/admin/reports", label: "Reports", icon: "📈", roles: ["owner", "manager"] },
   { href: "/admin/export", label: "Export Center", icon: "📤", roles: ["owner", "manager"] },
   { href: "/admin/announcements", label: "Announcements", icon: "📢", roles: ["owner", "manager", "staff"] },
