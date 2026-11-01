@@ -1,7 +1,7 @@
 // src/app/admin/inventory/InventoryClient.tsx
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { toDriveImageUrl as formatDriveUrl } from "@/lib/drive-url";
 import {
@@ -37,6 +37,15 @@ export default function InventoryClient({
   const canEdit = ["owner", "manager"].includes(userRole);
   const canSell = ["owner", "manager", "employee", "staff"].includes(userRole);
 
+  // Auto-refresh when window regains focus (e.g. after POS sale)
+  useEffect(() => {
+    function handleFocus() {
+      refresh();
+    }
+    window.addEventListener("focus", handleFocus);
+    return () => window.removeEventListener("focus", handleFocus);
+  }, []);
+
   const filtered = useMemo(() => {
     let out = items;
     if (q) {
@@ -64,10 +73,10 @@ export default function InventoryClient({
 
   async function refresh() {
     try {
-      const res = await fetch("/api/inventory");
+      const res = await fetch("/api/inventory/refresh", { cache: "no-store" });
       const data = await res.json();
-      if (Array.isArray(data)) {
-        setItems(data.filter((i: any) => i.Status !== "Archived"));
+      if (Array.isArray(data.items)) {
+        setItems(data.items.filter((i: any) => i.status !== "Archived"));
       }
     } catch (e) {
       console.error(e);
