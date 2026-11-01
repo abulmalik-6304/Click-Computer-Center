@@ -35,6 +35,12 @@ interface LiveData {
   };
   trend7d: { date: string; revenue: number; profit: number }[];
   lowStock: { id: string; name: string; code: string; stock: number }[];
+  inventoryStats: {
+    total: number;
+    lowStock: number;
+    outOfStock: number;
+    totalValue: number;
+  }; // ✅ አዲስ
   recentSales: {
     id: string;
     invoiceNo: string;
@@ -156,6 +162,40 @@ export default function DashboardClient({ initialData }: { initialData: LiveData
         />
       </div>
 
+      {/* ✅ Inventory Stats */}
+      {data.inventoryStats && (
+        <div className="grid sm:grid-cols-2 lg:grid-cols-4 gap-4">
+          <InvStat
+            label="Total Items"
+            value={data.inventoryStats.total}
+            icon="📦"
+            color="slate"
+            href="/admin/inventory"
+          />
+          <InvStat
+            label="Low Stock"
+            value={data.inventoryStats.lowStock}
+            icon="🟡"
+            color="orange"
+            href="/admin/inventory?filter=low"
+          />
+          <InvStat
+            label="Out of Stock"
+            value={data.inventoryStats.outOfStock}
+            icon="🔴"
+            color="red"
+            href="/admin/inventory?filter=out"
+          />
+          <InvStat
+            label="Inventory Value"
+            value={`${data.inventoryStats.totalValue.toLocaleString()} ETB`}
+            icon="💰"
+            color="emerald"
+            href="/admin/inventory"
+          />
+        </div>
+      )}
+
       {/* Quick Actions */}
       <QuickActions />
 
@@ -206,5 +246,41 @@ export default function DashboardClient({ initialData }: { initialData: LiveData
         </div>
       </div>
     </div>
+  );
+}
+
+// ─── Inventory Stat Card ───
+function InvStat({
+  label,
+  value,
+  icon,
+  color,
+  href,
+}: {
+  label: string;
+  value: any;
+  icon: string;
+  color: string;
+  href: string;
+}) {
+  const cls =
+    {
+      slate: "text-slate-700 bg-slate-50",
+      orange: "text-orange-700 bg-orange-50",
+      red: "text-red-700 bg-red-50",
+      emerald: "text-emerald-700 bg-emerald-50",
+    }[color] ?? "text-slate-700 bg-slate-50";
+
+  return (
+    <Link
+      href={href}
+      className={`${cls} p-4 rounded-2xl border border-slate-200 hover:shadow-md transition flex items-start justify-between`}
+    >
+      <div>
+        <p className="text-xs font-medium opacity-75">{label}</p>
+        <p className="mt-1 text-xl font-bold">{value}</p>
+      </div>
+      <span className="text-2xl">{icon}</span>
+    </Link>
   );
 }
