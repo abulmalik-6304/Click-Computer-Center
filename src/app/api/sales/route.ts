@@ -1,27 +1,39 @@
+// src/app/api/sales/route.ts
 import { NextRequest, NextResponse } from "next/server";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { getSheet, SHEETS } from "@/lib/google-sheets";
 import { deductInventory } from "@/lib/financial-engine";
 
-// ─── POST: አዲስ ሽያጭ መፍጠር (Multi-item POS) ───
+export const revalidate = 0;
+
+// ─── POST: Create sale (Draft or Completed) ───
 export async function POST(req: NextRequest) {
   const session = await getServerSession(authOptions);
   if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
   try {
     const body = await req.json();
-    // body = { customerName, customerId, paymentMethod, discount, paidAmount, items: [{ itemId, quantity }] }
+    const {
+      customerName,
+      customerId,
+      customerPhone,
+      paymentMethod,
+      discount,
+      paidAmount,
+      saleStatus, // "Draft" | "Completed"
+      items, // [{ itemId, quantity, sellingPrice, costPerItem }]
+    } = body;
 
-    if (!Array.isArray(body.items) || body.items.length === 0) {
+    if (!Array.isArray(items) || items.length === 0) {
       return NextResponse.json({ error: "No items in cart" }, { status: 400 });
     }
 
-    // 1) Inventory መጫን
+    // ─── Load Inventory ───
     const invSheet = await getSheet(SHEETS.INVENTORY);
     const invRows = await invSheet.getRows();
 
-    // 2) እያንዳንዱን item አረጋግጥ + ዋጋ አሰባስብ
+    // ─── Validate items + compute line totals ───
     type Line = {
       itemId: string;
       itemName: string;
@@ -34,28 +46,46 @@ export async function POST(req: NextRequest) {
     };
     const lines: Line[] = [];
 
-    for (const cartItem of body.items) {
-      const invRow = invRows.find((r) => String(r.get("Item_ID")) === String(cartItem.itemId));
+    for (const cartItem of items) {
+      const invRow = invRows.find(
+        (r) => String(r.get("Item_ID")) === String(cartItem.itemId)
+      );
       if (!invRow) {
-        return NextResponse.json({ error: `Item ${cartItem.itemId} not found` }, { status: 404 });
+        return NextResponse.json(
+          { error: `Item ${cartItem.itemId} not found` },
+          { status: 404 }
+        );
       }
 
       const currentStock = Number(invRow.get("Stock_Quantity") ?? 0);
       const qty = Number(cartItem.quantity);
+      const costPerItem = Number(
+        invRow.get("Avg_Cost") ?? invRow.get("Cost_Price") ?? 0
+      );
+      const sellingPrice = Number(
+        cartItem.sellingPrice ?? invRow.get("Selling_Price") ?? 0
+      );
 
-      // ⚠️ PROTECTED: deductInventory throws if insufficient
-      let newStock: number;
-      try {
-        newStock = deductInventory(currentStock, qty);
-      } catch (e: any) {
+      // ⚠️ Profit floor: price cannot be below cost + 10%
+      const floorPrice = costPerItem * 1.1;
+      if (sellingPrice < floorPrice) {
         return NextResponse.json(
-          { error: `Insufficient stock for ${invRow.get("Item_Name")}: ${e.message}` },
+          {
+            error: `Selling price for ${invRow.get("Item_Name")} is too low. Minimum: ${floorPrice.toFixed(2)} ETB (cost + 10%)`,
+          },
           { status: 400 }
         );
       }
 
-      const sellingPrice = Number(invRow.get("Selling_Price") ?? 0);
-      const costPerItem = Number(invRow.get("Avg_Cost") ?? invRow.get("Cost_Price") ?? 0);
+      // ⚠️ Stock check for Completed sales only
+      if (saleStatus === "Completed" && currentStock < qty) {
+        return NextResponse.json(
+          {
+            error: `Insufficient stock for ${invRow.get("Item_Name")}: have ${currentStock}, need ${qty}`,
+          },
+          { status: 400 }
+        );
+      }
 
       lines.push({
         itemId: invRow.get("Item_ID"),
@@ -69,36 +99,38 @@ export async function POST(req: NextRequest) {
       });
     }
 
-    // 3) Totals ስሌት (same as engine — ለማረጋገጫ)
+    // ─── Totals ───
     const subtotal = lines.reduce((s, l) => s + l.totalPrice, 0);
-    const discount = Number(body.discount ?? 0);
-    const totalAmount = Math.round((subtotal - discount) * 100) / 100;
-    const paidAmount = Number(body.paidAmount ?? totalAmount);
-    const paymentStatus = paidAmount >= totalAmount ? "Paid" : paidAmount > 0 ? "Partial" : "Unpaid";
+    const discountAmt = Number(discount ?? 0);
+    const totalAmount = Math.round((subtotal - discountAmt) * 100) / 100;
+    const paidAmountNum = Number(paidAmount ?? totalAmount);
+    const paymentStatus =
+      paidAmountNum >= totalAmount ? "Paid" : paidAmountNum > 0 ? "Partial" : "Unpaid";
 
-    // 4) Sales_TBL ላይ ዋና ሽያጭ መዝግብ
+    // ─── Sales_TBL ───
     const salesSheet = await getSheet(SHEETS.SALES);
     const salesRows = await salesSheet.getRows();
-    const salesId = `SAL-${String(salesRows.length + 1).padStart(4, "0")}`;
-    const invoiceNo = `INV-${new Date().getFullYear()}-${String(salesRows.length + 1).padStart(4, "0")}`;
+    const nextNum = salesRows.length + 1;
+    const salesId = `SAL-${String(nextNum).padStart(5, "0")}`;
+    const invoiceNo = `INV-${new Date().getFullYear()}-${String(nextNum).padStart(4, "0")}`;
 
     await salesSheet.addRow({
       Sales_ID: salesId,
       Date: new Date().toISOString(),
-      Customer_Name: body.customerName || "Walk-in",
+      Customer_Name: customerName || "Walk-in",
       Receipt_File: "",
       Recorded_By: session.user?.name ?? session.user?.email ?? "",
       Total_Amount: totalAmount,
-      Sale_Status: "Completed",
+      Sale_Status: saleStatus || "Completed",
       Invoice_No: invoiceNo,
-      Customer_ID: body.customerId || "",
-      Payment_Method: body.paymentMethod || "Cash",
-      Discount: discount,
-      Paid_Amount: paidAmount,
+      Customer_ID: customerId || "",
+      Payment_Method: paymentMethod || "Cash",
+      Discount: discountAmt,
+      Paid_Amount: paidAmountNum,
       Payment_Status: paymentStatus,
     });
 
-    // 5) Sales_Items_TBL ላይ ዝርዝሮች
+    // ─── Sales_Items_TBL ───
     const itemsSheet = await getSheet(SHEETS.SALES_ITEMS);
     const itemRows = await itemsSheet.getRows();
     let itemCounter = itemRows.length;
@@ -106,7 +138,7 @@ export async function POST(req: NextRequest) {
     for (const line of lines) {
       itemCounter++;
       await itemsSheet.addRow({
-        Sales_Item_ID: `SLI-${String(itemCounter).padStart(4, "0")}`,
+        Sales_Item_ID: `SLI-${String(itemCounter).padStart(5, "0")}`,
         Sales_ID: salesId,
         Item_ID: line.itemId,
         Item_Name: line.itemName,
@@ -118,12 +150,16 @@ export async function POST(req: NextRequest) {
       });
     }
 
-    // 6) Inventory ክምችት ቀንስ
-    for (const line of lines) {
-      const currentStock = Number(line.invRow.get("Stock_Quantity") ?? 0);
-      const newStock = deductInventory(currentStock, line.quantity);
-      line.invRow.set("Stock_Quantity", newStock);
-      await line.invRow.save();
+    // ═══════════════════════════════════════════════════════════════
+    // 🔧 STOCK DEDUCTION — Only for Completed sales
+    // ═══════════════════════════════════════════════════════════════
+    if (saleStatus === "Completed") {
+      for (const line of lines) {
+        const currentStock = Number(line.invRow.get("Stock_Quantity") ?? 0);
+        const newStock = deductInventory(currentStock, line.quantity);
+        line.invRow.set("Stock_Quantity", newStock);
+        await line.invRow.save();
+      }
     }
 
     return NextResponse.json({
@@ -131,8 +167,10 @@ export async function POST(req: NextRequest) {
       salesId,
       invoiceNo,
       totalAmount,
-      paidAmount,
+      paidAmount: paidAmountNum,
       paymentStatus,
+      saleStatus,
+      stockDeducted: saleStatus === "Completed",
     });
   } catch (e: any) {
     console.error("Sale error:", e);
@@ -140,12 +178,12 @@ export async function POST(req: NextRequest) {
   }
 }
 
-// ─── GET: ሽያጮችን አምጣ ───
+// ─── GET: List sales ───
 export async function GET(req: NextRequest) {
-  try {
-    const { searchParams } = new URL(req.url);
-    const limit = Number(searchParams.get("limit") ?? 0);
+  const session = await getServerSession(authOptions);
+  if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
+  try {
     const salesSheet = await getSheet(SHEETS.SALES);
     const salesRows = await salesSheet.getRows();
     const sales = salesRows.map((r) => r.toObject());
@@ -154,23 +192,24 @@ export async function GET(req: NextRequest) {
     const itemRows = await itemsSheet.getRows();
     const items = itemRows.map((r) => r.toObject());
 
-    // Group items by Sales_ID
     const itemsBySale: Record<string, any[]> = {};
     for (const it of items) {
-      if (!itemsBySale[it.Sales_ID]) itemsBySale[it.Sales_ID] = [];
-      itemsBySale[it.Sales_ID].push(it);
+      const sid = String(it.Sales_ID);
+      if (!itemsBySale[sid]) itemsBySale[sid] = [];
+      itemsBySale[sid].push(it);
     }
 
     const enriched = sales.map((s: any) => ({
       ...s,
-      Items: itemsBySale[s.Sales_ID] ?? [],
+      Items: itemsBySale[String(s.Sales_ID)] ?? [],
     }));
 
-    const sorted = enriched.sort(
-      (a: any, b: any) => new Date(b.Date).getTime() - new Date(a.Date).getTime()
+    enriched.sort(
+      (a: any, b: any) =>
+        new Date(b.Date).getTime() - new Date(a.Date).getTime()
     );
 
-    return NextResponse.json(limit > 0 ? sorted.slice(0, limit) : sorted);
+    return NextResponse.json(enriched);
   } catch (e: any) {
     return NextResponse.json({ error: e.message }, { status: 500 });
   }
