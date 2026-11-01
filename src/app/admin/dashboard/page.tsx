@@ -133,13 +133,31 @@ export default async function DashboardPage() {
     });
   }
 
-  // ─── Low stock ───
+  // ─── Inventory stats ───
+  const inventoryStats = {
+    total: inventory.length,
+    lowStock: inventory.filter((r: any) => {
+      const stock = Number(r.Stock_Quantity ?? r.stock ?? 0);
+      const reorder = Number(r.Reorder_Level ?? 10);
+      return stock > 0 && stock <= reorder;
+    }).length,
+    outOfStock: inventory.filter(
+      (r: any) => Number(r.Stock_Quantity ?? r.stock ?? 0) === 0
+    ).length,
+    totalValue: inventory.reduce((sum, r: any) => {
+      const stock = Number(r.Stock_Quantity ?? r.stock ?? 0);
+      const cost = Number(r.Avg_Cost ?? r.Cost_Price ?? 0);
+      return sum + stock * cost;
+    }, 0),
+  };
+
+  // ─── Low stock (for alert list) ───
   const lowStock = inventory
-    .filter(
-      (r: any) =>
-        Number(r.Stock_Quantity ?? r.stock ?? 0) <=
-        Number(r.Reorder_Level ?? r.minStock ?? 10)
-    )
+    .filter((r: any) => {
+      const stock = Number(r.Stock_Quantity ?? r.stock ?? 0);
+      const reorder = Number(r.Reorder_Level ?? 10);
+      return stock > 0 && stock <= reorder;
+    })
     .slice(0, 5)
     .map((r: any) => ({
       id: String(r.Item_ID || ""),
@@ -201,6 +219,7 @@ export default async function DashboardPage() {
     },
     trend7d,
     lowStock,
+    inventoryStats, // ✅ አዲስ
     recentSales,
     recentAnnouncements,
   };
