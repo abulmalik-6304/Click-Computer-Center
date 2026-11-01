@@ -115,20 +115,21 @@ export async function POST(req: NextRequest) {
     const invoiceNo = `INV-${new Date().getFullYear()}-${String(nextNum).padStart(4, "0")}`;
 
     await salesSheet.addRow({
-      Sales_ID: salesId,
-      Date: new Date().toISOString(),
-      Customer_Name: customerName || "Walk-in",
-      Receipt_File: "",
-      Recorded_By: session.user?.name ?? session.user?.email ?? "",
-      Total_Amount: totalAmount,
-      Sale_Status: saleStatus || "Completed",
-      Invoice_No: invoiceNo,
-      Customer_ID: customerId || "",
-      Payment_Method: paymentMethod || "Cash",
-      Discount: discountAmt,
-      Paid_Amount: paidAmountNum,
-      Payment_Status: paymentStatus,
-    });
+  Sales_ID: salesId,
+  Date: new Date().toISOString(),
+  Customer_Name: customerName || "Walk-in",
+  Receipt_File: "",
+  Recorded_By: session.user?.name ?? session.user?.email ?? "",
+  Total_Amount: totalAmount,
+  Sale_Status: saleStatus || "Completed",
+  Invoice_No: invoiceNo,
+  Customer_ID: customerId || "",
+  Payment_Method: paymentMethod || "Cash",
+  Discount: discountAmt,
+  Paid_Amount: paidAmountNum,
+  Payment_Status: paymentStatus,
+  Phone_Number: body.customerPhone || "",
+});
 
     // ─── Sales_Items_TBL ───
     const itemsSheet = await getSheet(SHEETS.SALES_ITEMS);
