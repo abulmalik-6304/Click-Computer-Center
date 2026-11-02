@@ -1,14 +1,26 @@
 // src/app/admin/sales/SalesPOS.tsx
 "use client";
 
-import { useState } from "react";
-import SalesHistory from "./SalesHistory";
-import SalesActivityPanel from "@/components/admin/sales/SalesActivityPanel";
+import { useState, useMemo } from "react";
+import { useRouter } from "next/navigation";
+import NewCustomerModal from "@/components/admin/NewCustomerModal";
 import { toDriveImageUrl as formatDriveUrl } from "@/lib/drive-url";
 
 // ═══════════════════════════════════════════════════════════════
-// TYPES
+// TYPES — 🔧 FIXED to match actual API data
 // ═══════════════════════════════════════════════════════════════
+interface InventoryItem {
+  id: string;
+  name: string;
+  code: string;
+  category: string;
+  image: string;
+  stock: number;
+  sellingPrice: number;   // ✅ price → sellingPrice
+  costPrice: number;       // ✅ አዲስ
+  unitType: string;        // ✅ አዲስ
+}
+
 interface Customer {
   id: string;
   name: string;
@@ -17,208 +29,119 @@ interface Customer {
   email: string;
 }
 
-interface Sale {
-  salesId: string;
-  date: string;
-  customerName: string;
-  staffName: string;
-  totalAmount: number;
-  discount: number;
-  paidAmount: number;
-  paymentStatus: string;
-  paymentMethod: string;
-  invoiceNo: string;
-  saleStatus: string;
-  items: any[];
-}
-
-interface CartLine {
+interface CartItem {
   itemId: string;
   name: string;
   sellingPrice: number;
   costPrice: number;
   quantity: number;
   maxStock: number;
-  unitType: string;
   image: string;
 }
 
-// ═══════════════════════════════════════════════════════════════
-// MAIN COMPONENT
-// ═══════════════════════════════════════════════════════════════
+interface ReceiptData {
+  invoiceNo: string;
+  salesId: string;
+  customerName: string;
+  customerPhone: string;
+  cart: CartItem[];
+  subtotal: number;
+  discount: number;
+  total: number;
+  paid: number;
+  paymentMethod: string;
+  paymentStatus: string;
+  saleStatus: string;
+}
+
 export default function SalesPOS({
   initialInventory,
-  initialCustomers,
-  initialRecentSales,
+  initialCustomers = [],
   userRole,
   userName,
 }: {
-  initialInventory: any[];
-  initialCustomers: Customer[];
-  initialRecentSales: Sale[];
+  initialInventory: InventoryItem[];
+  initialCustomers?: Customer[];
   userRole: string;
   userName: string;
 }) {
-  const [inventory, setInventory] = useState(initialInventory);
-  const [customers, setCustomers] = useState(initialCustomers);
-  const [showPOS, setShowPOS] = useState(false);
-  const [showActivity, setShowActivity] = useState(false);
+  const router = useRouter();
 
-  const isOwnerOrManager = ["owner", "manager"].includes(userRole);
-
-  async function refreshInventory() {
-    try {
-      const res = await fetch("/api/inventory/refresh", { cache: "no-store" });
-      const data = await res.json();
-      if (Array.isArray(data.items)) {
-        setInventory(
-          data.items.filter((i: any) => i.stock > 0 && i.sellingPrice > 0)
-        );
-      }
-    } catch (e) {
-      console.error(e);
-    }
-  }
-
-  async function refreshCustomers() {
-    try {
-      const res = await fetch("/api/customers/list");
-      const data = await res.json();
-      if (Array.isArray(data.customers)) setCustomers(data.customers);
-    } catch (e) {
-      console.error(e);
-    }
-  }
-
-  return (
-    <div className="p-4 sm:p-6 lg:p-10 space-y-6">
-      {/* Header */}
-      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
-        <div>
-          <h1 className="text-2xl sm:text-3xl font-bold text-slate-900">🧾 Sales</h1>
-          <p className="text-sm text-slate-500 mt-1">
-            {inventory.length} items available
-          </p>
-        </div>
-        <div className="flex flex-wrap gap-2">
-          {isOwnerOrManager && (
-            <button
-              onClick={() => setShowActivity((v) => !v)}
-              className={`inline-flex items-center gap-2 px-3 py-2.5 rounded-lg font-semibold text-sm shadow-sm transition ${
-                showActivity
-                  ? "bg-slate-900 text-white"
-                  : "bg-slate-100 hover:bg-slate-200 text-slate-700"
-              }`}
-            >
-              📝 Activity Log
-            </button>
-          )}
-          <button
-            onClick={() => setShowPOS(true)}
-            className="inline-flex items-center gap-2 px-5 py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white font-bold rounded-lg shadow-md"
-          >
-            🛒 New Sale
-          </button>
-        </div>
-      </div>
-
-      {showActivity && isOwnerOrManager && <SalesActivityPanel />}
-
-      <SalesHistory userRole={userRole} />
-
-      {showPOS && (
-        <POSModal
-          inventory={inventory}
-          customers={customers}
-          userRole={userRole}
-          onCustomerAdded={refreshCustomers}
-          onSaleCompleted={() => {
-            refreshInventory();
-            setShowPOS(false);
-          }}
-          onClose={() => setShowPOS(false)}
-        />
-      )}
-    </div>
-  );
-}
-
-// ═══════════════════════════════════════════════════════════════
-// POS MODAL — 3 Column Layout
-// ═══════════════════════════════════════════════════════════════
-function POSModal({
-  inventory,
-  customers,
-  userRole,
-  onCustomerAdded,
-  onSaleCompleted,
-  onClose,
-}: {
-  inventory: any[];
-  customers: Customer[];
-  userRole: string;
-  onCustomerAdded: () => void;
-  onSaleCompleted: () => void;
-  onClose: () => void;
-}) {
   // ─── State ───
-  const [cart, setCart] = useState<CartLine[]>([]);
+  const [search, setSearch] = useState("");
+  const [selectedCategory, setSelectedCategory] = useState("All");
+  const [cart, setCart] = useState<CartItem[]>([]);
+
+  // Customer
+  const [customers, setCustomers] = useState<Customer[]>(initialCustomers);
   const [customer, setCustomer] = useState<Customer | null>(null);
   const [customerSearch, setCustomerSearch] = useState("");
   const [showCustomerList, setShowCustomerList] = useState(false);
   const [showNewCustomer, setShowNewCustomer] = useState(false);
 
-  const [itemSearch, setItemSearch] = useState("");
-  const [showItemList, setShowItemList] = useState(false);
-
+  // Payment
   const [paymentMethod, setPaymentMethod] = useState("Cash");
-  const [discount, setDiscount] = useState(0);
-  const [paidAmount, setPaidAmount] = useState<number | null>(null);
-  const [paymentStatus, setPaymentStatus] = useState<"Paid" | "Partial" | "Unpaid">("Paid");
+  const [discount, setDiscount] = useState<number>(0);
+  const [paidAmount, setPaidAmount] = useState<string>("");
   const [saleStatus, setSaleStatus] = useState<"Draft" | "Completed">("Completed");
-  const [submitting, setSubmitting] = useState(false);
-  const [receipt, setReceipt] = useState<any>(null);
+
+  // Feedback
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState("");
+  const [receipt, setReceipt] = useState<ReceiptData | null>(null);
 
   const isOwnerOrManager = ["owner", "manager"].includes(userRole);
 
-  // ─── Derived ───
+  // ─── Categories ───
+  const categories = useMemo(() => {
+    const cats = new Set(initialInventory.map((i) => i.category || "General"));
+    return ["All", ...Array.from(cats)];
+  }, [initialInventory]);
+
+  // ─── Filtered products ───
+  const filteredProducts = useMemo(() => {
+    return initialInventory.filter((item) => {
+      const matchSearch =
+        item.name.toLowerCase().includes(search.toLowerCase()) ||
+        item.code.toLowerCase().includes(search.toLowerCase());
+      const matchCat =
+        selectedCategory === "All" || item.category === selectedCategory;
+      return matchSearch && matchCat;
+    });
+  }, [initialInventory, search, selectedCategory]);
+
+  // ─── Filtered customers ───
   const filteredCustomers = customers.filter((c) => {
     if (!customerSearch) return true;
     const lq = customerSearch.toLowerCase();
-    return (
-      c.name.toLowerCase().includes(lq) ||
-      c.phone.includes(customerSearch) ||
-      c.id.toLowerCase().includes(lq)
-    );
+    return c.name.toLowerCase().includes(lq) || c.phone.includes(customerSearch);
   });
 
-  const filteredItems = inventory.filter((i) => {
-    if (!itemSearch) return true;
-    const lq = itemSearch.toLowerCase();
-    return (
-      String(i.name).toLowerCase().includes(lq) ||
-      String(i.code).toLowerCase().includes(lq)
-    );
-  });
+  // ─── Calculations ───
+  const subtotal = cart.reduce(
+    (acc, item) => acc + item.sellingPrice * item.quantity,
+    0
+  );
+  const totalAmount = Math.max(0, subtotal - Number(discount || 0));
+  const paid = paidAmount === "" ? totalAmount : Number(paidAmount);
 
-  const subtotal = cart.reduce((s, c) => s + c.sellingPrice * c.quantity, 0);
-  const total = Math.max(0, subtotal - discount);
-  const paid = paidAmount ?? total;
-  const outstanding = total - paid;
+  // Payment status auto
+  const paymentStatus =
+    paid >= totalAmount ? "Paid" : paid > 0 ? "Partial" : "Unpaid";
 
-  // ─── Handlers ───
-  function addToCart(item: any) {
-    const existing = cart.find((c) => c.itemId === item.id);
-    if (existing) {
-      if (existing.quantity >= existing.maxStock) return;
-      setCart(
-        cart.map((c) =>
-          c.itemId === item.id ? { ...c, quantity: c.quantity + 1 } : c
-        )
-      );
-    } else {
-      setCart([
-        ...cart,
+  // ─── Cart actions ───
+  function addToCart(item: InventoryItem) {
+    if (item.stock <= 0) return;
+    setCart((prev) => {
+      const existing = prev.find((i) => i.itemId === item.id);
+      if (existing) {
+        if (existing.quantity >= item.stock) return prev;
+        return prev.map((i) =>
+          i.itemId === item.id ? { ...i, quantity: i.quantity + 1 } : i
+        );
+      }
+      return [
+        ...prev,
         {
           itemId: item.id,
           name: item.name,
@@ -226,29 +149,39 @@ function POSModal({
           costPrice: item.costPrice,
           quantity: 1,
           maxStock: item.stock,
-          unitType: item.unitType,
           image: item.image,
         },
-      ]);
-    }
-    setItemSearch("");
-    setShowItemList(false);
+      ];
+    });
   }
 
-  function updateQty(id: string, qty: number) {
-    if (qty <= 0) {
-      setCart(cart.filter((c) => c.itemId !== id));
-      return;
-    }
-    setCart(
-      cart.map((c) =>
-        c.itemId === id ? { ...c, quantity: Math.min(qty, c.maxStock) } : c
+  function updateQuantity(itemId: string, delta: number) {
+    setCart((prev) =>
+      prev
+        .map((i) => {
+          if (i.itemId === itemId) {
+            const newQty = i.quantity + delta;
+            if (newQty <= 0) return null;
+            if (newQty > i.maxStock) return i;
+            return { ...i, quantity: newQty };
+          }
+          return i;
+        })
+        .filter(Boolean) as CartItem[]
+    );
+  }
+
+  function updatePrice(itemId: string, newPrice: number) {
+    setCart((prev) =>
+      prev.map((i) =>
+        i.itemId === itemId ? { ...i, sellingPrice: newPrice } : i
       )
     );
   }
 
-  function updatePrice(id: string, price: number) {
-    setCart(cart.map((c) => (c.itemId === id ? { ...c, sellingPrice: price } : c)));
+  function removeFromCart(itemId: string) {
+    // ✅ FIXED typo: removeFromCard → removeFromCart
+    setCart((prev) => prev.filter((i) => i.itemId !== itemId));
   }
 
   function selectCustomer(c: Customer) {
@@ -258,30 +191,15 @@ function POSModal({
   }
 
   function handleCustomerCreated(newCustomer: Customer) {
-    onCustomerAdded();
+    setCustomers([...customers, newCustomer]);
     setCustomer(newCustomer);
     setShowNewCustomer(false);
   }
 
-  function handlePaidChange(v: number) {
-    setPaidAmount(v);
-    if (v >= total) setPaymentStatus("Paid");
-    else if (v > 0) setPaymentStatus("Partial");
-    else setPaymentStatus("Unpaid");
-  }
-
-  function clearCart() {
-    if (cart.length === 0) return;
-    if (!confirm("Clear entire cart?")) return;
-    setCart([]);
-    setDiscount(0);
-    setPaidAmount(null);
-    setPaymentStatus("Paid");
-  }
-
-  async function checkout() {
+  // ─── Checkout ───
+  async function handleCheckout() {
     if (cart.length === 0) {
-      alert("❌ Cart is empty");
+      setError("ካርቱ ባዶ ነው (Cart is empty)");
       return;
     }
 
@@ -289,14 +207,16 @@ function POSModal({
     for (const c of cart) {
       const floor = c.costPrice * 1.1;
       if (c.sellingPrice < floor) {
-        alert(
-          `❌ "${c.name}": minimum price is ${floor.toFixed(2)} ETB (cost + 10%)`
+        setError(
+          `❌ "${c.name}": ዝቅተኛ ዋጋ ${floor.toFixed(2)} ETB (cost + 10%)`
         );
         return;
       }
     }
 
-    setSubmitting(true);
+    setLoading(true);
+    setError("");
+
     try {
       const res = await fetch("/api/sales", {
         method: "POST",
@@ -306,7 +226,7 @@ function POSModal({
           customerId: customer?.id || "",
           customerPhone: customer?.phone || "",
           paymentMethod,
-          discount,
+          discount: Number(discount || 0),
           paidAmount: paid,
           saleStatus,
           items: cart.map((c) => ({
@@ -317,46 +237,37 @@ function POSModal({
           })),
         }),
       });
+
       const data = await res.json();
-      setSubmitting(false);
-
       if (!res.ok) {
-        alert(`❌ Sale failed: ${data.error}`);
-        return;
-      }
-
-      // Log activity
-      try {
-        await fetch("/api/sales/activity", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            action: saleStatus === "Draft" ? "draft" : "completed",
-            salesId: data.salesId,
-            invoiceNo: data.invoiceNo,
-            customerName: customer?.name || "Walk-in",
-            details: `${cart.length} items, ${total.toLocaleString()} ETB`,
-          }),
-        });
-      } catch {
-        /* ignore */
+        throw new Error(data.error || "ሽያጩን መመዝገብ አልተቻለም");
       }
 
       setReceipt({
-        ...data,
+        invoiceNo: data.invoiceNo,
+        salesId: data.salesId,
+        customerName: customer?.name || "Walk-in",
+        customerPhone: customer?.phone || "",
         cart,
-        customer,
         subtotal,
-        discount,
-        total,
+        discount: Number(discount || 0),
+        total: totalAmount,
         paid,
         paymentMethod,
         paymentStatus,
         saleStatus,
       });
+
+      // Reset
+      setCart([]);
+      setDiscount(0);
+      setPaidAmount("");
+      setCustomer(null);
+      router.refresh();
     } catch (e: any) {
-      setSubmitting(false);
-      alert(`❌ ${e.message}`);
+      setError(e.message);
+    } finally {
+      setLoading(false);
     }
   }
 
@@ -367,7 +278,7 @@ function POSModal({
         data={receipt}
         onClose={() => {
           setReceipt(null);
-          onSaleCompleted();
+          setSaleStatus("Completed");
         }}
       />
     );
@@ -377,457 +288,389 @@ function POSModal({
   // RENDER
   // ═══════════════════════════════════════════════════════════════
   return (
-    <div className="fixed inset-0 z-50 bg-black/60 flex items-center justify-center p-2 sm:p-4">
-      <div className="bg-slate-50 rounded-2xl shadow-2xl w-full max-w-7xl max-h-[96vh] flex flex-col">
-        {/* Header */}
-        <div className="bg-white border-b border-slate-200 px-4 py-3 flex items-center justify-between rounded-t-2xl">
-          <div className="flex items-center gap-3">
-            <div>
-              <h2 className="text-lg font-bold text-slate-900">🛒 New Sale</h2>
-              <p className="text-xs text-slate-500">
-                {cart.length} items · {total.toLocaleString()} ETB
-              </p>
-            </div>
-            {saleStatus === "Draft" && (
-              <span className="px-2 py-0.5 rounded-full text-xs font-semibold bg-amber-100 text-amber-700">
-                Draft
-              </span>
-            )}
-          </div>
-          <button
-            onClick={onClose}
-            className="text-slate-400 hover:text-slate-900 text-xl p-1"
-          >
-            ✕
-          </button>
-        </div>
+    <div className="p-4 sm:p-6 lg:p-8 max-w-7xl mx-auto">
+      <div className="grid lg:grid-cols-3 gap-6">
+        {/* ═══ LEFT: Product Catalog (2 cols) ═══ */}
+        <div className="lg:col-span-2 space-y-4">
+          <div className="bg-white p-4 rounded-2xl border border-slate-200 shadow-sm space-y-4">
+            <h1 className="text-xl font-bold text-slate-900">
+              🧾 Point of Sale (POS)
+            </h1>
 
-        {/* Body — 3 columns */}
-        <div className="flex-1 overflow-y-auto p-3 grid grid-cols-1 lg:grid-cols-3 gap-3">
-          {/* ═════════ COLUMN 1: CUSTOMER ═════════ */}
-          <div className="space-y-3">
-            {/* Customer card */}
-            <div className="bg-white rounded-xl border border-slate-200 p-3 space-y-2">
-              <h3 className="text-sm font-bold text-slate-700 flex items-center justify-between">
-                <span>👤 Customer</span>
-                {customer && (
-                  <button
-                    onClick={() => {
-                      setCustomer(null);
-                      setCustomerSearch("");
-                    }}
-                    className="text-xs text-red-600 hover:text-red-800"
-                  >
-                    Clear
-                  </button>
-                )}
-              </h3>
+            {/* Search */}
+            <input
+              type="text"
+              placeholder="🔍 ዕቃዎችን በስም ወይም በኮድ ይፈልጉ..."
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              className="w-full px-4 py-3 rounded-xl border border-slate-300 focus:ring-2 focus:ring-orange-500 text-sm text-slate-900"
+            />
 
-              {/* Customer search */}
-              {!customer && (
-                <div className="relative">
-                  <input
-                    value={customerSearch}
-                    onChange={(e) => {
-                      setCustomerSearch(e.target.value);
-                      setShowCustomerList(true);
-                    }}
-                    onFocus={() => setShowCustomerList(true)}
-                    placeholder="🔍 Search by name or phone…"
-                    className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm text-slate-900"
-                  />
-                  {showCustomerList && (
-                    <div className="absolute top-full mt-1 left-0 right-0 bg-white border border-slate-200 rounded-lg shadow-lg max-h-56 overflow-y-auto z-30">
-                      {filteredCustomers.length === 0 ? (
-                        <p className="p-3 text-xs text-slate-500 text-center">
-                          No customers found
-                        </p>
-                      ) : (
-                        filteredCustomers.slice(0, 10).map((c) => (
-                          <button
-                            key={c.id}
-                            onClick={() => selectCustomer(c)}
-                            className="w-full text-left px-3 py-2 hover:bg-slate-50 border-b border-slate-100 text-sm"
-                          >
-                            <p className="font-medium text-slate-900">{c.name}</p>
-                            <p className="text-xs text-slate-500">
-                              {c.phone || "No phone"}
-                            </p>
-                          </button>
-                        ))
-                      )}
-                    </div>
-                  )}
-                </div>
-              )}
-
-              {/* Selected customer */}
-              {customer && (
-                <div className="p-2 bg-emerald-50 border border-emerald-200 rounded-lg">
-                  <p className="font-semibold text-slate-900">{customer.name}</p>
-                  <p className="text-xs text-slate-600">
-                    📞 {customer.phone || "—"}
-                  </p>
-                  <p className="text-xs text-slate-500">
-                    Type: {customer.type}
-                  </p>
-                </div>
-              )}
-
-              {/* Phone (read-only) */}
-              <div>
-                <label className="text-xs text-slate-500">Phone Number</label>
-                <input
-                  type="tel"
-                  value={customer?.phone || ""}
-                  readOnly
-                  placeholder="Auto-filled"
-                  className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm bg-slate-50 text-slate-700"
-                />
-              </div>
-
-              {/* Add new customer */}
-              <button
-                onClick={() => setShowNewCustomer(true)}
-                className="w-full py-2 bg-blue-600 hover:bg-blue-700 text-white text-xs font-semibold rounded-lg"
-              >
-                ➕ New Customer
-              </button>
-            </div>
-
-            {/* Sale Status card */}
-            <div className="bg-white rounded-xl border border-slate-200 p-3 space-y-2">
-              <h3 className="text-sm font-bold text-slate-700">📋 Sale Status</h3>
-              <div className="grid grid-cols-2 gap-1 bg-slate-100 rounded-lg p-1">
+            {/* Categories */}
+            <div className="flex flex-wrap gap-2">
+              {categories.map((cat) => (
                 <button
-                  onClick={() => setSaleStatus("Draft")}
-                  className={`py-2 text-xs font-semibold rounded ${
-                    saleStatus === "Draft"
-                      ? "bg-amber-500 text-white"
-                      : "text-slate-600"
+                  key={cat}
+                  onClick={() => setSelectedCategory(cat)}
+                  className={`px-4 py-2 rounded-xl text-xs font-semibold transition ${
+                    selectedCategory === cat
+                      ? "bg-orange-500 text-white shadow"
+                      : "bg-slate-100 text-slate-700 hover:bg-slate-200"
                   }`}
                 >
-                  📝 Draft
+                  {cat}
                 </button>
-                <button
-                  onClick={() => setSaleStatus("Completed")}
-                  className={`py-2 text-xs font-semibold rounded ${
-                    saleStatus === "Completed"
-                      ? "bg-emerald-600 text-white"
-                      : "text-slate-600"
-                  }`}
-                >
-                  ✅ Completed
-                </button>
-              </div>
-              <p className="text-xs text-slate-500 leading-tight">
-                {saleStatus === "Draft"
-                  ? "📝 Stock not deducted. Receipt can be printed later."
-                  : "✅ Stock will be deducted. Receipt opens automatically."}
-              </p>
+              ))}
             </div>
           </div>
 
-          {/* ═════════ COLUMN 2: ITEMS + CART ═════════ */}
-          <div className="space-y-3">
-            {/* Item search */}
-            <div className="bg-white rounded-xl border border-slate-200 p-3 space-y-2">
-              <h3 className="text-sm font-bold text-slate-700">📦 Add Items</h3>
-              <div className="relative">
-                <input
-                  value={itemSearch}
-                  onChange={(e) => {
-                    setItemSearch(e.target.value);
-                    setShowItemList(true);
-                  }}
-                  onFocus={() => setShowItemList(true)}
-                  placeholder="🔍 Search by name or code…"
-                  className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm text-slate-900"
-                />
-                {showItemList && itemSearch && (
-                  <div className="absolute top-full mt-1 left-0 right-0 bg-white border border-slate-200 rounded-lg shadow-lg max-h-64 overflow-y-auto z-30">
-                    {filteredItems.length === 0 ? (
-                      <p className="p-3 text-xs text-slate-500 text-center">
-                        No items found
-                      </p>
-                    ) : (
-                      filteredItems.slice(0, 12).map((item) => (
-                        <button
-                          key={item.id}
-                          onClick={() => addToCart(item)}
-                          className="w-full text-left p-2 hover:bg-slate-50 border-b border-slate-100 flex items-center gap-2"
-                        >
-                          <img
-                            src={formatDriveUrl(item.image)}
-                            alt={item.name}
-                            className="w-9 h-9 rounded object-cover bg-slate-100 flex-shrink-0"
-                            onError={(e) =>
-                              ((e.target as HTMLImageElement).src =
-                                "/placeholder.svg")
-                            }
-                          />
-                          <div className="flex-1 min-w-0">
-                            <p className="text-sm font-medium text-slate-900 truncate">
-                              {item.name}
-                            </p>
-                            <p className="text-xs text-slate-500">
-                              Stock: {item.stock} · {item.code}
-                            </p>
-                          </div>
-                          <p className="text-sm font-bold text-emerald-600 flex-shrink-0">
-                            {item.sellingPrice.toLocaleString()}
-                          </p>
-                        </button>
-                      ))
-                    )}
+          {/* Product grid */}
+          <div className="grid sm:grid-cols-2 md:grid-cols-3 gap-4 max-h-[600px] overflow-y-auto pr-2">
+            {filteredProducts.map((item) => {
+              const isOutOfStock = item.stock <= 0;
+              return (
+                <div
+                  key={item.id}
+                  onClick={() => !isOutOfStock && addToCart(item)}
+                  className={`bg-white p-3 rounded-2xl border border-slate-200 shadow-sm flex flex-col justify-between transition ${
+                    isOutOfStock
+                      ? "opacity-50 cursor-not-allowed"
+                      : "hover:border-orange-500 cursor-pointer hover:shadow-md"
+                  }`}
+                >
+                  {/* ✅ Image */}
+                  <div className="aspect-square rounded-xl overflow-hidden bg-slate-100 mb-2">
+                    <img
+                      src={formatDriveUrl(item.image)}
+                      alt={item.name}
+                      className="w-full h-full object-cover"
+                      onError={(e) =>
+                        ((e.target as HTMLImageElement).src = "/placeholder.svg")
+                      }
+                    />
                   </div>
-                )}
-              </div>
-            </div>
 
-            {/* Cart */}
-            <div className="bg-white rounded-xl border border-slate-200 p-3">
-              <div className="flex items-center justify-between mb-2">
-                <h3 className="text-sm font-bold text-slate-700">
-                  🛒 Items ({cart.length})
-                </h3>
-                {cart.length > 0 && (
-                  <button
-                    onClick={clearCart}
-                    className="text-xs text-red-600 hover:text-red-800"
-                  >
-                    Clear all
-                  </button>
-                )}
-              </div>
-
-              {cart.length === 0 ? (
-                <p className="text-sm text-slate-400 text-center py-8">
-                  No items yet — search above
-                </p>
-              ) : (
-                <div className="space-y-2 max-h-80 overflow-y-auto">
-                  {cart.map((c) => {
-                    const floor = c.costPrice * 1.1;
-                    const isBelowFloor = c.sellingPrice < floor;
-                    return (
-                      <div
-                        key={c.itemId}
-                        className={`p-2 rounded-lg ${
-                          isBelowFloor
-                            ? "bg-red-50 border border-red-300"
-                            : "bg-slate-50"
+                  <div>
+                    <div className="flex justify-between items-start mb-1">
+                      <span className="text-xs font-semibold px-2 py-0.5 bg-slate-100 text-slate-600 rounded-md">
+                        {item.code || "ITEM"}
+                      </span>
+                      <span
+                        className={`text-xs font-bold px-2 py-0.5 rounded-full ${
+                          isOutOfStock
+                            ? "bg-red-100 text-red-700"
+                            : "bg-emerald-100 text-emerald-700"
                         }`}
                       >
-                        <div className="flex items-center gap-2">
-                          <img
-                            src={formatDriveUrl(c.image)}
-                            alt={c.name}
-                            className="w-10 h-10 rounded object-cover bg-slate-100 flex-shrink-0"
-                            onError={(e) =>
-                              ((e.target as HTMLImageElement).src =
-                                "/placeholder.svg")
-                            }
-                          />
-                          <div className="flex-1 min-w-0">
-                            <p className="text-sm font-semibold text-slate-900 truncate">
-                              {c.name}
-                            </p>
-                            <p className="text-xs text-slate-500">
-                              {c.unitType}
-                            </p>
-                          </div>
-                          <button
-                            onClick={() => updateQty(c.itemId, 0)}
-                            className="text-red-600 hover:bg-red-100 rounded p-1 text-xs"
-                            title="Remove"
-                          >
-                            ✕
-                          </button>
-                        </div>
+                        {isOutOfStock ? "Sold Out" : `${item.stock}`}
+                      </span>
+                    </div>
+                    <h3 className="font-bold text-slate-900 text-sm line-clamp-2">
+                      {item.name}
+                    </h3>
+                  </div>
 
-                        <div className="grid grid-cols-2 gap-2 mt-2">
-                          <div>
-                            <label className="text-xs text-slate-500">
-                              Unit Price
-                            </label>
+                  <div className="mt-2 flex items-center justify-between">
+                    <span className="font-extrabold text-orange-600 text-sm">
+                      {item.sellingPrice.toLocaleString()} ETB
+                    </span>
+                    <button
+                      disabled={isOutOfStock}
+                      className="px-3 py-1.5 bg-orange-50 hover:bg-orange-100 text-orange-700 rounded-lg text-xs font-bold transition"
+                    >
+                      + አክል
+                    </button>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+
+        {/* ═══ RIGHT: Cart + Checkout ═══ */}
+        <div className="bg-white p-5 rounded-2xl border border-slate-200 shadow-sm flex flex-col h-fit sticky top-4">
+          <div className="space-y-4">
+            <h2 className="font-bold text-slate-900 text-lg border-b border-slate-100 pb-3">
+              🛒 ካርት ({cart.length})
+            </h2>
+
+            {/* Cart items */}
+            {cart.length === 0 ? (
+              <p className="text-sm text-slate-400 text-center py-8">
+                ካርቱ ባዶ ነው
+              </p>
+            ) : (
+              <div className="space-y-3 max-h-64 overflow-y-auto divide-y divide-slate-100 pr-1">
+                {cart.map((item) => {
+                  const floor = item.costPrice * 1.1;
+                  const isBelowFloor = item.sellingPrice < floor;
+                  return (
+                    <div
+                      key={item.itemId}
+                      className={`pt-3 first:pt-0 ${
+                        isBelowFloor ? "bg-red-50 -mx-2 px-2 py-2 rounded-lg" : ""
+                      }`}
+                    >
+                      <div className="flex items-center justify-between gap-2">
+                        <div className="min-w-0 flex-1">
+                          <p className="text-sm font-bold text-slate-900 truncate">
+                            {item.name}
+                          </p>
+                          <div className="flex items-center gap-1 mt-1">
                             <input
                               type="number"
-                              value={c.sellingPrice}
+                              value={item.sellingPrice}
                               onChange={(e) =>
-                                updatePrice(c.itemId, Number(e.target.value))
+                                updatePrice(item.itemId, Number(e.target.value))
                               }
-                              className={`w-full rounded border px-2 py-1 text-sm ${
+                              className={`w-20 rounded border px-1 py-0.5 text-xs ${
                                 isBelowFloor
                                   ? "border-red-500 text-red-700 bg-red-50"
                                   : "border-slate-300 text-slate-900"
                               }`}
                             />
-                            <p
-                              className={`text-xs mt-0.5 ${
-                                isBelowFloor
-                                  ? "text-red-600 font-semibold"
-                                  : "text-slate-400"
-                              }`}
-                            >
+                            <span className="text-xs text-slate-500">ETB</span>
+                          </div>
+                          {isBelowFloor && (
+                            <p className="text-xs text-red-600 mt-0.5 font-semibold">
                               Min: {Math.round(floor)} ETB
                             </p>
-                          </div>
-                          <div>
-                            <label className="text-xs text-slate-500">
-                              Quantity
-                            </label>
-                            <div className="flex items-center">
-                              <button
-                                onClick={() => updateQty(c.itemId, c.quantity - 1)}
-                                className="w-7 h-7 bg-slate-200 hover:bg-slate-300 rounded-l text-slate-700"
-                              >
-                                −
-                              </button>
-                              <span className="w-10 h-7 bg-white border-t border-b border-slate-300 flex items-center justify-center text-sm font-semibold text-slate-900">
-                                {c.quantity}
-                              </span>
-                              <button
-                                onClick={() => updateQty(c.itemId, c.quantity + 1)}
-                                className="w-7 h-7 bg-slate-200 hover:bg-slate-300 rounded-r text-slate-700"
-                              >
-                                +
-                              </button>
-                            </div>
-                          </div>
+                          )}
                         </div>
-
-                        <div className="flex justify-between mt-1 text-xs">
-                          <span className="text-slate-500">Line total:</span>
-                          <strong className="text-slate-900">
-                            {(c.sellingPrice * c.quantity).toLocaleString()} ETB
-                          </strong>
+                        <div className="flex items-center gap-1">
+                          <button
+                            onClick={() => updateQuantity(item.itemId, -1)}
+                            className="w-7 h-7 bg-slate-100 hover:bg-slate-200 rounded-lg text-sm font-bold text-slate-700"
+                          >
+                            −
+                          </button>
+                          <span className="text-sm font-bold w-6 text-center">
+                            {item.quantity}
+                          </span>
+                          <button
+                            onClick={() => updateQuantity(item.itemId, 1)}
+                            className="w-7 h-7 bg-slate-100 hover:bg-slate-200 rounded-lg text-sm font-bold text-slate-700"
+                          >
+                            +
+                          </button>
+                          <button
+                            onClick={() => removeFromCart(item.itemId)}
+                            className="text-red-500 hover:text-red-700 text-xs ml-1"
+                          >
+                            🗑
+                          </button>
                         </div>
                       </div>
-                    );
-                  })}
-                </div>
-              )}
-            </div>
-          </div>
-
-          {/* ═════════ COLUMN 3: PAYMENT ═════════ */}
-          <div className="space-y-3">
-            {/* Totals */}
-            <div className="bg-white rounded-xl border border-slate-200 p-3 space-y-2">
-              <h3 className="text-sm font-bold text-slate-700">💰 Summary</h3>
-
-              <div className="flex justify-between text-sm">
-                <span className="text-slate-600">Subtotal</span>
-                <span className="font-medium">{subtotal.toLocaleString()} ETB</span>
+                    </div>
+                  );
+                })}
               </div>
+            )}
 
+            {/* Customer section */}
+            <div className="border-t border-slate-100 pt-4 space-y-3">
               <div>
-                <label className="text-xs text-slate-500">Discount (ETB)</label>
-                <input
-                  type="number"
-                  value={discount}
-                  onChange={(e) => setDiscount(+e.target.value)}
-                  className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm text-slate-900"
-                />
+                <label className="block text-xs font-bold text-slate-700 mb-1">
+                  👤 ደንበኛ (Customer)
+                </label>
+                {!customer ? (
+                  <div className="relative">
+                    <input
+                      type="text"
+                      value={customerSearch}
+                      onChange={(e) => {
+                        setCustomerSearch(e.target.value);
+                        setShowCustomerList(true);
+                      }}
+                      onFocus={() => setShowCustomerList(true)}
+                      placeholder="🔍 Search customer…"
+                      className="w-full px-3 py-2 rounded-xl border border-slate-300 text-sm text-slate-900"
+                    />
+                    {showCustomerList && (
+                      <div className="absolute top-full mt-1 left-0 right-0 bg-white border border-slate-200 rounded-lg shadow-lg max-h-48 overflow-y-auto z-20">
+                        {filteredCustomers.length === 0 ? (
+                          <p className="p-3 text-xs text-slate-500 text-center">
+                            No customers
+                          </p>
+                        ) : (
+                          filteredCustomers.slice(0, 8).map((c) => (
+                            <button
+                              key={c.id}
+                              onClick={() => selectCustomer(c)}
+                              className="w-full text-left px-3 py-2 hover:bg-slate-50 border-b border-slate-100 text-sm"
+                            >
+                              <p className="font-medium text-slate-900">
+                                {c.name}
+                              </p>
+                              <p className="text-xs text-slate-500">{c.phone}</p>
+                            </button>
+                          ))
+                        )}
+                      </div>
+                    )}
+                  </div>
+                ) : (
+                  <div className="p-2 bg-emerald-50 border border-emerald-200 rounded-lg">
+                    <div className="flex justify-between">
+                      <div>
+                        <p className="font-semibold text-slate-900 text-sm">
+                          {customer.name}
+                        </p>
+                        <p className="text-xs text-slate-600">
+                          📞 {customer.phone || "—"}
+                        </p>
+                      </div>
+                      <button
+                        onClick={() => setCustomer(null)}
+                        className="text-red-600 text-xs hover:underline"
+                      >
+                        ✕
+                      </button>
+                    </div>
+                  </div>
+                )}
+                <button
+                  onClick={() => setShowNewCustomer(true)}
+                  className="mt-2 w-full py-1.5 bg-blue-100 hover:bg-blue-200 text-blue-700 text-xs font-semibold rounded-lg"
+                >
+                  ➕ New Customer
+                </button>
               </div>
 
-              <div className="flex justify-between text-lg font-bold pt-2 border-t border-slate-200">
-                <span>Total</span>
-                <span className="text-emerald-600">
-                  {total.toLocaleString()} ETB
-                </span>
-              </div>
-            </div>
-
-            {/* Payment */}
-            <div className="bg-white rounded-xl border border-slate-200 p-3 space-y-2">
-              <h3 className="text-sm font-bold text-slate-700">💳 Payment</h3>
-
+              {/* Payment method */}
               <div>
-                <label className="text-xs text-slate-500">Payment Method</label>
+                <label className="block text-xs font-bold text-slate-700 mb-1">
+                  💳 Payment Method
+                </label>
                 <select
                   value={paymentMethod}
                   onChange={(e) => setPaymentMethod(e.target.value)}
-                  className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm text-slate-900"
+                  className="w-full px-3 py-2 rounded-xl border border-slate-300 text-sm text-slate-900"
                 >
-                  <option>Cash</option>
-                  <option>Telebirr</option>
-                  <option>CBE</option>
-                  <option>Credit</option>
+                  <option value="Cash">Cash</option>
+                  <option value="Telebirr">Telebirr</option>
+                  <option value="CBE">CBE</option>
+                  <option value="Credit">Credit</option>
                 </select>
               </div>
 
-              <div>
-                <label className="text-xs text-slate-500">Paid Amount</label>
-                <input
-                  type="number"
-                  value={paid}
-                  onChange={(e) => handlePaidChange(+e.target.value)}
-                  className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm text-slate-900"
-                />
+              {/* Discount + Paid */}
+              <div className="grid grid-cols-2 gap-2">
+                <div>
+                  <label className="block text-xs font-bold text-slate-700 mb-1">
+                    ቅናሽ
+                  </label>
+                  <input
+                    type="number"
+                    value={discount}
+                    onChange={(e) => setDiscount(Number(e.target.value))}
+                    className="w-full px-3 py-2 rounded-xl border border-slate-300 text-sm text-slate-900"
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs font-bold text-slate-700 mb-1">
+                    የተከፈለ
+                  </label>
+                  <input
+                    type="number"
+                    placeholder={totalAmount.toString()}
+                    value={paidAmount}
+                    onChange={(e) => setPaidAmount(e.target.value)}
+                    className="w-full px-3 py-2 rounded-xl border border-slate-300 text-sm text-slate-900"
+                  />
+                </div>
               </div>
 
+              {/* Sale status */}
               <div>
-                <label className="text-xs text-slate-500">Payment Status</label>
-                <select
-                  value={paymentStatus}
-                  onChange={(e) =>
-                    setPaymentStatus(e.target.value as "Paid" | "Partial" | "Unpaid")
-                  }
-                  className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm text-slate-900"
-                >
-                  <option value="Paid">✅ Paid</option>
-                  <option value="Partial">🟡 Partial</option>
-                  <option value="Unpaid">🔴 Unpaid</option>
-                </select>
+                <label className="block text-xs font-bold text-slate-700 mb-1">
+                  📋 Sale Status
+                </label>
+                <div className="grid grid-cols-2 gap-1 bg-slate-100 rounded-lg p-1">
+                  <button
+                    onClick={() => setSaleStatus("Draft")}
+                    className={`py-2 text-xs font-semibold rounded ${
+                      saleStatus === "Draft"
+                        ? "bg-amber-500 text-white"
+                        : "text-slate-600"
+                    }`}
+                  >
+                    📝 Draft
+                  </button>
+                  <button
+                    onClick={() => setSaleStatus("Completed")}
+                    className={`py-2 text-xs font-semibold rounded ${
+                      saleStatus === "Completed"
+                        ? "bg-emerald-600 text-white"
+                        : "text-slate-600"
+                    }`}
+                  >
+                    ✅ Completed
+                  </button>
+                </div>
               </div>
+            </div>
+          </div>
 
-              {outstanding > 0 && (
-                <div className="p-2 bg-orange-50 border border-orange-200 rounded-lg">
-                  <p className="text-xs text-orange-700">
-                    ⚠️ Outstanding: {outstanding.toLocaleString()} ETB
-                  </p>
-                </div>
-              )}
-              {outstanding < 0 && (
-                <div className="p-2 bg-blue-50 border border-blue-200 rounded-lg">
-                  <p className="text-xs text-blue-700">
-                    💵 Change: {Math.abs(outstanding).toLocaleString()} ETB
-                  </p>
-                </div>
-              )}
+          {/* Summary + Checkout */}
+          <div className="border-t border-slate-100 pt-4 mt-4 space-y-3">
+            <div className="flex justify-between text-sm text-slate-600">
+              <span>Subtotal:</span>
+              <span className="font-semibold">
+                {subtotal.toLocaleString()} ETB
+              </span>
+            </div>
+            <div className="flex justify-between text-lg font-extrabold text-slate-900">
+              <span>Total:</span>
+              <span className="text-orange-600">
+                {totalAmount.toLocaleString()} ETB
+              </span>
             </div>
 
-            {/* Checkout */}
+            {/* Payment status badge */}
+            <div className="flex justify-between text-sm">
+              <span className="text-slate-600">Payment:</span>
+              <span
+                className={`px-2 py-0.5 rounded-full text-xs font-bold ${
+                  paymentStatus === "Paid"
+                    ? "bg-emerald-100 text-emerald-700"
+                    : paymentStatus === "Partial"
+                    ? "bg-orange-100 text-orange-700"
+                    : "bg-red-100 text-red-700"
+                }`}
+              >
+                {paymentStatus}
+              </span>
+            </div>
+
+            {error && (
+              <p className="text-xs text-red-600 bg-red-50 p-2 rounded-lg">
+                {error}
+              </p>
+            )}
+
             <button
-              onClick={checkout}
-              disabled={cart.length === 0 || submitting}
-              className={`w-full py-3.5 text-white font-bold rounded-xl disabled:opacity-50 disabled:cursor-not-allowed transition shadow-lg ${
+              onClick={handleCheckout}
+              disabled={loading || cart.length === 0}
+              className={`w-full py-3 text-white font-bold rounded-xl disabled:opacity-50 transition ${
                 saleStatus === "Draft"
                   ? "bg-amber-500 hover:bg-amber-600"
                   : "bg-emerald-600 hover:bg-emerald-700"
               }`}
             >
-              {submitting
+              {loading
                 ? "⏳ Processing…"
                 : saleStatus === "Draft"
-                ? `📝 Save Draft · ${total.toLocaleString()} ETB`
-                : `✅ Complete Sale · ${total.toLocaleString()} ETB`}
+                ? `📝 Save Draft · ${totalAmount.toLocaleString()} ETB`
+                : `✅ Complete Sale · ${totalAmount.toLocaleString()} ETB`}
             </button>
-
-            {cart.length > 0 && (
-              <p className="text-xs text-slate-400 text-center">
-                {cart.length} items · Recorded as {userRole}
-              </p>
-            )}
           </div>
         </div>
       </div>
 
-      {/* New Customer Modal */}
+      {/* New customer modal */}
       {showNewCustomer && (
-        <NewCustomerMiniModal
+        <NewCustomerModal
           onClose={() => setShowNewCustomer(false)}
           onCreated={handleCustomerCreated}
         />
@@ -837,222 +680,16 @@ function POSModal({
 }
 
 // ═══════════════════════════════════════════════════════════════
-// NEW CUSTOMER MINI MODAL (self-contained)
-// ═══════════════════════════════════════════════════════════════
-function NewCustomerMiniModal({
-  onClose,
-  onCreated,
-}: {
-  onClose: () => void;
-  onCreated: (c: Customer) => void;
-}) {
-  const [form, setForm] = useState({
-    name: "",
-    phone: "",
-    email: "",
-    type: "Regular",
-    address: "",
-  });
-  const [saving, setSaving] = useState(false);
-  const [error, setError] = useState("");
-
-  async function submit(e: React.FormEvent) {
-    e.preventDefault();
-    setError("");
-    if (!form.name.trim()) {
-      setError("Name is required");
-      return;
-    }
-    setSaving(true);
-    try {
-      const res = await fetch("/api/customers/create", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(form),
-      });
-      const data = await res.json();
-      if (!res.ok) {
-        setError(data.error || "Failed");
-        setSaving(false);
-        return;
-      }
-      onCreated(data.customer);
-    } catch (e: any) {
-      setError(e.message);
-      setSaving(false);
-    }
-  }
-
-  return (
-    <div className="fixed inset-0 z-[60] flex items-center justify-center p-4 bg-black/70">
-      <form
-        onSubmit={submit}
-        className="bg-white rounded-2xl shadow-2xl w-full max-w-md p-6 space-y-4"
-      >
-        <div className="flex items-center justify-between">
-          <h2 className="text-xl font-bold text-slate-900">➕ New Customer</h2>
-          <button
-            type="button"
-            onClick={onClose}
-            className="text-slate-400 hover:text-slate-900 text-xl"
-          >
-            ✕
-          </button>
-        </div>
-
-        <div>
-          <label className="block text-sm font-semibold text-slate-900 mb-1">
-            Full Name *
-          </label>
-          <input
-            type="text"
-            value={form.name}
-            onChange={(e) => setForm({ ...form, name: e.target.value })}
-            required
-            placeholder="e.g. Abebe Kebede"
-            className="w-full rounded-lg border border-slate-300 px-3 py-2.5 text-slate-900"
-          />
-        </div>
-
-        <div>
-          <label className="block text-sm font-semibold text-slate-900 mb-1">
-            Phone
-          </label>
-          <input
-            type="tel"
-            value={form.phone}
-            onChange={(e) => setForm({ ...form, phone: e.target.value })}
-            placeholder="+251 9XX XXX XXX"
-            className="w-full rounded-lg border border-slate-300 px-3 py-2.5 text-slate-900"
-          />
-        </div>
-
-        <div>
-          <label className="block text-sm font-semibold text-slate-900 mb-1">
-            Email
-          </label>
-          <input
-            type="email"
-            value={form.email}
-            onChange={(e) => setForm({ ...form, email: e.target.value })}
-            placeholder="you@example.com"
-                        className="w-full rounded-lg border border-slate-300 px-3 py-2.5 text-slate-900"
-          />
-        </div>
-
-        <div>
-          <label className="block text-sm font-semibold text-slate-900 mb-1">
-            Customer Type
-          </label>
-          <select
-            value={form.type}
-            onChange={(e) => setForm({ ...form, type: e.target.value })}
-            className="w-full rounded-lg border border-slate-300 px-3 py-2.5 text-slate-900"
-          >
-            <option>Regular</option>
-            <option>VIP</option>
-            <option>Wholesale</option>
-          </select>
-        </div>
-
-        <div>
-          <label className="block text-sm font-semibold text-slate-900 mb-1">
-            Address
-          </label>
-          <input
-            type="text"
-            value={form.address}
-            onChange={(e) => setForm({ ...form, address: e.target.value })}
-            placeholder="City, kebele…"
-            className="w-full rounded-lg border border-slate-300 px-3 py-2.5 text-slate-900"
-          />
-        </div>
-
-        {error && (
-          <div className="p-3 bg-red-50 border border-red-200 rounded-lg">
-            <p className="text-sm text-red-700">❌ {error}</p>
-          </div>
-        )}
-
-        <div className="flex gap-2">
-          <button
-            type="button"
-            onClick={onClose}
-            className="flex-1 py-2.5 rounded-lg border border-slate-300 text-slate-700 font-medium"
-          >
-            Cancel
-          </button>
-          <button
-            type="submit"
-            disabled={saving}
-            className="flex-1 py-2.5 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white font-semibold disabled:opacity-50"
-          >
-            {saving ? "Saving…" : "Create Customer"}
-          </button>
-        </div>
-      </form>
-    </div>
-  );
-}
-
-// ═══════════════════════════════════════════════════════════════
 // RECEIPT VIEW
 // ═══════════════════════════════════════════════════════════════
-function ReceiptView({ data, onClose }: { data: any; onClose: () => void }) {
+function ReceiptView({
+  data,
+  onClose,
+}: {
+  data: ReceiptData;
+  onClose: () => void;
+}) {
   const [copied, setCopied] = useState(false);
-
-  function buildReceiptText(): string {
-    const items = data.cart
-      .map(
-        (c: any) =>
-          `  • ${c.name} × ${c.quantity} = ${(c.sellingPrice * c.quantity).toLocaleString()} ETB`
-      )
-      .join("\n");
-    const outstanding = data.total - data.paid;
-    return [
-      "🧾 *CLICK COMPUTER CENTER*",
-      "───────────────────────",
-      `📄 Invoice: ${data.invoiceNo}`,
-      `📅 Date: ${new Date().toLocaleDateString()}`,
-      `👤 Customer: ${data.customer?.name || "Walk-in"}`,
-      data.customer?.phone ? `📞 Phone: ${data.customer.phone}` : "",
-      `📋 Status: ${data.saleStatus}`,
-      `💳 Payment: ${data.paymentMethod} (${data.paymentStatus})`,
-      "───────────────────────",
-      "📦 *Items:*",
-      items,
-      "───────────────────────",
-      `Subtotal: ${data.subtotal.toLocaleString()} ETB`,
-      data.discount > 0 ? `Discount: -${data.discount.toLocaleString()} ETB` : "",
-      `*TOTAL: ${data.total.toLocaleString()} ETB*`,
-      `Paid: ${data.paid.toLocaleString()} ETB`,
-      outstanding > 0
-        ? `⚠️ Outstanding: ${outstanding.toLocaleString()} ETB`
-        : "",
-      "───────────────────────",
-      "🙏 Thank you for your business!",
-    ]
-      .filter(Boolean)
-      .join("\n");
-  }
-
-  async function copyReceipt() {
-    const text = buildReceiptText();
-    try {
-      await navigator.clipboard.writeText(text);
-      setCopied(true);
-      setTimeout(() => setCopied(false), 2500);
-    } catch {
-      const ta = document.createElement("textarea");
-      ta.value = text;
-      document.body.appendChild(ta);
-      ta.select();
-      document.execCommand("copy");
-      document.body.removeChild(ta);
-      setCopied(true);
-      setTimeout(() => setCopied(false), 2500);
-    }
-  }
 
   function printReceipt() {
     const html = `
@@ -1068,12 +705,12 @@ function ReceiptView({ data, onClose }: { data: any; onClose: () => void }) {
         .total{font-weight:bold;font-size:15px}
       </style></head><body>
         <h1>CLICK COMPUTER CENTER</h1>
-        <p class="small">Ethiopia · +251 900 000 000</p>
+        <p class="small">Ethiopia</p>
         <hr/>
         <p><strong>Invoice:</strong> ${data.invoiceNo}</p>
         <p><strong>Date:</strong> ${new Date().toLocaleString()}</p>
-        <p><strong>Customer:</strong> ${data.customer?.name || "Walk-in"}</p>
-        ${data.customer?.phone ? `<p><strong>Phone:</strong> ${data.customer.phone}</p>` : ""}
+        <p><strong>Customer:</strong> ${data.customerName}</p>
+        ${data.customerPhone ? `<p><strong>Phone:</strong> ${data.customerPhone}</p>` : ""}
         <p><strong>Status:</strong> ${data.saleStatus}</p>
         <hr/>
         <table>
@@ -1081,7 +718,7 @@ function ReceiptView({ data, onClose }: { data: any; onClose: () => void }) {
           <tbody>
             ${data.cart
               .map(
-                (c: any) =>
+                (c) =>
                   `<tr><td>${c.name}</td><td class="right">${c.quantity}</td><td class="right">${(c.sellingPrice * c.quantity).toLocaleString()}</td></tr>`
               )
               .join("")}
@@ -1094,31 +731,51 @@ function ReceiptView({ data, onClose }: { data: any; onClose: () => void }) {
         <p class="right">Paid: ${data.paid.toLocaleString()} ETB</p>
         <p class="right small">${data.paymentMethod} · ${data.paymentStatus}</p>
         <hr/>
-        <p class="small right">Thank you! Come again.</p>
+        <p class="small right">Thank you!</p>
       </body></html>
     `;
     const w = window.open("", "_blank", "width=500,height=700");
     if (w) {
       w.document.write(html);
       w.document.close();
-      setTimeout(() => w.print(), 400);
+      setTimeout(() => w.print(), 300);
     }
   }
 
-  async function shareReceipt() {
-    const text = buildReceiptText();
-    if (navigator.share) {
-      try {
-        await navigator.share({
-          title: `Receipt ${data.invoiceNo}`,
-          text,
-        });
-      } catch {
-        /* user cancelled */
-      }
-    } else {
-      await copyReceipt();
-      alert("Share not supported — copied to clipboard.");
+  async function copyReceipt() {
+    const text = `
+🧾 *CLICK COMPUTER CENTER*
+───────────────────────
+📄 Invoice: ${data.invoiceNo}
+📅 Date: ${new Date().toLocaleDateString()}
+👤 Customer: ${data.customerName}
+${data.customerPhone ? `📞 Phone: ${data.customerPhone}` : ""}
+📋 Status: ${data.saleStatus}
+💳 Payment: ${data.paymentMethod} (${data.paymentStatus})
+───────────────────────
+${data.cart.map((c) => `• ${c.name} × ${c.quantity} = ${(c.sellingPrice * c.quantity).toLocaleString()} ETB`).join("\n")}
+───────────────────────
+Subtotal: ${data.subtotal.toLocaleString()} ETB
+Discount: ${data.discount.toLocaleString()} ETB
+*TOTAL: ${data.total.toLocaleString()} ETB*
+Paid: ${data.paid.toLocaleString()} ETB
+───────────────────────
+🙏 Thank you!
+    `.trim();
+
+    try {
+      await navigator.clipboard.writeText(text);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2500);
+    } catch {
+      const ta = document.createElement("textarea");
+      ta.value = text;
+      document.body.appendChild(ta);
+      ta.select();
+      document.execCommand("copy");
+      document.body.removeChild(ta);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2500);
     }
   }
 
@@ -1137,12 +794,12 @@ function ReceiptView({ data, onClose }: { data: any; onClose: () => void }) {
 
         <div className="text-sm space-y-1">
           <Row label="Invoice" value={data.invoiceNo} />
-          <Row label="Customer" value={data.customer?.name || "Walk-in"} />
+          <Row label="Customer" value={data.customerName} />
           <Row label="Status" value={data.saleStatus} />
         </div>
 
         <div className="border-t border-slate-200 pt-2 space-y-1 text-sm max-h-40 overflow-y-auto">
-          {data.cart.map((c: any) => (
+          {data.cart.map((c) => (
             <div key={c.itemId} className="flex justify-between">
               <span className="truncate text-slate-700">
                 {c.name} × {c.quantity}
@@ -1159,32 +816,29 @@ function ReceiptView({ data, onClose }: { data: any; onClose: () => void }) {
           <Row label="Discount" value={`${data.discount.toLocaleString()} ETB`} />
           <Row label="Total" value={`${data.total.toLocaleString()} ETB`} bold />
           <Row label="Paid" value={`${data.paid.toLocaleString()} ETB`} />
-          <Row label="Payment" value={`${data.paymentMethod} (${data.paymentStatus})`} />
+          <Row
+            label="Payment"
+            value={`${data.paymentMethod} (${data.paymentStatus})`}
+          />
         </div>
 
         {data.saleStatus === "Completed" && (
-          <div className="grid grid-cols-3 gap-2 pt-2">
+          <div className="grid grid-cols-2 gap-2 pt-2">
             <button
               onClick={printReceipt}
-              className="py-2 rounded-lg bg-slate-900 hover:bg-slate-800 text-white font-semibold text-xs"
+              className="py-2.5 rounded-lg bg-slate-900 hover:bg-slate-800 text-white font-semibold text-sm"
             >
               🖨 Print
             </button>
             <button
               onClick={copyReceipt}
-              className={`py-2 rounded-lg font-semibold text-xs ${
+                            className={`py-2.5 rounded-lg font-semibold text-sm ${
                 copied
                   ? "bg-emerald-600 text-white"
                   : "bg-slate-100 hover:bg-slate-200 text-slate-700"
               }`}
             >
               {copied ? "✅ Copied" : "📋 Copy"}
-            </button>
-            <button
-              onClick={shareReceipt}
-              className="py-2 rounded-lg bg-orange-500 hover:bg-orange-600 text-white font-semibold text-xs"
-            >
-              🔗 Share
             </button>
           </div>
         )}
