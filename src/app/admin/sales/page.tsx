@@ -30,11 +30,17 @@ export interface Sale {
   items: any[];
 }
 
-export default async function SalesPage() {
+export default async function SalesPage({
+  searchParams,
+}: {
+  searchParams?: { item?: string };
+}) {
   const session = await getServerSession(authOptions);
   if (!session) redirect("/login");
 
   const role = String((session.user as any).role || "staff").toLowerCase();
+
+  const preselectedItemId = searchParams?.item || "";
 
   let inventory: any[] = [];
   let customers: Customer[] = [];
@@ -51,6 +57,7 @@ export default async function SalesPage() {
           id: String(obj.Item_ID || ""),
           name: String(obj.Item_Name || ""),
           code: String(obj.Item_Code || ""),
+          category: String(obj.Item_Category || "General"),
           image: String(obj.Item_Image || ""),
           stock: Number(obj.Stock_Quantity || 0),
           sellingPrice: Number(obj.Selling_Price || 0),
@@ -129,6 +136,7 @@ export default async function SalesPage() {
       initialInventory={inventory}
       initialCustomers={customers}
       initialRecentSales={recentSales}
+      initialPreselectedItemId={preselectedItemId}
       userRole={role}
       userName={session.user?.name ?? "User"}
     />
