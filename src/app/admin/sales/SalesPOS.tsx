@@ -59,11 +59,13 @@ export default function SalesPOS({
   initialCustomers = [],
   userRole,
   userName,
+  initialRecentSales = [],
 }: {
   initialInventory: InventoryItem[];
   initialCustomers?: Customer[];
   userRole: string;
   userName: string;
+  initialRecentSales?: any[];
 }) {
   const router = useRouter();
   const [showPOS, setShowPOS] = useState(false);
@@ -952,7 +954,7 @@ function ReceiptPopup({
       `Paid: ${data.paid.toLocaleString()} ETB`,
       `Payment: ${data.paymentMethod} (${data.paymentStatus})`,
       "───────────────────────",
-      "Thank you!",
+            "Thank you!",
     ]
       .filter(Boolean)
       .join("\n");
@@ -1114,4 +1116,4 @@ function ReceiptPopup({
       </div>
     </div>
   );
-} 
+}
