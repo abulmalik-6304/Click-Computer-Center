@@ -84,7 +84,8 @@ export default function InventoryClient({
   }
 
   function handleSell(item: InventoryItem) {
-    router.push(`/admin/sales?item=${item.id}`);
+    // ✅ Navigate to POS with item preselected
+    router.push(`/admin/sales?item=${encodeURIComponent(item.id)}`);
   }
 
   return (
