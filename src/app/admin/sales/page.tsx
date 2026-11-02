@@ -51,24 +51,26 @@ export default async function SalesPage({
     const invSheet = await getSheet(SHEETS.INVENTORY);
     const invRows = await invSheet.getRows();
     inventory = invRows
-      .map((r) => {
-        const obj = r.toObject() as any;
-        return {
-          id: String(obj.Item_ID || ""),
-          name: String(obj.Item_Name || ""),
-          code: String(obj.Item_Code || ""),
-          category: String(obj.Item_Category || "General"),
-          image: String(obj.Item_Image || ""),
-          stock: Number(obj.Stock_Quantity || 0),
-          sellingPrice: Number(obj.Selling_Price || 0),
-          costPrice: Number(obj.Avg_Cost || obj.Cost_Price || 0),
-          unitType: String(obj.Unit_Type || "pcs"),
-          status: String(obj.Status || "Active"),
-        };
-      })
-      .filter(
-        (i) => i.status !== "Archived" && i.stock > 0 && i.sellingPrice > 0
-      );
+  .map((r) => {
+    const obj = r.toObject() as any;
+    return {
+      id: String(obj.Item_ID || ""),
+      name: String(obj.Item_Name || ""),
+      code: String(obj.Item_Code || ""),
+      image: String(obj.Item_Image || ""),
+      stock: Number(obj.Stock_Quantity || 0),
+      sellingPrice: Number(obj.Selling_Price || 0),
+      costPrice: Number(obj.Avg_Cost || obj.Cost_Price || 0),
+      unitType: String(obj.Unit_Type || "pcs"),
+      status: String(obj.Status || "Active"),
+    };
+  })
+  .filter(
+    (i) =>
+      i.status !== "Archived" &&
+      i.sellingPrice > 0
+    // ✅ Removed `stock > 0` — show ALL items so picker can filter
+  );
 
     // Customers
     try {
