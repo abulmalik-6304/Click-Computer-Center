@@ -237,17 +237,18 @@ function POSModal({
     return c.name.toLowerCase().includes(lq) || c.phone.includes(customerSearch);
   });
 
-  // ✅ ALWAYS show items — filter only when search has text
-  const filteredItems = useMemo(() => {
-    if (!itemSearch.trim()) return inventory;
-    const lq = itemSearch.toLowerCase().trim();
-    return inventory.filter(
-      (i) =>
-        i.name.toLowerCase().includes(lq) ||
-        i.code.toLowerCase().includes(lq) ||
-        (i.category && i.category.toLowerCase().includes(lq))
-    );
-  }, [inventory, itemSearch]);
+  // ✅ ALWAYS show ALL items (including 0 stock)
+// Only filter when search has text
+const filteredItems = useMemo(() => {
+  if (!itemSearch.trim()) return inventory;
+  const lq = itemSearch.toLowerCase().trim();
+  return inventory.filter(
+    (i) =>
+      i.name.toLowerCase().includes(lq) ||
+      i.code.toLowerCase().includes(lq) ||
+      (i.category && i.category.toLowerCase().includes(lq))
+  );
+}, [inventory, itemSearch]);
 
   // ─── HANDLERS ───
   function selectCustomer(c: Customer) {
