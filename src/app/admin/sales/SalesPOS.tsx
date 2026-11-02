@@ -1,7 +1,7 @@
 // src/app/admin/sales/SalesPOS.tsx
 "use client";
 
-import { useState, useMemo } from "react";
+import { useState, useMemo, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import NewCustomerModal from "@/components/admin/NewCustomerModal";
 import { toDriveImageUrl as formatDriveUrl } from "@/lib/drive-url";
@@ -60,15 +60,18 @@ export default function SalesPOS({
   userRole,
   userName,
   initialRecentSales = [],
+  initialPreselectedItemId = "",
 }: {
   initialInventory: InventoryItem[];
   initialCustomers?: Customer[];
   userRole: string;
   userName: string;
   initialRecentSales?: any[];
+  initialPreselectedItemId?: string;
 }) {
   const router = useRouter();
-  const [showPOS, setShowPOS] = useState(false);
+  // ✅ Auto-open POS if item is preselected
+  const [showPOS, setShowPOS] = useState(!!initialPreselectedItemId);
   const [showActivity, setShowActivity] = useState(false);
   const [recentRefresh, setRecentRefresh] = useState(0);
 
@@ -114,6 +117,7 @@ export default function SalesPOS({
           inventory={initialInventory}
           customers={initialCustomers}
           userRole={userRole}
+          preselectedItemId={initialPreselectedItemId}
           onClose={() => setShowPOS(false)}
           onSaleCompleted={() => {
             setShowPOS(false);
@@ -147,12 +151,14 @@ function POSModal({
   inventory,
   customers,
   userRole,
+  preselectedItemId = "",
   onClose,
   onSaleCompleted,
 }: {
   inventory: InventoryItem[];
   customers: Customer[];
   userRole: string;
+  preselectedItemId?: string;
   onClose: () => void;
   onSaleCompleted: () => void;
 }) {
@@ -179,6 +185,30 @@ function POSModal({
   const [error, setError] = useState("");
   const [successMsg, setSuccessMsg] = useState("");
   const [receipt, setReceipt] = useState<ReceiptData | null>(null);
+
+  // ✅ AUTO-ADD preselected item to cart on mount
+  useEffect(() => {
+    if (!preselectedItemId) return;
+    const item = inventory.find((i) => i.id === preselectedItemId);
+    if (!item) return;
+    if (item.stock <= 0) return;
+    setCart((prev) => {
+      // Skip if already in cart
+      if (prev.find((c) => c.itemId === item.id)) return prev;
+      return [
+        ...prev,
+        {
+          itemId: item.id,
+          name: item.name,
+          sellingPrice: item.sellingPrice,
+          costPrice: item.costPrice,
+          quantity: 1,
+          maxStock: item.stock,
+          image: item.image,
+        },
+      ];
+    });
+  }, [preselectedItemId, inventory]);
 
   // ─── CALCULATIONS ───
   const subtotal = cart.reduce((s, c) => s + c.sellingPrice * c.quantity, 0);
@@ -207,15 +237,17 @@ function POSModal({
     return c.name.toLowerCase().includes(lq) || c.phone.includes(customerSearch);
   });
 
-  const filteredItems = inventory.filter((i) => {
-    if (!itemSearch) return true;
-    const lq = itemSearch.toLowerCase();
-    return (
-      i.name.toLowerCase().includes(lq) ||
-      i.code.toLowerCase().includes(lq) ||
-      i.category.toLowerCase().includes(lq)
+  // ✅ ALWAYS show items — filter only when search has text
+  const filteredItems = useMemo(() => {
+    if (!itemSearch.trim()) return inventory;
+    const lq = itemSearch.toLowerCase().trim();
+    return inventory.filter(
+      (i) =>
+        i.name.toLowerCase().includes(lq) ||
+        i.code.toLowerCase().includes(lq) ||
+        (i.category && i.category.toLowerCase().includes(lq))
     );
-  });
+  }, [inventory, itemSearch]);
 
   // ─── HANDLERS ───
   function selectCustomer(c: Customer) {
@@ -926,7 +958,7 @@ function ReceiptPopup({
   data: ReceiptData;
   onClose: () => void;
 }) {
-  const [copied, setCopied] = useState(false);
+    const [copied, setCopied] = useState(false);
 
   function buildReceiptText(): string {
     const items = data.cart
@@ -954,7 +986,7 @@ function ReceiptPopup({
       `Paid: ${data.paid.toLocaleString()} ETB`,
       `Payment: ${data.paymentMethod} (${data.paymentStatus})`,
       "───────────────────────",
-            "Thank you!",
+      "Thank you!",
     ]
       .filter(Boolean)
       .join("\n");
