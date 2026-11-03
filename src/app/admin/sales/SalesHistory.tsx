@@ -2,7 +2,7 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
-import VoidSaleModal from "@/components/admin/sales/VoidSaleModal"; // ✅ አዲስ
+import VoidSaleModal from "@/components/admin/sales/VoidSaleModal";
 
 interface SaleItem {
   salesItemId: string;
@@ -43,10 +43,13 @@ const SALE_STATUS_COLORS: Record<string, string> = {
   refunded: "bg-orange-100 text-orange-700",
 };
 
-export default function SalesHistory({ userRole }: { userRole: string }) {
-  const isOwner = userRole === "owner";
-  const [voidTarget, setVoidTarget] = useState<Sale | null>(null); // ✅ አዲስ
+// ✅ Safe formatter
+function fmt(n: any): string {
+  const num = Number(n);
+  return isNaN(num) ? "0" : num.toLocaleString();
+}
 
+export default function SalesHistory({ userRole }: { userRole: string }) {
   const [q, setQ] = useState("");
   const [from, setFrom] = useState("");
   const [to, setTo] = useState("");
@@ -57,21 +60,17 @@ export default function SalesHistory({ userRole }: { userRole: string }) {
 
   const [rows, setRows] = useState<Sale[]>([]);
   const [pagination, setPagination] = useState({
-    page: 1,
-    limit: 20,
-    total: 0,
-    totalPages: 1,
+    page: 1, limit: 20, total: 0, totalPages: 1,
   });
   const [summary, setSummary] = useState({
-    revenue: 0,
-    paid: 0,
-    outstanding: 0,
-    count: 0,
+    revenue: 0, paid: 0, outstanding: 0, count: 0,
   });
   const [loading, setLoading] = useState(true);
   const [active, setActive] = useState<Sale | null>(null);
+  const [voidTarget, setVoidTarget] = useState<Sale | null>(null);
 
-  const isOwnerOrManager = ["owner", "manager"].includes(userRole);
+  const isOwner = String(userRole).toLowerCase() === "owner";
+  const isOwnerOrManager = ["owner", "manager"].includes(String(userRole).toLowerCase());
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -197,19 +196,11 @@ export default function SalesHistory({ userRole }: { userRole: string }) {
       {/* Summary */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
         <Mini label="Sales" value={summary.count} />
-        <Mini
-          label="Revenue"
-          value={`${summary.revenue.toLocaleString()} ETB`}
-          color="emerald"
-        />
-        <Mini
-          label="Paid"
-          value={`${summary.paid.toLocaleString()} ETB`}
-          color="emerald"
-        />
+        <Mini label="Revenue" value={`${fmt(summary.revenue)} ETB`} color="emerald" />
+        <Mini label="Paid" value={`${fmt(summary.paid)} ETB`} color="emerald" />
         <Mini
           label="Outstanding"
-          value={`${summary.outstanding.toLocaleString()} ETB`}
+          value={`${fmt(summary.outstanding)} ETB`}
           color={summary.outstanding > 0 ? "red" : "slate"}
         />
       </div>
@@ -250,7 +241,9 @@ export default function SalesHistory({ userRole }: { userRole: string }) {
                 rows.map((s) => (
                   <tr
                     key={s.salesId}
-                    className="border-t border-slate-100 hover:bg-slate-50"
+                    className={`border-t border-slate-100 hover:bg-slate-50 ${
+                      s.saleStatus === "Voided" ? "opacity-60" : ""
+                    }`}
                   >
                     <td className="px-3 py-3 font-medium text-slate-900">
                       {s.invoiceNo || s.salesId}
@@ -260,7 +253,7 @@ export default function SalesHistory({ userRole }: { userRole: string }) {
                     </td>
                     <td className="px-3 py-3">{s.customerName}</td>
                     <td className="px-3 py-3 text-right font-semibold text-slate-900">
-                      {s.totalAmount.toLocaleString()}
+                      {fmt(s.totalAmount)}
                     </td>
                     <td className="px-3 py-3 hidden sm:table-cell">
                       <span
@@ -337,6 +330,8 @@ export default function SalesHistory({ userRole }: { userRole: string }) {
           onClose={() => setActive(null)}
         />
       )}
+
+      {/* Void Modal */}
       {voidTarget && (
         <VoidSaleModal
           salesId={voidTarget.salesId}
@@ -397,7 +392,7 @@ function SaleDetailModal({
     const items = sale.items
       .map(
         (i) =>
-          `  • ${i.itemName} × ${i.quantity} = ${i.totalPrice.toLocaleString()} ETB`
+          `  • ${i.itemName} × ${i.quantity} = ${fmt(i.totalPrice)} ETB`
       )
       .join("\n");
     const outstanding = sale.totalAmount - sale.paidAmount;
@@ -407,20 +402,19 @@ function SaleDetailModal({
       `📄 Invoice: ${sale.invoiceNo || sale.salesId}`,
       `📅 Date: ${new Date(sale.date).toLocaleDateString()}`,
       `👤 Customer: ${sale.customerName}`,
-      `👨‍💼 Staff: ${sale.staffName || "—"}`,
       `💳 Payment: ${sale.paymentMethod} (${sale.paymentStatus})`,
       `📋 Status: ${sale.saleStatus}`,
       "───────────────────────",
       "📦 *Items:*",
       items,
       "───────────────────────",
-      `Subtotal: ${sale.items.reduce((s, i) => s + i.totalPrice, 0).toLocaleString()} ETB`,
-      sale.discount > 0 ? `Discount: -${sale.discount.toLocaleString()} ETB` : "",
-      `*TOTAL: ${sale.totalAmount.toLocaleString()} ETB*`,
-      `Paid: ${sale.paidAmount.toLocaleString()} ETB`,
-      outstanding > 0 ? `⚠️ Outstanding: ${outstanding.toLocaleString()} ETB` : "",
+      `Subtotal: ${fmt(sale.items.reduce((s, i) => s + i.totalPrice, 0))} ETB`,
+      sale.discount > 0 ? `Discount: -${fmt(sale.discount)} ETB` : "",
+      `*TOTAL: ${fmt(sale.totalAmount)} ETB*`,
+      `Paid: ${fmt(sale.paidAmount)} ETB`,
+      outstanding > 0 ? `⚠️ Outstanding: ${fmt(outstanding)} ETB` : "",
       "───────────────────────",
-      "🙏 Thank you for your business!",
+      "🙏 Thank you!",
     ]
       .filter(Boolean)
       .join("\n");
@@ -431,7 +425,7 @@ function SaleDetailModal({
     try {
       await navigator.clipboard.writeText(text);
       setCopied(true);
-      setTimeout(() => setCopied(false), 2500);
+      setTimeout(() => setCopied(false), 2000);
     } catch {
       const ta = document.createElement("textarea");
       ta.value = text;
@@ -440,24 +434,7 @@ function SaleDetailModal({
       document.execCommand("copy");
       document.body.removeChild(ta);
       setCopied(true);
-      setTimeout(() => setCopied(false), 2500);
-    }
-  }
-
-  async function shareReceipt() {
-    const text = buildReceiptText();
-    if (navigator.share) {
-      try {
-        await navigator.share({
-          title: `Receipt ${sale.invoiceNo || sale.salesId}`,
-          text,
-        });
-      } catch {
-        /* user cancelled */
-      }
-    } else {
-      await copyReceipt();
-      alert("Share not supported — receipt copied to clipboard.");
+      setTimeout(() => setCopied(false), 2000);
     }
   }
 
@@ -465,10 +442,10 @@ function SaleDetailModal({
     const html = `
       <html><head><title>Receipt ${sale.invoiceNo}</title>
       <style>
-        body{font-family:Arial;padding:20px;max-width:400px;margin:0 auto}
+        body{font-family:Arial;padding:20px;max-width:400px;margin:0 auto;color:#0f172a}
         h1{font-size:18px;margin:0 0 4px}
         .small{font-size:12px;color:#666}
-        hr{border:none;border-top:1px solid #ddd;margin:8px 0}
+        hr{border:none;border-top:1px dashed #999;margin:8px 0}
         table{width:100%;font-size:13px;border-collapse:collapse}
         td{padding:4px 0}
         .right{text-align:right}
@@ -487,14 +464,14 @@ function SaleDetailModal({
             ${sale.items
               .map(
                 (i) =>
-                  `<tr><td>${i.itemName}</td><td class="right">${i.quantity}</td><td class="right">${i.totalPrice.toLocaleString()}</td></tr>`
+                  `<tr><td>${i.itemName}</td><td class="right">${i.quantity}</td><td class="right">${fmt(i.totalPrice)}</td></tr>`
               )
               .join("")}
           </tbody>
         </table>
         <hr/>
-        <p class="total right">TOTAL: ${sale.totalAmount.toLocaleString()} ETB</p>
-        <p class="right">Paid: ${sale.paidAmount.toLocaleString()} ETB</p>
+        <p class="total right">TOTAL: ${fmt(sale.totalAmount)} ETB</p>
+        <p class="right">Paid: ${fmt(sale.paidAmount)} ETB</p>
         <p class="right small">Status: ${sale.paymentStatus}</p>
         <hr/>
         <p class="small right">Thank you!</p>
@@ -507,6 +484,11 @@ function SaleDetailModal({
       setTimeout(() => w.print(), 300);
     }
   }
+
+  const canVoid =
+    isOwner &&
+    sale.saleStatus !== "Voided" &&
+    sale.saleStatus !== "Refunded";
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60">
@@ -528,11 +510,12 @@ function SaleDetailModal({
           </button>
         </div>
 
+        {/* Voided / Refunded banner */}
         {sale.saleStatus === "Voided" && (
           <div className="p-3 bg-red-50 border border-red-200 rounded-lg">
             <p className="text-sm font-bold text-red-700">🚫 VOIDED</p>
             <p className="text-xs text-red-600 mt-1">
-              This sale has been voided and its stock restored.
+              This sale has been voided and stock restored.
             </p>
           </div>
         )}
@@ -540,7 +523,7 @@ function SaleDetailModal({
           <div className="p-3 bg-orange-50 border border-orange-200 rounded-lg">
             <p className="text-sm font-bold text-orange-700">💵 REFUNDED</p>
             <p className="text-xs text-orange-600 mt-1">
-              Customer returned this sale. Stock has been restored.
+              Customer returned this sale. Stock restored.
             </p>
           </div>
         )}
@@ -583,12 +566,10 @@ function SaleDetailModal({
                 <div className="flex-1">
                   <p className="text-slate-900">{i.itemName}</p>
                   <p className="text-xs text-slate-500">
-                    {i.quantity} × {i.sellingPrice.toLocaleString()} ETB
+                    {i.quantity} × {fmt(i.sellingPrice)} ETB
                   </p>
                 </div>
-                <p className="font-medium text-slate-900">
-                  {i.totalPrice.toLocaleString()}
-                </p>
+                <p className="font-medium text-slate-900">{fmt(i.totalPrice)}</p>
               </div>
             ))}
           </div>
@@ -597,19 +578,18 @@ function SaleDetailModal({
         <div className="border-t border-slate-200 pt-3 space-y-1 text-sm">
           <Row
             label="Subtotal"
-            value={sale.items.reduce((s, i) => s + i.totalPrice, 0)}
+            value={fmt(sale.items.reduce((s, i) => s + i.totalPrice, 0))}
           />
-          <Row label="Discount" value={sale.discount} />
-          <Row label="Total" value={sale.totalAmount} bold />
-          <Row label="Paid" value={sale.paidAmount} />
-          <Row label="Outstanding" value={sale.totalAmount - sale.paidAmount} />
+          <Row label="Discount" value={fmt(sale.discount)} />
+          <Row label="Total" value={fmt(sale.totalAmount)} bold />
+          <Row label="Paid" value={fmt(sale.paidAmount)} />
+          <Row label="Outstanding" value={fmt(sale.totalAmount - sale.paidAmount)} />
         </div>
 
+        {/* Action buttons */}
         <div
           className={`grid gap-2 pt-2 ${
-            isOwner && sale.saleStatus !== "Voided" && sale.saleStatus !== "Refunded"
-              ? "grid-cols-4"
-              : "grid-cols-3"
+            canVoid ? "grid-cols-4" : "grid-cols-3"
           }`}
         >
           <button
@@ -629,12 +609,12 @@ function SaleDetailModal({
             {copied ? "✅" : "📋"}
           </button>
           <button
-            onClick={shareReceipt}
-            className="py-2.5 rounded-lg bg-orange-500 hover:bg-orange-600 text-white font-semibold text-sm"
+            onClick={onClose}
+            className="py-2.5 rounded-lg bg-slate-100 hover:bg-slate-200 text-slate-700 font-semibold text-sm"
           >
-            🔗
+            Close
           </button>
-          {isOwner && sale.saleStatus !== "Voided" && sale.saleStatus !== "Refunded" && (
+          {canVoid && (
             <button
               onClick={onVoid}
               className="py-2.5 rounded-lg bg-red-600 hover:bg-red-700 text-white font-semibold text-sm"
@@ -643,13 +623,6 @@ function SaleDetailModal({
             </button>
           )}
         </div>
-
-        <button
-          onClick={onClose}
-          className="w-full py-2 rounded-lg border border-slate-300 text-slate-700 font-medium text-sm"
-        >
-          Close
-        </button>
       </div>
     </div>
   );
@@ -661,14 +634,14 @@ function Row({
   bold,
 }: {
   label: string;
-  value: number;
+  value: string;
   bold?: boolean;
 }) {
   return (
     <div className="flex justify-between">
       <span className="text-slate-500">{label}</span>
       <span className={bold ? "font-bold text-slate-900" : "text-slate-900"}>
-        {value.toLocaleString()} ETB
+        {value} ETB
       </span>
     </div>
   );
