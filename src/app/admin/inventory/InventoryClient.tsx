@@ -37,11 +37,11 @@ export default function InventoryClient({
   const canEdit = ["owner", "manager"].includes(userRole);
   const canSell = ["owner", "manager", "employee", "staff"].includes(userRole);
 
-  // Auto-refresh when window regains focus (e.g. after POS sale)
+  // ✅ Auto-refresh on window focus (e.g. after POS sale)
   useEffect(() => {
-    function handleFocus() {
+    const handleFocus = () => {
       refresh();
-    }
+    };
     window.addEventListener("focus", handleFocus);
     return () => window.removeEventListener("focus", handleFocus);
   }, []);
@@ -84,8 +84,8 @@ export default function InventoryClient({
   }
 
   function handleSell(item: InventoryItem) {
-    // ✅ Navigate to POS with item preselected
-    router.push(`/admin/sales?item=${encodeURIComponent(item.id)}`);
+    // ✅ Navigate to POS with item auto-selected
+    router.push(`/admin/sales?item=${encodeURIComponent(item.id)}&open=1`);
   }
 
   return (
