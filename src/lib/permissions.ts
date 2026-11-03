@@ -4,6 +4,7 @@
 // ═══════════════════════════════════════════════════════════════
 
 import { getSheet, getDoc } from "./google-sheets";
+// ✅ We use getSheet (not getCachedRows) for settings — always fresh
 
 const PERMISSIONS_SHEET = "Permissions_TBL";
 
