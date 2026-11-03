@@ -70,6 +70,7 @@ export default function SalesPOS({
   initialRecentSales = [],
   initialPreselectedItemId = "",
   initialAutoOpen = false,
+  canViewActivity = false,
 }: {
   initialInventory: InventoryItem[];
   initialCustomers?: Customer[];
@@ -78,6 +79,7 @@ export default function SalesPOS({
   initialRecentSales?: any[];
   initialPreselectedItemId?: string;
   initialAutoOpen?: boolean;
+  canViewActivity?: boolean;
 }) {
   const router = useRouter();
   // ✅ Auto-open POS if item is preselected OR autoOpen flag is set
@@ -95,7 +97,8 @@ export default function SalesPOS({
     }
   }, [initialAutoOpen, initialPreselectedItemId]);
 
-  const isOwnerOrManager = ["owner", "manager"].includes(userRole);
+  // ✅ Only owner OR managers with explicit permission see Activity Log
+  const canSeeActivity = canViewActivity;
 
   return (
     <div className="p-4 sm:p-6 lg:p-10 space-y-6">
@@ -107,7 +110,7 @@ export default function SalesPOS({
           </p>
         </div>
         <div className="flex flex-wrap gap-2">
-          {isOwnerOrManager && (
+          {canSeeActivity && (
             <button
               onClick={() => setShowActivity((v) => !v)}
               className={`inline-flex items-center gap-2 px-3 py-2.5 rounded-lg font-semibold text-sm shadow-sm transition ${
@@ -128,7 +131,7 @@ export default function SalesPOS({
         </div>
       </div>
 
-      {showActivity && isOwnerOrManager && <ActivityPlaceholder />}
+      {showActivity && canSeeActivity && <SalesActivityPanel />}
 
       <SalesHistoryPlaceholder refreshKey={recentRefresh} />
 
@@ -158,10 +161,6 @@ import SalesActivityPanel from "@/components/admin/sales/SalesActivityPanel";
 
 function SalesHistoryPlaceholder({ refreshKey }: { refreshKey: number }) {
   return <SalesHistory key={refreshKey} userRole="staff" />;
-}
-
-function ActivityPlaceholder() {
-  return <SalesActivityPanel />;
 }
 
 // ═══════════════════════════════════════════════════════════════
@@ -951,8 +950,8 @@ function ItemPickerModal({
                     </p>
                     <p className="text-xs text-slate-500">
                       {item.code} · Stock: {item.stock}
-                    </p>
-                                   </div>
+                                       </p>
+                  </div>
                   <div className="text-right flex-shrink-0">
                     <p className="text-sm font-bold text-emerald-600">
                       {fmt(item.sellingPrice)}
