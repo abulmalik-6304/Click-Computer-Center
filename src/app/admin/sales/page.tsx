@@ -2,13 +2,14 @@
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { redirect } from "next/navigation";
-import { getSheet, SHEETS } from "@/lib/google-sheets";
+import { getCachedRows } from "@/lib/sheets-cache";
+import { SHEETS } from "@/lib/google-sheets";
 import { calculateAllStock } from "@/lib/inventory-stock";
 import { hasPermission } from "@/lib/permissions";
 import SalesPOS from "./SalesPOS";
 
 export const revalidate = 0;
-export const dynamic = "force-dynamic"; // ✅ Fresh data
+export const dynamic = "force-dynamic";
 
 export interface Customer {
   id: string;
@@ -26,8 +27,9 @@ export default async function SalesPage({
   const session = await getServerSession(authOptions);
   if (!session) redirect("/login");
 
-  // ✅ Role normalized to lowercase ("owner" | "manager" | "staff")
   const role = String((session.user as any).role || "staff").toLowerCase();
+  const email = String(session.user?.email || "");
+
   const preselectedItemId = searchParams?.item || "";
   const autoOpen = searchParams?.open === "1";
 
@@ -36,12 +38,10 @@ export default async function SalesPage({
 
   try {
     const stockMap = await calculateAllStock();
+    const invData = await getCachedRows(SHEETS.INVENTORY);
 
-    const invSheet = await getSheet(SHEETS.INVENTORY);
-    const invRows = await invSheet.getRows();
-    inventory = invRows
-      .map((r) => {
-        const obj = r.toObject() as any;
+    inventory = invData
+      .map((obj) => {
         const itemId = String(obj.Item_ID || "");
         const calc = stockMap[itemId];
         const stock = calc?.currentStock ?? 0;
@@ -62,18 +62,14 @@ export default async function SalesPage({
       .filter((i) => i.status !== "Archived" && i.sellingPrice > 0);
 
     try {
-      const custSheet = await getSheet("Customer_TBL");
-      const custRows = await custSheet.getRows();
-      customers = custRows.map((r) => {
-        const obj = r.toObject() as any;
-        return {
-          id: String(obj.Customer_ID || ""),
-          name: String(obj.Customer_Name || ""),
-          phone: String(obj.Phone_Number || ""),
-          type: String(obj.Customer_Type || "Regular"),
-          email: String(obj.Customer_Email || ""),
-        };
-      });
+      const custData = await getCachedRows("Customer_TBL");
+      customers = custData.map((obj) => ({
+        id: String(obj.Customer_ID || ""),
+        name: String(obj.Customer_Name || ""),
+        phone: String(obj.Phone_Number || ""),
+        type: String(obj.Customer_Type || "Regular"),
+        email: String(obj.Customer_Email || ""),
+      }));
     } catch {
       customers = [];
     }
@@ -81,12 +77,11 @@ export default async function SalesPage({
     console.error("Sales page load error:", e);
   }
 
-  // ✅ Permission check for activity log visibility
-  const email = String(session.user?.email || "");
+  // ✅ Check all permissions
   const canViewActivity = await hasPermission(email, role, "canViewActivity");
-
-  // 🔍 Debug (optional) — uncomment to verify in server logs
-  // console.log("[SalesPage] role:", role, "email:", email, "canViewActivity:", canViewActivity);
+  const canVoid = await hasPermission(email, role, "canVoid");
+  const canRefund = await hasPermission(email, role, "canRefund");
+  const canDelete = await hasPermission(email, role, "canDelete");
 
   return (
     <SalesPOS
@@ -95,9 +90,12 @@ export default async function SalesPage({
       initialRecentSales={[]}
       initialPreselectedItemId={preselectedItemId}
       initialAutoOpen={autoOpen}
-      userRole={role} // ✅ "owner" | "manager" | "staff" (lowercase)
+      userRole={role}
       userName={session.user?.name ?? "User"}
       canViewActivity={canViewActivity}
+      canVoid={canVoid}
+      canRefund={canRefund}
+      canDelete={canDelete}
     />
   );
 }
