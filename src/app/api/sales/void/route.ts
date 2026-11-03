@@ -4,6 +4,7 @@ import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { getSheet, SHEETS } from "@/lib/google-sheets";
 import { calculateAllStock } from "@/lib/inventory-stock";
+import { hasPermission } from "@/lib/permissions";
 
 export const revalidate = 0;
 export const dynamic = "force-dynamic";
@@ -17,19 +18,15 @@ export const dynamic = "force-dynamic";
  *   reason: string;
  * }
  *
- * Only owner can void/refund/delete sales.
+ * Owner always has permission.
+ * Manager needs explicit permission (canVoid / canDelete).
  */
 export async function POST(req: NextRequest) {
   const session = await getServerSession(authOptions);
   if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
   const role = String((session.user as any).role || "").toLowerCase();
-  if (role !== "owner") {
-    return NextResponse.json(
-      { error: "Only owner can void/refund/delete sales" },
-      { status: 403 }
-    );
-  }
+  const email = String(session.user?.email || "");
 
   try {
     const body = await req.json();
@@ -40,6 +37,26 @@ export async function POST(req: NextRequest) {
     }
     if (!["void", "refund", "delete"].includes(action)) {
       return NextResponse.json({ error: "Invalid action" }, { status: 400 });
+    }
+
+    // ═══════════════════════════════════════════════════════════════
+    // ✅ PERMISSION CHECK — owner always has, manager needs explicit grant
+    // ═══════════════════════════════════════════════════════════════
+    const canVoidRefund = await hasPermission(email, role, "canVoid");
+    const canDelete = await hasPermission(email, role, "canDelete");
+
+    if (action === "delete" && !canDelete) {
+      return NextResponse.json(
+        { error: "You do not have delete permission" },
+        { status: 403 }
+      );
+    }
+
+    if ((action === "void" || action === "refund") && !canVoidRefund) {
+      return NextResponse.json(
+        { error: "You do not have void/refund permission" },
+        { status: 403 }
+      );
     }
 
     // ─── Load sale ───
