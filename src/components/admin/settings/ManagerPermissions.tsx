@@ -33,7 +33,10 @@ export default function ManagerPermissions() {
     setLoading(true);
     setError("");
     try {
-      const res = await fetch("/api/settings/permissions");
+      // ✅ cache: 'no-store' — always fresh
+      const res = await fetch("/api/settings/permissions", {
+        cache: "no-store",
+      });
       const data = await res.json();
       if (!res.ok) {
         setError(data.error || "Failed");
