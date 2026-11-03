@@ -8,6 +8,7 @@ import {
   ManagerPermissions,
 } from "@/lib/permissions";
 import { getSheet, SHEETS } from "@/lib/google-sheets";
+// ✅ Settings = no cache, fresh every time
 
 export const revalidate = 0;
 export const dynamic = "force-dynamic";
