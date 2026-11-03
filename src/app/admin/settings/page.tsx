@@ -5,6 +5,7 @@ import { redirect } from "next/navigation";
 import SettingsClient from "./SettingsClient";
 import SigninLogClient from "./SigninLogClient";
 import ManagerPermissions from "@/components/admin/settings/ManagerPermissions";
+import ProfitSharingSettings from "@/components/admin/settings/ProfitSharingSettings";
 
 export const revalidate = 0;
 
@@ -28,6 +29,9 @@ export default async function SettingsPage() {
 
       {/* ✅ Manager Permissions — Owner only */}
       {isOwner && <ManagerPermissions />}
+
+      {/* ✅ Profit Sharing Settings — Owner only */}
+      {isOwner && <ProfitSharingSettings />}
 
       {/* ✅ Sign-in Log */}
       <SigninLogClient />
