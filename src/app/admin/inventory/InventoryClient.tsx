@@ -19,9 +19,11 @@ type ModalMode = "add" | "edit" | "stock-in" | null;
 export default function InventoryClient({
   initialItems,
   userRole,
+  canEdit: canEditProp,
 }: {
   initialItems: InventoryItem[];
   userRole: string;
+  canEdit?: boolean;
 }) {
   const router = useRouter();
   const [items, setItems] = useState(initialItems);
@@ -34,7 +36,10 @@ export default function InventoryClient({
   const [showActivity, setShowActivity] = useState(false);
 
   const isOwner = userRole === "owner";
-  const canEdit = ["owner", "manager"].includes(userRole);
+  const canEdit =
+    canEditProp !== undefined
+      ? canEditProp
+      : ["owner", "manager"].includes(userRole);
   const canSell = ["owner", "manager", "employee", "staff"].includes(userRole);
 
   // ✅ Auto-refresh on window focus (e.g. after POS sale)
