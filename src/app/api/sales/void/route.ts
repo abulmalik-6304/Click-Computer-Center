@@ -3,7 +3,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { getSheet, SHEETS } from "@/lib/google-sheets";
-import { calculateAllStock } from "@/lib/inventory-stock";
+import { getCachedRows, refreshCache } from "@/lib/sheets-cache";
 import { hasPermission } from "@/lib/permissions";
 
 export const revalidate = 0;
@@ -11,15 +11,11 @@ export const dynamic = "force-dynamic";
 
 /**
  * POST /api/sales/void
+ * Body: { salesId, action: "void" | "refund" | "delete", reason }
  *
- * Body: {
- *   salesId: string;
- *   action: "void" | "refund" | "delete";
- *   reason: string;
- * }
- *
- * Owner always has permission.
- * Manager needs explicit permission (canVoid / canDelete).
+ * - void:   Stock restored, Sale_Status = "Voided", excluded from reports
+ * - refund: Stock restored, Sale_Status = "Refunded", excluded from profit
+ * - delete: Items + sale rows deleted (Draft only)
  */
 export async function POST(req: NextRequest) {
   const session = await getServerSession(authOptions);
@@ -39,22 +35,26 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: "Invalid action" }, { status: 400 });
     }
 
-    // ═══════════════════════════════════════════════════════════════
-    // ✅ PERMISSION CHECK — owner always has, manager needs explicit grant
-    // ═══════════════════════════════════════════════════════════════
-    const canVoidRefund = await hasPermission(email, role, "canVoid");
+    // ─── Permission check ───
+    const canVoid = await hasPermission(email, role, "canVoid");
+    const canRefund = await hasPermission(email, role, "canRefund");
     const canDelete = await hasPermission(email, role, "canDelete");
 
-    if (action === "delete" && !canDelete) {
+    if (action === "void" && !canVoid) {
       return NextResponse.json(
-        { error: "You do not have delete permission" },
+        { error: "You don't have void permission" },
         { status: 403 }
       );
     }
-
-    if ((action === "void" || action === "refund") && !canVoidRefund) {
+    if (action === "refund" && !canRefund) {
       return NextResponse.json(
-        { error: "You do not have void/refund permission" },
+        { error: "You don't have refund permission" },
+        { status: 403 }
+      );
+    }
+    if (action === "delete" && !canDelete) {
+      return NextResponse.json(
+        { error: "You don't have delete permission" },
         { status: 403 }
       );
     }
@@ -77,6 +77,13 @@ export async function POST(req: NextRequest) {
       );
     }
 
+    if (action === "delete" && saleStatus !== "Draft") {
+      return NextResponse.json(
+        { error: "Only Draft sales can be deleted" },
+        { status: 400 }
+      );
+    }
+
     const invoiceNo = String(saleRow.get("Invoice_No") || "");
     const customerName = String(saleRow.get("Customer_Name") || "");
     const totalAmount = Number(saleRow.get("Total_Amount") || 0);
@@ -90,26 +97,29 @@ export async function POST(req: NextRequest) {
     );
 
     // ═══════════════════════════════════════════════════════════════
-    // RESTORE STOCK (only if Completed sale)
+    // RESTORE STOCK — for void/refund on Completed sales
     // ═══════════════════════════════════════════════════════════════
     let restoredCount = 0;
+    const restoredItems: { name: string; qty: number }[] = [];
 
-    if (saleStatus === "Completed" && items.length > 0) {
+    if ((action === "void" || action === "refund") && saleStatus === "Completed") {
       const invSheet = await getSheet(SHEETS.INVENTORY);
       const invRows = await invSheet.getRows();
 
       for (const it of items) {
         const itemId = String(it.get("Item_ID") || "");
+        const itemName = String(it.get("Item_Name") || "");
         const qty = Number(it.get("Quantity") || 0);
         if (!itemId || qty <= 0) continue;
 
         const invRow = invRows.find((r) => String(r.get("Item_ID")) === itemId);
         if (invRow) {
-          // ✅ Restore Stock_Quantity directly (so AppSheet also sees it)
+          // ✅ Restore Stock_Quantity directly (AppSheet reads it)
           const currentStock = Number(invRow.get("Stock_Quantity") || 0);
           invRow.set("Stock_Quantity", currentStock + qty);
           await invRow.save();
           restoredCount++;
+          restoredItems.push({ name: itemName, qty });
         }
       }
     }
@@ -118,17 +128,22 @@ export async function POST(req: NextRequest) {
     // HANDLE ACTION
     // ═══════════════════════════════════════════════════════════════
     if (action === "delete") {
-      // ─── DELETE: remove items + sale ───
+      // Delete items + sale
       for (const it of items) {
         await it.delete();
       }
       await saleRow.delete();
     } else {
-      // ─── VOID / REFUND: change status ───
       const newStatus = action === "void" ? "Voided" : "Refunded";
       saleRow.set("Sale_Status", newStatus);
       await saleRow.save();
     }
+
+    // ✅ Invalidate caches so next page load gets fresh data
+    await refreshCache(SHEETS.SALES);
+    await refreshCache(SHEETS.SALES_ITEMS);
+    await refreshCache(SHEETS.INVENTORY);
+    await refreshCache(SHEETS.STOCK_IN);
 
     // ═══════════════════════════════════════════════════════════════
     // LOG ACTIVITY
@@ -155,6 +170,12 @@ export async function POST(req: NextRequest) {
         });
       });
       const logRows = await logSheet.getRows();
+
+      const restoredText =
+        restoredItems.length > 0
+          ? ` · Restored: ${restoredItems.map((r) => `${r.name}×${r.qty}`).join(", ")}`
+          : "";
+
       await logSheet.addRow({
         Log_ID: `SACT-${String(logRows.length + 1).padStart(5, "0")}`,
         Date: new Date().toISOString(),
@@ -164,9 +185,15 @@ export async function POST(req: NextRequest) {
         Customer_Name: customerName,
         Performed_By: session.user?.name ?? session.user?.email ?? "",
         Role: role,
-        Details: `Reason: ${reason || "Not specified"} · Restored ${restoredCount} items`,
+        Details: `Reason: ${reason || "Not specified"}${restoredText}`,
         Old_Value: `Status: ${saleStatus}, Amount: ${totalAmount} ETB`,
-        New_Value: `Status: ${action === "delete" ? "DELETED" : action === "void" ? "Voided" : "Refunded"}`,
+        New_Value: `Status: ${
+          action === "delete"
+            ? "DELETED"
+            : action === "void"
+            ? "Voided"
+            : "Refunded"
+        }`,
       });
     } catch (e) {
       console.warn("Activity log failed:", e);
@@ -178,7 +205,12 @@ export async function POST(req: NextRequest) {
       salesId,
       restoredItems: restoredCount,
       restoredStock: saleStatus === "Completed",
-      newStatus: action === "delete" ? "DELETED" : action === "void" ? "Voided" : "Refunded",
+      newStatus:
+        action === "delete"
+          ? "DELETED"
+          : action === "void"
+          ? "Voided"
+          : "Refunded",
     });
   } catch (e: any) {
     console.error("Void/refund error:", e);
