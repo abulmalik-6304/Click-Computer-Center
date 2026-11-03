@@ -12,11 +12,11 @@ const NAV = [
   { href: "/admin/sales", label: "Sales / POS", icon: "🧾", roles: ["owner", "manager", "employee", "staff"] },
   { href: "/admin/expenses", label: "Expenses", icon: "📉", roles: ["owner", "manager"] },
   { href: "/admin/income", label: "Income", icon: "💰", roles: ["owner", "manager"] },
-  { href: "/admin/profit-sharing", label: "Profit Report", icon: "💵", roles: ["owner"] }, // ✅ አዲስ
+  { href: "/admin/profit-sharing", label: "Profit Report", icon: "💵", roles: ["owner", "manager"] }, // ✅ Manager (permission check inside)
   { href: "/admin/reports", label: "Reports", icon: "📈", roles: ["owner", "manager"] },
   { href: "/admin/export", label: "Export Center", icon: "📤", roles: ["owner", "manager"] },
   { href: "/admin/announcements", label: "Announcements", icon: "📢", roles: ["owner", "manager", "employee", "staff"] },
-  { href: "/admin/staff", label: "Staff & Badges", icon: "🏅", roles: ["owner"] }, // ✅ Owner only
+  { href: "/admin/staff", label: "Staff & Badges", icon: "🏅", roles: ["owner"] },
 ];
 
 export default function AdminShell({
