@@ -16,6 +16,8 @@ interface Manager {
     canDelete: boolean;
     canEditInventory: boolean;
     canExport: boolean;
+    canViewActivity: boolean;
+    canManageStaff: boolean;
   };
 }
 
@@ -181,6 +183,20 @@ export default function ManagerPermissions() {
                   enabled={m.permissions.canExport}
                   loading={saving === m.email}
                   onClick={() => toggle(m, "canExport")}
+                />
+                <Toggle
+                  label="View Activity Log"
+                  icon="📝"
+                  enabled={m.permissions.canViewActivity}
+                  loading={saving === m.email}
+                  onClick={() => toggle(m, "canViewActivity")}
+                />
+                <Toggle
+                  label="Manage Staff"
+                  icon="🏅"
+                  enabled={m.permissions.canManageStaff}
+                  loading={saving === m.email}
+                  onClick={() => toggle(m, "canManageStaff")}
                 />
               </div>
             </div>
