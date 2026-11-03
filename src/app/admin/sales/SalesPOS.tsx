@@ -133,7 +133,10 @@ export default function SalesPOS({
 
       {showActivity && canSeeActivity && <SalesActivityPanel />}
 
-      <SalesHistoryPlaceholder refreshKey={recentRefresh} />
+      <SalesHistoryPlaceholder
+        refreshKey={recentRefresh}
+        userRole={userRole}
+      />
 
       {showPOS && (
         <POSModal
@@ -159,8 +162,14 @@ export default function SalesPOS({
 import SalesHistory from "./SalesHistory";
 import SalesActivityPanel from "@/components/admin/sales/SalesActivityPanel";
 
-function SalesHistoryPlaceholder({ refreshKey }: { refreshKey: number }) {
-  return <SalesHistory key={refreshKey} userRole="staff" />;
+function SalesHistoryPlaceholder({
+  refreshKey,
+  userRole,
+}: {
+  refreshKey: number;
+  userRole: string;
+}) {
+  return <SalesHistory key={refreshKey} userRole={userRole} />;
 }
 
 // ═══════════════════════════════════════════════════════════════
@@ -948,9 +957,9 @@ function ItemPickerModal({
                     <p className="text-sm font-medium text-slate-900 truncate">
                       {item.name}
                     </p>
-                    <p className="text-xs text-slate-500">
+                                        <p className="text-xs text-slate-500">
                       {item.code} · Stock: {item.stock}
-                                       </p>
+                    </p>
                   </div>
                   <div className="text-right flex-shrink-0">
                     <p className="text-sm font-bold text-emerald-600">
