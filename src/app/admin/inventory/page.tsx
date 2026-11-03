@@ -4,10 +4,11 @@ import { authOptions } from "@/lib/auth";
 import { redirect } from "next/navigation";
 import { getSheet, SHEETS } from "@/lib/google-sheets";
 import { calculateAllStock } from "@/lib/inventory-stock";
+import { getManagerPermissions, hasPermission } from "@/lib/permissions";
 import InventoryClient from "./InventoryClient";
 
 export const revalidate = 0;
-export const dynamic = "force-dynamic";  // ✅ ሁልጊዜ fresh data
+export const dynamic = "force-dynamic"; // ✅ ሁልጊዜ fresh data
 
 export interface InventoryItem {
   id: string;
@@ -74,5 +75,15 @@ export default async function InventoryPage() {
     console.error("Inventory load error:", e);
   }
 
-  return <InventoryClient initialItems={items} userRole={role} />;
+  // ✅ Calculate permissions for this user
+  const email = String(session.user?.email || "");
+  const canEdit = await hasPermission(email, role, "canEditInventory");
+
+  return (
+    <InventoryClient
+      initialItems={items}
+      userRole={role}
+      canEdit={canEdit}
+    />
+  );
 }
