@@ -17,7 +17,7 @@ const NAV = [
   { href: "/admin/export", label: "Export Center", icon: "📤", roles: ["owner", "manager"] },
   { href: "/admin/announcements", label: "Announcements", icon: "📢", roles: ["owner", "manager", "employee", "staff"] },
   { href: "/admin/staff", label: "Staff & Badges", icon: "🏅", roles: ["owner"] },
-];
+]; 
 
 export default function AdminShell({
   children,
