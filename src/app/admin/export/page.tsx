@@ -4,6 +4,7 @@ import { authOptions } from "@/lib/auth";
 import { redirect } from "next/navigation";
 import { getSheet, SHEETS } from "@/lib/google-sheets";
 import { buildEnrichedSales, mapExpenseRow, mapInventoryRow } from "@/lib/data-mappers";
+import { hasPermission } from "@/lib/permissions";
 import ExportClient from "./ExportClient";
 
 export const revalidate = 0;
@@ -12,8 +13,27 @@ export default async function ExportPage() {
   const session = await getServerSession(authOptions);
   if (!session?.user) redirect("/login");
 
-  const role = String((session.user as any).role || "staff").toLowerCase();
-  if (!["owner", "manager"].includes(role)) redirect("/admin/dashboard");
+  const role = String((session.user as any).role || "").toLowerCase();
+  const email = String(session.user.email || "");
+
+  // ✅ Only owner OR managers with explicit permission
+  const canExport = await hasPermission(email, role, "canExport");
+  if (!canExport) {
+    return (
+      <div className="p-10 text-center">
+        <div className="bg-red-50 border border-red-200 rounded-2xl p-8 max-w-md mx-auto">
+          <p className="text-4xl mb-3">🚫</p>
+          <h1 className="text-xl font-bold text-red-900 mb-2">Access Denied</h1>
+          <p className="text-sm text-red-700">
+            You don&apos;t have permission to access Export Center.
+          </p>
+          <p className="text-xs text-red-600 mt-2">
+            Contact the owner to request access.
+          </p>
+        </div>
+      </div>
+    );
+  }
 
   let sales: any[] = [];
   let inventory: any[] = [];
