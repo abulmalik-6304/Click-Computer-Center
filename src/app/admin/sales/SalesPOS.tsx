@@ -69,6 +69,7 @@ export default function SalesPOS({
   userName,
   initialRecentSales = [],
   initialPreselectedItemId = "",
+  initialAutoOpen = false,
 }: {
   initialInventory: InventoryItem[];
   initialCustomers?: Customer[];
@@ -76,12 +77,23 @@ export default function SalesPOS({
   userName: string;
   initialRecentSales?: any[];
   initialPreselectedItemId?: string;
+  initialAutoOpen?: boolean;
 }) {
   const router = useRouter();
-  // ✅ Auto-open POS if item is preselected
-  const [showPOS, setShowPOS] = useState(!!initialPreselectedItemId);
+  // ✅ Auto-open POS if item is preselected OR autoOpen flag is set
+  const [showPOS, setShowPOS] = useState(
+    !!initialPreselectedItemId || initialAutoOpen
+  );
   const [showActivity, setShowActivity] = useState(false);
   const [recentRefresh, setRecentRefresh] = useState(0);
+
+  // ✅ Clean URL params after auto-open
+  useEffect(() => {
+    if (initialAutoOpen && initialPreselectedItemId) {
+      // Clear the query params without reload
+      window.history.replaceState({}, "", "/admin/sales");
+    }
+  }, [initialAutoOpen, initialPreselectedItemId]);
 
   const isOwnerOrManager = ["owner", "manager"].includes(userRole);
 
@@ -940,7 +952,7 @@ function ItemPickerModal({
                     <p className="text-xs text-slate-500">
                       {item.code} · Stock: {item.stock}
                     </p>
-                  </div>
+                                   </div>
                   <div className="text-right flex-shrink-0">
                     <p className="text-sm font-bold text-emerald-600">
                       {fmt(item.sellingPrice)}
