@@ -7,6 +7,7 @@ import { calculateAllStock } from "@/lib/inventory-stock";
 import SalesPOS from "./SalesPOS";
 
 export const revalidate = 0;
+export const dynamic = "force-dynamic";  // ✅ Fresh data
 
 export interface Customer {
   id: string;
@@ -19,19 +20,19 @@ export interface Customer {
 export default async function SalesPage({
   searchParams,
 }: {
-  searchParams?: { item?: string };
+  searchParams?: { item?: string; open?: string };
 }) {
   const session = await getServerSession(authOptions);
   if (!session) redirect("/login");
 
   const role = String((session.user as any).role || "staff").toLowerCase();
   const preselectedItemId = searchParams?.item || "";
+  const autoOpen = searchParams?.open === "1";
 
   let inventory: any[] = [];
   let customers: Customer[] = [];
 
   try {
-    // ✅ Calculate stock from purchases/sales
     const stockMap = await calculateAllStock();
 
     const invSheet = await getSheet(SHEETS.INVENTORY);
@@ -40,7 +41,6 @@ export default async function SalesPage({
       .map((r) => {
         const obj = r.toObject() as any;
         const itemId = String(obj.Item_ID || "");
-
         const calc = stockMap[itemId];
         const stock = calc?.currentStock ?? 0;
 
@@ -57,11 +57,8 @@ export default async function SalesPage({
           status: String(obj.Status || "Active"),
         };
       })
-      .filter(
-        (i) => i.status !== "Archived" && i.sellingPrice > 0
-      );
+      .filter((i) => i.status !== "Archived" && i.sellingPrice > 0);
 
-    // Customers
     try {
       const custSheet = await getSheet("Customer_TBL");
       const custRows = await custSheet.getRows();
@@ -88,6 +85,7 @@ export default async function SalesPage({
       initialCustomers={customers}
       initialRecentSales={[]}
       initialPreselectedItemId={preselectedItemId}
+      initialAutoOpen={autoOpen}
       userRole={role}
       userName={session.user?.name ?? "User"}
     />
