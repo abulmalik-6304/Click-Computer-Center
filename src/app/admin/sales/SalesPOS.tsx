@@ -88,7 +88,6 @@ export default function SalesPOS({
   canDelete?: boolean;
 }) {
   const router = useRouter();
-  // ...
   // ✅ Auto-open POS if item is preselected OR autoOpen flag is set
   const [showPOS, setShowPOS] = useState(
     !!initialPreselectedItemId || initialAutoOpen
@@ -143,6 +142,9 @@ export default function SalesPOS({
       <SalesHistoryPlaceholder
         refreshKey={recentRefresh}
         userRole={userRole}
+        canVoid={canVoid}
+        canRefund={canRefund}
+        canDelete={canDelete}
       />
 
       {showPOS && (
@@ -172,11 +174,25 @@ import SalesActivityPanel from "@/components/admin/sales/SalesActivityPanel";
 function SalesHistoryPlaceholder({
   refreshKey,
   userRole,
+  canVoid,
+  canRefund,
+  canDelete,
 }: {
   refreshKey: number;
   userRole: string;
+  canVoid: boolean;
+  canRefund: boolean;
+  canDelete: boolean;
 }) {
-  return <SalesHistory key={refreshKey} userRole={userRole} />;
+  return (
+    <SalesHistory
+      key={refreshKey}
+      userRole={userRole}
+      canVoid={canVoid}
+      canRefund={canRefund}
+      canDelete={canDelete}
+    />
+  );
 }
 
 // ═══════════════════════════════════════════════════════════════
@@ -950,7 +966,7 @@ function ItemPickerModal({
                   key={item.id}
                   onClick={() => !out && onSelect(item)}
                   disabled={out}
-                  className="w-full text-left p-2 hover:bg-slate-50 border-b border-slate-100 flex items-center gap-2 disabled:opacity-40"
+                                    className="w-full text-left p-2 hover:bg-slate-50 border-b border-slate-100 flex items-center gap-2 disabled:opacity-40"
                 >
                   <img
                     src={formatDriveUrl(item.image)}
@@ -964,7 +980,7 @@ function ItemPickerModal({
                     <p className="text-sm font-medium text-slate-900 truncate">
                       {item.name}
                     </p>
-                                        <p className="text-xs text-slate-500">
+                    <p className="text-xs text-slate-500">
                       {item.code} · Stock: {item.stock}
                     </p>
                   </div>
@@ -1015,9 +1031,7 @@ function ReceiptPopup({
       items,
       "───────────────────────",
       `Subtotal: ${fmt(data.subtotal)} ETB`,
-      data.discount > 0
-        ? `Discount: -${fmt(data.discount)} ETB`
-        : "",
+      data.discount > 0 ? `Discount: -${fmt(data.discount)} ETB` : "",
       `TOTAL: ${fmt(data.total)} ETB`,
       `Paid: ${fmt(data.paid)} ETB`,
       `Payment: ${data.paymentMethod} (${data.paymentStatus})`,
