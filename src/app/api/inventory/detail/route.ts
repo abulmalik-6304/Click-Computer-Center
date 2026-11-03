@@ -3,16 +3,10 @@ import { NextRequest, NextResponse } from "next/server";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { getSheet, SHEETS } from "@/lib/google-sheets";
+import { calculateItemStock } from "@/lib/inventory-stock";
 
 export const revalidate = 0;
 
-/**
- * GET /api/inventory/detail?itemId=ITM-0001
- *
- * Returns full detail with role-based filtering:
- * - Owner/Manager: full data
- * - Employee/Staff: no cost, no profit
- */
 export async function GET(req: NextRequest) {
   const session = await getServerSession(authOptions);
   if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
@@ -23,26 +17,28 @@ export async function GET(req: NextRequest) {
   try {
     const { searchParams } = new URL(req.url);
     const itemId = searchParams.get("itemId") || "";
-    if (!itemId) {
-      return NextResponse.json({ error: "itemId required" }, { status: 400 });
-    }
+    if (!itemId) return NextResponse.json({ error: "itemId required" }, { status: 400 });
 
-    // ─── Load item ───
     const invSheet = await getSheet(SHEETS.INVENTORY);
     const invRows = await invSheet.getRows();
     const invRow = invRows.find((r) => String(r.get("Item_ID")) === String(itemId));
-    if (!invRow) {
-      return NextResponse.json({ error: "Item not found" }, { status: 404 });
-    }
+    if (!invRow) return NextResponse.json({ error: "Item not found" }, { status: 404 });
 
     const invObj = invRow.toObject() as any;
+
+    // ✅ Calculate stock from Stock_In - Sales_Items
+    const stockCalc = await calculateItemStock(itemId);
+    const stock = stockCalc.currentStock;
+    const totalPurchased = stockCalc.totalPurchased;
+    const totalSold = stockCalc.totalSold;
+
     const item = {
       id: String(invObj.Item_ID || ""),
       name: String(invObj.Item_Name || ""),
       code: String(invObj.Item_Code || ""),
       category: String(invObj.Category || invObj.Unit_Type || "General"),
       image: String(invObj.Item_Image || ""),
-      stock: Number(invObj.Stock_Quantity || 0),
+      stock,  // ✅ CALCULATED
       costPrice: Number(invObj.Cost_Price || 0),
       sellingPrice: Number(invObj.Selling_Price || 0),
       avgCost: Number(invObj.Avg_Cost || invObj.Cost_Price || 0),
@@ -53,7 +49,6 @@ export async function GET(req: NextRequest) {
       date: String(invObj.Date || ""),
     };
 
-    // ─── Supplier name ───
     let supplierName = "";
     try {
       const supSheet = await getSheet("Supplier_TBL");
@@ -64,9 +59,8 @@ export async function GET(req: NextRequest) {
       /* ignore */
     }
 
-    // ─── Stock-In history ───
+    // Purchases log
     let stockInLogs: any[] = [];
-    let totalPurchased = 0;
     let lastPurchased = "";
     try {
       const stockSheet = await getSheet(SHEETS.STOCK_IN);
@@ -88,15 +82,13 @@ export async function GET(req: NextRequest) {
         .filter((l) => l.itemId === itemId)
         .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
 
-      totalPurchased = stockInLogs.reduce((s, l) => s + l.quantity, 0);
       lastPurchased = stockInLogs[0]?.date || "";
     } catch {
       /* ignore */
     }
 
-    // ─── Sales history ───
+    // Sales log
     let salesLogs: any[] = [];
-    let totalSold = 0;
     let totalRevenue = 0;
     let totalCost = 0;
     let lastSold = "";
@@ -134,7 +126,6 @@ export async function GET(req: NextRequest) {
         })
         .filter((l) => l.itemId === itemId);
 
-      totalSold = salesLogs.reduce((s, l) => s + l.quantity, 0);
       totalRevenue = salesLogs.reduce((s, l) => s + l.totalPrice, 0);
       totalCost = salesLogs.reduce((s, l) => s + l.totalCost, 0);
 
@@ -146,6 +137,7 @@ export async function GET(req: NextRequest) {
           invoiceNo: salesById[l.salesId]?.invoiceNo || "",
         }))
         .sort((a, b) => new Date(b.saleDate).getTime() - new Date(a.saleDate).getTime());
+
       lastSold = salesLogs[0]?.saleDate || "";
     } catch {
       /* ignore */
@@ -155,10 +147,7 @@ export async function GET(req: NextRequest) {
     const profitMargin =
       totalRevenue > 0 ? Math.round((totalProfit / totalRevenue) * 1000) / 10 : 0;
 
-    // ═══════════════════════════════════════════════════════════
-    // Role-based filtering — do NOT send sensitive data to staff
-    // ═══════════════════════════════════════════════════════════
-    const responseData: any = {
+    return NextResponse.json({
       item: isOwnerOrManager
         ? { ...item, supplierName }
         : {
@@ -185,9 +174,7 @@ export async function GET(req: NextRequest) {
       },
       stockInLogs: isOwnerOrManager ? stockInLogs.slice(0, 20) : [],
       salesLogs: isOwnerOrManager ? salesLogs.slice(0, 20) : salesLogs.slice(0, 5),
-    };
-
-    return NextResponse.json(responseData);
+    });
   } catch (e: any) {
     console.error("Detail error:", e);
     return NextResponse.json({ error: e.message }, { status: 500 });
