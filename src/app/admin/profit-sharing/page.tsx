@@ -15,7 +15,7 @@ export default async function ProfitSharingPage() {
   const role = String((session.user as any).role || "").toLowerCase();
   const email = String(session.user?.email || "");
 
-  // ✅ Check permission — owner always has, manager needs explicit grant
+  // ✅ Permission check
   const canViewProfit = await hasPermission(email, role, "canViewProfit");
 
   if (!canViewProfit) {
