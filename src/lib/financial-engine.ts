@@ -18,6 +18,9 @@ export interface SaleRecord {
   Total_Cost_Amount?: number | string;
   staffId?: string;
   Recorded_By?: string;
+  /** ✅ Used to exclude cancelled sales from revenue/cost/profit */
+  saleStatus?: string;
+  Sale_Status?: string;
 }
 
 export interface ExpenseRecord {
@@ -29,17 +32,42 @@ export interface ExpenseRecord {
   Amount?: number | string;
 }
 
+/**
+ * Returns true if a sale is cancelled (voided/refunded) and should be
+ * excluded from all financial calculations (revenue, cost, profit).
+ */
+function isCancelled(sale: SaleRecord): boolean {
+  const status = String(
+    (sale as any).saleStatus ?? (sale as any).Sale_Status ?? ""
+  )
+    .toLowerCase()
+    .trim();
+  return status === "voided" || status === "refunded";
+}
+
 export function calculateLineCost(sale: SaleRecord): number {
+  // ✅ Voided / Refunded sales don't count toward cost
+  if (isCancelled(sale)) return 0;
+
   const qty = Number(sale.quantity ?? sale.Quantity ?? 1);
   const cost = Number(sale.unitCost ?? 0);
-  const totalCost = sale.Total_Cost_Amount !== undefined ? Number(sale.Total_Cost_Amount) : cost * qty;
+  const totalCost =
+    sale.Total_Cost_Amount !== undefined
+      ? Number(sale.Total_Cost_Amount)
+      : cost * qty;
   return round2(totalCost);
 }
 
 export function calculateLineRevenue(sale: SaleRecord): number {
+  // ✅ Voided / Refunded sales don't count toward revenue
+  if (isCancelled(sale)) return 0;
+
   const qty = Number(sale.quantity ?? sale.Quantity ?? 1);
   const price = Number(sale.unitPrice ?? 0);
-  const totalPrice = sale.Total_Price !== undefined ? Number(sale.Total_Price) : price * qty;
+  const totalPrice =
+    sale.Total_Price !== undefined
+      ? Number(sale.Total_Price)
+      : price * qty;
   return round2(totalPrice);
 }
 
@@ -99,14 +127,16 @@ export function calculateNetProfit(
   const salesTotal = today
     ? calculateTodaysSalesTotal(sales, today)
     : round2(sales.reduce((s, x) => s + calculateLineRevenue(x), 0));
-  
+
   const costTotal = today
     ? calculateTodaysCostTotal(sales, today)
     : round2(sales.reduce((s, x) => s + calculateLineCost(x), 0));
-  
+
   const expTotal = today
     ? calculateTodaysExpensesTotal(expenses, today)
-    : round2(expenses.reduce((s, x) => s + Number(x.amount ?? x.Amount ?? 0), 0));
+    : round2(
+        expenses.reduce((s, x) => s + Number(x.amount ?? x.Amount ?? 0), 0)
+      );
 
   return round2(salesTotal - costTotal - expTotal);
 }
