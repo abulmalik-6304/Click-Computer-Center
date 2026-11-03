@@ -1,4 +1,8 @@
 // src/lib/permissions.ts
+// ═══════════════════════════════════════════════════════════════
+// 🔐 PERMISSIONS SYSTEM — Owner grants specific permissions to managers
+// ═══════════════════════════════════════════════════════════════
+
 import { getSheet, getDoc } from "./google-sheets";
 
 const PERMISSIONS_SHEET = "Permissions_TBL";
@@ -13,7 +17,7 @@ export const PERMISSION_HEADERS = [
   "Can_Export",
   "Can_View_Activity",
   "Can_Manage_Staff",
-  "Can_View_Profit", // ✅ አዲስ
+  "Can_View_Profit",
   "Updated_By",
   "Updated_At",
 ];
@@ -27,7 +31,7 @@ export interface ManagerPermissions {
   canExport: boolean;
   canViewActivity: boolean;
   canManageStaff: boolean;
-  canViewProfit: boolean; // ✅ አዲስ
+  canViewProfit: boolean;
 }
 
 export const DEFAULT_PERMISSIONS: Omit<ManagerPermissions, "email"> = {
@@ -38,12 +42,27 @@ export const DEFAULT_PERMISSIONS: Omit<ManagerPermissions, "email"> = {
   canExport: false,
   canViewActivity: false,
   canManageStaff: false,
-  canViewProfit: false, // ✅ አዲስ
+  canViewProfit: false,
 };
 
+export type PermissionKey =
+  | "canVoid"
+  | "canRefund"
+  | "canDelete"
+  | "canEditInventory"
+  | "canExport"
+  | "canViewActivity"
+  | "canManageStaff"
+  | "canViewProfit";
+
+// ═══════════════════════════════════════════════════════════════
+// GET: Load permissions for a manager
+// ═══════════════════════════════════════════════════════════════
 export async function getManagerPermissions(
   email: string
 ): Promise<ManagerPermissions | null> {
+  if (!email) return null;
+
   try {
     const sheet = await getSheet(PERMISSIONS_SHEET);
     const rows = await sheet.getRows();
@@ -63,7 +82,7 @@ export async function getManagerPermissions(
       canExport: bool(row.get("Can_Export")),
       canViewActivity: bool(row.get("Can_View_Activity")),
       canManageStaff: bool(row.get("Can_Manage_Staff")),
-      canViewProfit: bool(row.get("Can_View_Profit")), // ✅ አዲስ
+      canViewProfit: bool(row.get("Can_View_Profit")),
     };
   } catch (e: any) {
     if (String(e.message).includes("not found")) return null;
@@ -72,6 +91,9 @@ export async function getManagerPermissions(
   }
 }
 
+// ═══════════════════════════════════════════════════════════════
+// SET: Save permissions
+// ═══════════════════════════════════════════════════════════════
 export async function setManagerPermissions(
   permissions: ManagerPermissions,
   updatedBy: string
@@ -103,7 +125,7 @@ export async function setManagerPermissions(
       Can_Export: permissions.canExport ? "TRUE" : "FALSE",
       Can_View_Activity: permissions.canViewActivity ? "TRUE" : "FALSE",
       Can_Manage_Staff: permissions.canManageStaff ? "TRUE" : "FALSE",
-      Can_View_Profit: permissions.canViewProfit ? "TRUE" : "FALSE", // ✅ አዲስ
+      Can_View_Profit: permissions.canViewProfit ? "TRUE" : "FALSE",
     };
 
     if (existing) {
@@ -127,33 +149,26 @@ export async function setManagerPermissions(
   }
 }
 
-export type PermissionKey =
-  | "canVoid"
-  | "canRefund"
-  | "canDelete"
-  | "canEditInventory"
-  | "canExport"
-  | "canViewActivity"
-  | "canManageStaff"
-  | "canViewProfit"; // ✅ አዲስ
-
-/**
- * Check if user has permission.
- * - Owner: always true
- * - Manager: needs explicit grant
- * - Staff/Employee: always false
- */
+// ═══════════════════════════════════════════════════════════════
+// CHECK: Has permission
+// ═══════════════════════════════════════════════════════════════
 export async function hasPermission(
   email: string,
   role: string,
   permission: PermissionKey
 ): Promise<boolean> {
   const r = String(role || "").toLowerCase().trim();
+
+  // Owner always has all permissions
   if (r === "owner") return true;
+
+  // Manager needs explicit grant
   if (r === "manager") {
     const perms = await getManagerPermissions(email);
     if (!perms) return false;
     return perms[permission];
   }
+
+  // Staff/Employee never has these permissions
   return false;
 }
