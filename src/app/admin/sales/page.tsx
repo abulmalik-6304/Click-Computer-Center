@@ -3,6 +3,7 @@ import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { redirect } from "next/navigation";
 import { getSheet, SHEETS } from "@/lib/google-sheets";
+import { calculateAllStock } from "@/lib/inventory-stock";
 import SalesPOS from "./SalesPOS";
 
 export const revalidate = 0;
@@ -15,21 +16,6 @@ export interface Customer {
   email: string;
 }
 
-export interface Sale {
-  salesId: string;
-  date: string;
-  customerName: string;
-  staffName: string;
-  totalAmount: number;
-  discount: number;
-  paidAmount: number;
-  paymentStatus: string;
-  paymentMethod: string;
-  invoiceNo: string;
-  saleStatus: string;
-  items: any[];
-}
-
 export default async function SalesPage({
   searchParams,
 }: {
@@ -39,38 +25,41 @@ export default async function SalesPage({
   if (!session) redirect("/login");
 
   const role = String((session.user as any).role || "staff").toLowerCase();
-
   const preselectedItemId = searchParams?.item || "";
 
   let inventory: any[] = [];
   let customers: Customer[] = [];
-  let recentSales: Sale[] = [];
 
   try {
-    // Inventory (only items in stock)
+    // ✅ Calculate stock from purchases/sales
+    const stockMap = await calculateAllStock();
+
     const invSheet = await getSheet(SHEETS.INVENTORY);
     const invRows = await invSheet.getRows();
     inventory = invRows
-  .map((r) => {
-    const obj = r.toObject() as any;
-    return {
-      id: String(obj.Item_ID || ""),
-      name: String(obj.Item_Name || ""),
-      code: String(obj.Item_Code || ""),
-      image: String(obj.Item_Image || ""),
-      stock: Number(obj.Stock_Quantity || 0),
-      sellingPrice: Number(obj.Selling_Price || 0),
-      costPrice: Number(obj.Avg_Cost || obj.Cost_Price || 0),
-      unitType: String(obj.Unit_Type || "pcs"),
-      status: String(obj.Status || "Active"),
-    };
-  })
-  .filter(
-    (i) =>
-      i.status !== "Archived" &&
-      i.sellingPrice > 0
-    // ✅ Removed `stock > 0` — show ALL items so picker can filter
-  );
+      .map((r) => {
+        const obj = r.toObject() as any;
+        const itemId = String(obj.Item_ID || "");
+
+        const calc = stockMap[itemId];
+        const stock = calc?.currentStock ?? 0;
+
+        return {
+          id: itemId,
+          name: String(obj.Item_Name || ""),
+          code: String(obj.Item_Code || ""),
+          category: String(obj.Category || obj.Unit_Type || "General"),
+          image: String(obj.Item_Image || ""),
+          stock,
+          sellingPrice: Number(obj.Selling_Price || 0),
+          costPrice: Number(obj.Avg_Cost || obj.Cost_Price || 0),
+          unitType: String(obj.Unit_Type || "pcs"),
+          status: String(obj.Status || "Active"),
+        };
+      })
+      .filter(
+        (i) => i.status !== "Archived" && i.sellingPrice > 0
+      );
 
     // Customers
     try {
@@ -89,46 +78,6 @@ export default async function SalesPage({
     } catch {
       customers = [];
     }
-
-    // Recent sales
-    const [salesSheet, itemSheet] = await Promise.all([
-      getSheet(SHEETS.SALES),
-      getSheet(SHEETS.SALES_ITEMS),
-    ]);
-    const [salesRows, itemRows] = await Promise.all([
-      salesSheet.getRows(),
-      itemSheet.getRows(),
-    ]);
-
-    const itemsBySale: Record<string, any[]> = {};
-    for (const it of itemRows) {
-      const obj = it.toObject() as any;
-      const sid = String(obj.Sales_ID);
-      if (!itemsBySale[sid]) itemsBySale[sid] = [];
-      itemsBySale[sid].push(obj);
-    }
-
-    recentSales = salesRows
-      .map((r) => {
-        const obj = r.toObject() as any;
-        const sid = String(obj.Sales_ID || "");
-        return {
-          salesId: sid,
-          date: String(obj.Date || ""),
-          customerName: String(obj.Customer_Name || "Walk-in"),
-          staffName: String(obj.Recorded_By || ""),
-          totalAmount: Number(obj.Total_Amount || 0),
-          discount: Number(obj.Discount || 0),
-          paidAmount: Number(obj.Paid_Amount || 0),
-          paymentStatus: String(obj.Payment_Status || "Paid"),
-          paymentMethod: String(obj.Payment_Method || "Cash"),
-          invoiceNo: String(obj.Invoice_No || ""),
-          saleStatus: String(obj.Sale_Status || "Completed"),
-          items: itemsBySale[sid] ?? [],
-        };
-      })
-      .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime())
-      .slice(0, 10);
   } catch (e) {
     console.error("Sales page load error:", e);
   }
@@ -137,7 +86,7 @@ export default async function SalesPage({
     <SalesPOS
       initialInventory={inventory}
       initialCustomers={customers}
-      initialRecentSales={recentSales}
+      initialRecentSales={[]}
       initialPreselectedItemId={preselectedItemId}
       userRole={role}
       userName={session.user?.name ?? "User"}
