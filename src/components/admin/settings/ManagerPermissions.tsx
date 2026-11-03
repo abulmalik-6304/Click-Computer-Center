@@ -18,6 +18,7 @@ interface Manager {
     canExport: boolean;
     canViewActivity: boolean;
     canManageStaff: boolean;
+    canViewProfit: boolean; // ✅ አዲስ
   };
 }
 
@@ -197,6 +198,13 @@ export default function ManagerPermissions() {
                   enabled={m.permissions.canManageStaff}
                   loading={saving === m.email}
                   onClick={() => toggle(m, "canManageStaff")}
+                />
+                <Toggle
+                  label="View Profit Report"
+                  icon="💵"
+                  enabled={m.permissions.canViewProfit}
+                  loading={saving === m.email}
+                  onClick={() => toggle(m, "canViewProfit")}
                 />
               </div>
             </div>
