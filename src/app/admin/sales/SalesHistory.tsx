@@ -2,6 +2,7 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
+import VoidSaleModal from "@/components/admin/sales/VoidSaleModal"; // ✅ አዲስ
 
 interface SaleItem {
   salesItemId: string;
@@ -38,9 +39,14 @@ const STATUS_COLORS: Record<string, string> = {
 const SALE_STATUS_COLORS: Record<string, string> = {
   completed: "bg-emerald-100 text-emerald-700",
   draft: "bg-amber-100 text-amber-700",
+  voided: "bg-red-100 text-red-700",
+  refunded: "bg-orange-100 text-orange-700",
 };
 
 export default function SalesHistory({ userRole }: { userRole: string }) {
+  const isOwner = userRole === "owner";
+  const [voidTarget, setVoidTarget] = useState<Sale | null>(null); // ✅ አዲስ
+
   const [q, setQ] = useState("");
   const [from, setFrom] = useState("");
   const [to, setTo] = useState("");
@@ -160,6 +166,8 @@ export default function SalesHistory({ userRole }: { userRole: string }) {
             <option value="all">All Status</option>
             <option value="completed">Completed</option>
             <option value="draft">Draft</option>
+            <option value="voided">Voided</option>
+            <option value="refunded">Refunded</option>
           </select>
           <select
             value={sort}
@@ -321,7 +329,25 @@ export default function SalesHistory({ userRole }: { userRole: string }) {
         <SaleDetailModal
           sale={active}
           isOwnerOrManager={isOwnerOrManager}
+          isOwner={isOwner}
+          onVoid={() => {
+            setVoidTarget(active);
+            setActive(null);
+          }}
           onClose={() => setActive(null)}
+        />
+      )}
+      {voidTarget && (
+        <VoidSaleModal
+          salesId={voidTarget.salesId}
+          invoiceNo={voidTarget.invoiceNo}
+          totalAmount={voidTarget.totalAmount}
+          saleStatus={voidTarget.saleStatus}
+          onClose={() => setVoidTarget(null)}
+          onSuccess={() => {
+            setVoidTarget(null);
+            load();
+          }}
         />
       )}
     </div>
@@ -355,10 +381,14 @@ function Mini({
 function SaleDetailModal({
   sale,
   isOwnerOrManager,
+  isOwner,
+  onVoid,
   onClose,
 }: {
   sale: Sale;
   isOwnerOrManager: boolean;
+  isOwner: boolean;
+  onVoid: () => void;
   onClose: () => void;
 }) {
   const [copied, setCopied] = useState(false);
@@ -498,6 +528,23 @@ function SaleDetailModal({
           </button>
         </div>
 
+        {sale.saleStatus === "Voided" && (
+          <div className="p-3 bg-red-50 border border-red-200 rounded-lg">
+            <p className="text-sm font-bold text-red-700">🚫 VOIDED</p>
+            <p className="text-xs text-red-600 mt-1">
+              This sale has been voided and its stock restored.
+            </p>
+          </div>
+        )}
+        {sale.saleStatus === "Refunded" && (
+          <div className="p-3 bg-orange-50 border border-orange-200 rounded-lg">
+            <p className="text-sm font-bold text-orange-700">💵 REFUNDED</p>
+            <p className="text-xs text-orange-600 mt-1">
+              Customer returned this sale. Stock has been restored.
+            </p>
+          </div>
+        )}
+
         <div className="grid grid-cols-2 gap-3 text-sm">
           <div>
             <span className="text-slate-500">Customer:</span>{" "}
@@ -558,7 +605,13 @@ function SaleDetailModal({
           <Row label="Outstanding" value={sale.totalAmount - sale.paidAmount} />
         </div>
 
-        <div className="grid grid-cols-3 gap-2 pt-2">
+        <div
+          className={`grid gap-2 pt-2 ${
+            isOwner && sale.saleStatus !== "Voided" && sale.saleStatus !== "Refunded"
+              ? "grid-cols-4"
+              : "grid-cols-3"
+          }`}
+        >
           <button
             onClick={printReceipt}
             className="py-2.5 rounded-lg bg-slate-900 hover:bg-slate-800 text-white font-semibold text-sm"
@@ -573,14 +626,22 @@ function SaleDetailModal({
                 : "bg-slate-100 hover:bg-slate-200 text-slate-700"
             }`}
           >
-            {copied ? "✅ Copied" : "📋 Copy"}
+            {copied ? "✅" : "📋"}
           </button>
           <button
             onClick={shareReceipt}
             className="py-2.5 rounded-lg bg-orange-500 hover:bg-orange-600 text-white font-semibold text-sm"
           >
-            🔗 Share
+            🔗
           </button>
+          {isOwner && sale.saleStatus !== "Voided" && sale.saleStatus !== "Refunded" && (
+            <button
+              onClick={onVoid}
+              className="py-2.5 rounded-lg bg-red-600 hover:bg-red-700 text-white font-semibold text-sm"
+            >
+              🗑 Void
+            </button>
+          )}
         </div>
 
         <button
