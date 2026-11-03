@@ -8,6 +8,7 @@ import ManagerPermissions from "@/components/admin/settings/ManagerPermissions";
 import ProfitSharingSettings from "@/components/admin/settings/ProfitSharingSettings";
 
 export const revalidate = 0;
+export const dynamic = "force-dynamic";
 
 export default async function SettingsPage() {
   const session = await getServerSession(authOptions);
@@ -16,9 +17,13 @@ export default async function SettingsPage() {
   const role = String((session.user as any).role || "staff").toLowerCase();
   const isOwner = role === "owner";
 
+  // ✅ Unique key forces React to remount children on every visit
+  const pageKey = `settings-${Date.now()}`;
+
   return (
     <div className="p-4 sm:p-6 lg:p-10 space-y-6">
       <SettingsClient
+        key={`profile-${pageKey}`}
         user={{
           name: session.user.name ?? "User",
           email: session.user.email ?? "",
@@ -27,14 +32,18 @@ export default async function SettingsPage() {
         }}
       />
 
-      {/* ✅ Manager Permissions — Owner only */}
-      {isOwner && <ManagerPermissions />}
+      {/* ✅ Manager Permissions — Owner only, fresh each visit */}
+      {isOwner && (
+        <ManagerPermissions key={`perms-${pageKey}`} />
+      )}
 
-      {/* ✅ Profit Sharing Settings — Owner only */}
-      {isOwner && <ProfitSharingSettings />}
+      {/* ✅ Profit Sharing — Owner only */}
+      {isOwner && (
+        <ProfitSharingSettings key={`profit-${pageKey}`} />
+      )}
 
       {/* ✅ Sign-in Log */}
-      <SigninLogClient />
+      <SigninLogClient key={`signin-${pageKey}`} />
     </div>
   );
 }
