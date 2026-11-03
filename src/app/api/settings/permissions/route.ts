@@ -39,7 +39,7 @@ export async function GET() {
       .filter((u) => u.role === "manager" && u.email);
 
     // Load permissions for each manager
-    const withPermissions = await Promise.all(
+        const withPermissions = await Promise.all(
       managers.map(async (m) => {
         const perms = await getManagerPermissions(m.email);
         return {
@@ -51,6 +51,8 @@ export async function GET() {
             canDelete: false,
             canEditInventory: false,
             canExport: false,
+            canViewActivity: false,
+            canManageStaff: false,
           },
         };
       })
