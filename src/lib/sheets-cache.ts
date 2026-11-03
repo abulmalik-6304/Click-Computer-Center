@@ -26,6 +26,15 @@ const CACHE_TTL = {
 };
 
 function getTTL(sheetName: string): number {
+  // ✅ NEVER cache settings/permissions — always fresh
+  if (
+    sheetName === "Settings_TBL" ||
+    sheetName === "Permissions_TBL" ||
+    sheetName === "Profit_Report_Log_TBL"
+  ) {
+    return 0;
+  }
+
   switch (sheetName) {
     case SHEETS.INVENTORY:
       return CACHE_TTL.INVENTORY;
