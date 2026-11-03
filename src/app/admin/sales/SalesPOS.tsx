@@ -71,6 +71,9 @@ export default function SalesPOS({
   initialPreselectedItemId = "",
   initialAutoOpen = false,
   canViewActivity = false,
+  canVoid = false,
+  canRefund = false,
+  canDelete = false,
 }: {
   initialInventory: InventoryItem[];
   initialCustomers?: Customer[];
@@ -80,8 +83,12 @@ export default function SalesPOS({
   initialPreselectedItemId?: string;
   initialAutoOpen?: boolean;
   canViewActivity?: boolean;
+  canVoid?: boolean;
+  canRefund?: boolean;
+  canDelete?: boolean;
 }) {
   const router = useRouter();
+  // ...
   // ✅ Auto-open POS if item is preselected OR autoOpen flag is set
   const [showPOS, setShowPOS] = useState(
     !!initialPreselectedItemId || initialAutoOpen
