@@ -124,21 +124,26 @@ export async function GET(req: NextRequest) {
         rows.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
     }
 
+    // ─── Totals — EXCLUDE Voided/Refunded from revenue ───
+    const summary = rows.reduce(
+      (acc, s) => {
+        const status = String(s.saleStatus || "").toLowerCase();
+        const isCancelled = status === "voided" || status === "refunded";
+
+        return {
+          revenue: acc.revenue + (isCancelled ? 0 : s.totalAmount),
+          paid: acc.paid + (isCancelled ? 0 : s.paidAmount),
+          count: acc.count + 1,
+        };
+      },
+      { revenue: 0, paid: 0, count: 0 }
+    );
+
     // ─── Pagination ───
     const total = rows.length;
     const totalPages = Math.max(1, Math.ceil(total / limit));
     const start = (page - 1) * limit;
     const pageRows = rows.slice(start, start + limit);
-
-    // ─── Totals for the filtered set ───
-    const summary = rows.reduce(
-      (acc, s) => ({
-        revenue: acc.revenue + s.totalAmount,
-        paid: acc.paid + s.paidAmount,
-        count: acc.count + 1,
-      }),
-      { revenue: 0, paid: 0, count: 0 }
-    );
 
     return NextResponse.json({
       rows: pageRows,
