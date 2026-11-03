@@ -7,6 +7,14 @@ import NewCustomerModal from "@/components/admin/NewCustomerModal";
 import { toDriveImageUrl as formatDriveUrl } from "@/lib/drive-url";
 
 // ═══════════════════════════════════════════════════════════════
+// ✅ SAFE NUMBER FORMATTING — prevents null.toLocaleString() errors
+// ═══════════════════════════════════════════════════════════════
+function fmt(n: any): string {
+  const num = Number(n);
+  return isNaN(num) ? "0" : num.toLocaleString();
+}
+
+// ═══════════════════════════════════════════════════════════════
 // TYPES
 // ═══════════════════════════════════════════════════════════════
 interface InventoryItem {
@@ -238,17 +246,17 @@ function POSModal({
   });
 
   // ✅ ALWAYS show ALL items (including 0 stock)
-// Only filter when search has text
-const filteredItems = useMemo(() => {
-  if (!itemSearch.trim()) return inventory;
-  const lq = itemSearch.toLowerCase().trim();
-  return inventory.filter(
-    (i) =>
-      i.name.toLowerCase().includes(lq) ||
-      i.code.toLowerCase().includes(lq) ||
-      (i.category && i.category.toLowerCase().includes(lq))
-  );
-}, [inventory, itemSearch]);
+  // Only filter when search has text
+  const filteredItems = useMemo(() => {
+    if (!itemSearch.trim()) return inventory;
+    const lq = itemSearch.toLowerCase().trim();
+    return inventory.filter(
+      (i) =>
+        i.name.toLowerCase().includes(lq) ||
+        i.code.toLowerCase().includes(lq) ||
+        (i.category && i.category.toLowerCase().includes(lq))
+    );
+  }, [inventory, itemSearch]);
 
   // ─── HANDLERS ───
   function selectCustomer(c: Customer) {
@@ -396,7 +404,7 @@ const filteredItems = useMemo(() => {
             salesId: data.salesId,
             invoiceNo: data.invoiceNo,
             customerName: customer?.name || "Walk-in",
-            details: `${cart.length} items, ${total.toLocaleString()} ETB`,
+            details: `${cart.length} items, ${fmt(total)} ETB`,
           }),
         });
       } catch {
@@ -459,7 +467,7 @@ const filteredItems = useMemo(() => {
           <div>
             <h2 className="text-lg font-bold text-slate-900">🛒 New Sale</h2>
             <p className="text-xs text-slate-500">
-              {cart.length} items · {total.toLocaleString()} ETB
+              {cart.length} items · {fmt(total)} ETB
             </p>
           </div>
           <button
@@ -670,7 +678,7 @@ const filteredItems = useMemo(() => {
                             </div>
                           </td>
                           <td className="px-2 py-2 text-right font-semibold text-slate-900">
-                            {(line.sellingPrice * line.quantity).toLocaleString()}
+                            {fmt(line.sellingPrice * line.quantity)}
                           </td>
                           <td className="px-1 py-2">
                             <button
@@ -701,7 +709,7 @@ const filteredItems = useMemo(() => {
             <div className="flex justify-between text-sm">
               <span className="text-slate-600">Subtotal:</span>
               <span className="font-semibold text-slate-900">
-                {subtotal.toLocaleString()} ETB
+                {fmt(subtotal)} ETB
               </span>
             </div>
 
@@ -721,7 +729,7 @@ const filteredItems = useMemo(() => {
                   type="number"
                   value={paidAmount}
                   onChange={(e) => handlePaidChange(e.target.value)}
-                  placeholder={total.toString()}
+                  placeholder={String(total)}
                   className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm text-slate-900"
                 />
               </div>
@@ -729,7 +737,7 @@ const filteredItems = useMemo(() => {
 
             <div className="flex justify-between text-lg font-bold pt-2 border-t border-slate-200">
               <span>Total:</span>
-              <span className="text-emerald-600">{total.toLocaleString()} ETB</span>
+              <span className="text-emerald-600">{fmt(total)} ETB</span>
             </div>
           </section>
 
@@ -833,8 +841,8 @@ const filteredItems = useMemo(() => {
             {loading
               ? "⏳ Processing…"
               : saleStatus === "Draft"
-              ? `📝 Save Draft · ${total.toLocaleString()} ETB`
-              : `✅ Complete Sale · ${total.toLocaleString()} ETB`}
+              ? `📝 Save Draft · ${fmt(total)} ETB`
+              : `✅ Complete Sale · ${fmt(total)} ETB`}
           </button>
         </div>
       </div>
@@ -935,7 +943,7 @@ function ItemPickerModal({
                   </div>
                   <div className="text-right flex-shrink-0">
                     <p className="text-sm font-bold text-emerald-600">
-                      {item.sellingPrice.toLocaleString()}
+                      {fmt(item.sellingPrice)}
                     </p>
                     <p className="text-xs text-slate-500">ETB</p>
                   </div>
@@ -959,13 +967,13 @@ function ReceiptPopup({
   data: ReceiptData;
   onClose: () => void;
 }) {
-    const [copied, setCopied] = useState(false);
+  const [copied, setCopied] = useState(false);
 
   function buildReceiptText(): string {
     const items = data.cart
       .map(
         (c) =>
-          `  ${c.name} × ${c.quantity} = ${(c.sellingPrice * c.quantity).toLocaleString()} ETB`
+          `  ${c.name} × ${c.quantity} = ${fmt(c.sellingPrice * c.quantity)} ETB`
       )
       .join("\n");
     return [
@@ -979,12 +987,12 @@ function ReceiptPopup({
       "ITEMS:",
       items,
       "───────────────────────",
-      `Subtotal: ${data.subtotal.toLocaleString()} ETB`,
+      `Subtotal: ${fmt(data.subtotal)} ETB`,
       data.discount > 0
-        ? `Discount: -${data.discount.toLocaleString()} ETB`
+        ? `Discount: -${fmt(data.discount)} ETB`
         : "",
-      `TOTAL: ${data.total.toLocaleString()} ETB`,
-      `Paid: ${data.paid.toLocaleString()} ETB`,
+      `TOTAL: ${fmt(data.total)} ETB`,
+      `Paid: ${fmt(data.paid)} ETB`,
       `Payment: ${data.paymentMethod} (${data.paymentStatus})`,
       "───────────────────────",
       "Thank you!",
@@ -1056,16 +1064,16 @@ function ReceiptPopup({
             ${data.cart
               .map(
                 (c) =>
-                  `<tr><td>${c.name}</td><td class="right">${c.quantity}</td><td class="right">${(c.sellingPrice * c.quantity).toLocaleString()}</td></tr>`
+                  `<tr><td>${c.name}</td><td class="right">${c.quantity}</td><td class="right">${fmt(c.sellingPrice * c.quantity)}</td></tr>`
               )
               .join("")}
           </tbody>
         </table>
         <hr/>
-        <p class="right">Subtotal: ${data.subtotal.toLocaleString()} ETB</p>
-        <p class="right">Discount: ${data.discount.toLocaleString()} ETB</p>
-        <p class="total right">TOTAL: ${data.total.toLocaleString()} ETB</p>
-        <p class="right">Paid: ${data.paid.toLocaleString()} ETB</p>
+        <p class="right">Subtotal: ${fmt(data.subtotal)} ETB</p>
+        <p class="right">Discount: ${fmt(data.discount)} ETB</p>
+        <p class="total right">TOTAL: ${fmt(data.total)} ETB</p>
+        <p class="right">Paid: ${fmt(data.paid)} ETB</p>
         <p class="right small">${data.paymentMethod} · ${data.paymentStatus}</p>
         <hr/>
         <p class="small right">Thank you! Come again.</p>
@@ -1100,13 +1108,13 @@ function ReceiptPopup({
           <div className="flex justify-between">
             <span className="text-slate-600">Total:</span>
             <span className="font-bold text-emerald-600">
-              {data.total.toLocaleString()} ETB
+              {fmt(data.total)} ETB
             </span>
           </div>
           <div className="flex justify-between">
             <span className="text-slate-600">Paid:</span>
             <span className="font-medium text-slate-900">
-              {data.paid.toLocaleString()} ETB
+              {fmt(data.paid)} ETB
             </span>
           </div>
         </div>
