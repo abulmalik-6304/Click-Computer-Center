@@ -26,6 +26,7 @@ export default async function SalesPage({
   const session = await getServerSession(authOptions);
   if (!session) redirect("/login");
 
+  // ✅ Role normalized to lowercase ("owner" | "manager" | "staff")
   const role = String((session.user as any).role || "staff").toLowerCase();
   const preselectedItemId = searchParams?.item || "";
   const autoOpen = searchParams?.open === "1";
@@ -84,6 +85,9 @@ export default async function SalesPage({
   const email = String(session.user?.email || "");
   const canViewActivity = await hasPermission(email, role, "canViewActivity");
 
+  // 🔍 Debug (optional) — uncomment to verify in server logs
+  // console.log("[SalesPage] role:", role, "email:", email, "canViewActivity:", canViewActivity);
+
   return (
     <SalesPOS
       initialInventory={inventory}
@@ -91,7 +95,7 @@ export default async function SalesPage({
       initialRecentSales={[]}
       initialPreselectedItemId={preselectedItemId}
       initialAutoOpen={autoOpen}
-      userRole={role}
+      userRole={role} // ✅ "owner" | "manager" | "staff" (lowercase)
       userName={session.user?.name ?? "User"}
       canViewActivity={canViewActivity}
     />
