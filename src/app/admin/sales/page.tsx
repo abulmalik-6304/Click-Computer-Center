@@ -4,10 +4,11 @@ import { authOptions } from "@/lib/auth";
 import { redirect } from "next/navigation";
 import { getSheet, SHEETS } from "@/lib/google-sheets";
 import { calculateAllStock } from "@/lib/inventory-stock";
+import { hasPermission } from "@/lib/permissions";
 import SalesPOS from "./SalesPOS";
 
 export const revalidate = 0;
-export const dynamic = "force-dynamic";  // ✅ Fresh data
+export const dynamic = "force-dynamic"; // ✅ Fresh data
 
 export interface Customer {
   id: string;
@@ -79,6 +80,10 @@ export default async function SalesPage({
     console.error("Sales page load error:", e);
   }
 
+  // ✅ Permission check for activity log visibility
+  const email = String(session.user?.email || "");
+  const canViewActivity = await hasPermission(email, role, "canViewActivity");
+
   return (
     <SalesPOS
       initialInventory={inventory}
@@ -88,6 +93,7 @@ export default async function SalesPage({
       initialAutoOpen={autoOpen}
       userRole={role}
       userName={session.user?.name ?? "User"}
+      canViewActivity={canViewActivity}
     />
   );
 }
