@@ -7,7 +7,7 @@ const PROFIT_CONFIG_KEY = "profit_config";
 
 export async function getProfitConfig(): Promise<ProfitConfig> {
   try {
-    const sheet = await getSheet(SETTINGS_SHEET);
+    const sheet = await getSheet(SETTINGS_SHEET); // ✅ getSheet (not getCachedRows)
     const rows = await sheet.getRows();
     const row = rows.find(
       (r) => String(r.get("Setting_Key")) === PROFIT_CONFIG_KEY
