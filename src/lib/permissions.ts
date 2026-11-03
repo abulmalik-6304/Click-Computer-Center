@@ -13,6 +13,7 @@ export const PERMISSION_HEADERS = [
   "Can_Export",
   "Can_View_Activity",
   "Can_Manage_Staff",
+  "Can_View_Profit", // ✅ አዲስ
   "Updated_By",
   "Updated_At",
 ];
@@ -26,6 +27,7 @@ export interface ManagerPermissions {
   canExport: boolean;
   canViewActivity: boolean;
   canManageStaff: boolean;
+  canViewProfit: boolean; // ✅ አዲስ
 }
 
 export const DEFAULT_PERMISSIONS: Omit<ManagerPermissions, "email"> = {
@@ -36,6 +38,7 @@ export const DEFAULT_PERMISSIONS: Omit<ManagerPermissions, "email"> = {
   canExport: false,
   canViewActivity: false,
   canManageStaff: false,
+  canViewProfit: false, // ✅ አዲስ
 };
 
 export async function getManagerPermissions(
@@ -60,6 +63,7 @@ export async function getManagerPermissions(
       canExport: bool(row.get("Can_Export")),
       canViewActivity: bool(row.get("Can_View_Activity")),
       canManageStaff: bool(row.get("Can_Manage_Staff")),
+      canViewProfit: bool(row.get("Can_View_Profit")), // ✅ አዲስ
     };
   } catch (e: any) {
     if (String(e.message).includes("not found")) return null;
@@ -99,6 +103,7 @@ export async function setManagerPermissions(
       Can_Export: permissions.canExport ? "TRUE" : "FALSE",
       Can_View_Activity: permissions.canViewActivity ? "TRUE" : "FALSE",
       Can_Manage_Staff: permissions.canManageStaff ? "TRUE" : "FALSE",
+      Can_View_Profit: permissions.canViewProfit ? "TRUE" : "FALSE", // ✅ አዲስ
     };
 
     if (existing) {
@@ -129,7 +134,8 @@ export type PermissionKey =
   | "canEditInventory"
   | "canExport"
   | "canViewActivity"
-  | "canManageStaff";
+  | "canManageStaff"
+  | "canViewProfit"; // ✅ አዲስ
 
 /**
  * Check if user has permission.
