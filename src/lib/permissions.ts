@@ -1,9 +1,4 @@
 // src/lib/permissions.ts
-// ═══════════════════════════════════════════════════════════════
-// 🔐 PERMISSIONS SYSTEM
-// Owner can grant/revoke specific permissions to managers
-// ═══════════════════════════════════════════════════════════════
-
 import { getSheet, getDoc } from "./google-sheets";
 
 const PERMISSIONS_SHEET = "Permissions_TBL";
@@ -16,6 +11,8 @@ export const PERMISSION_HEADERS = [
   "Can_Delete",
   "Can_Edit_Inventory",
   "Can_Export",
+  "Can_View_Activity",
+  "Can_Manage_Staff",
   "Updated_By",
   "Updated_At",
 ];
@@ -27,7 +24,19 @@ export interface ManagerPermissions {
   canDelete: boolean;
   canEditInventory: boolean;
   canExport: boolean;
+  canViewActivity: boolean;
+  canManageStaff: boolean;
 }
+
+export const DEFAULT_PERMISSIONS: Omit<ManagerPermissions, "email"> = {
+  canVoid: false,
+  canRefund: false,
+  canDelete: false,
+  canEditInventory: false,
+  canExport: false,
+  canViewActivity: false,
+  canManageStaff: false,
+};
 
 export async function getManagerPermissions(
   email: string
@@ -40,20 +49,20 @@ export async function getManagerPermissions(
     );
     if (!row) return null;
 
+    const bool = (v: any) => String(v || "FALSE").toUpperCase() === "TRUE";
+
     return {
       email: String(row.get("Manager_Email") || ""),
-      canVoid: String(row.get("Can_Void") || "FALSE").toUpperCase() === "TRUE",
-      canRefund: String(row.get("Can_Refund") || "FALSE").toUpperCase() === "TRUE",
-      canDelete: String(row.get("Can_Delete") || "FALSE").toUpperCase() === "TRUE",
-      canEditInventory:
-        String(row.get("Can_Edit_Inventory") || "FALSE").toUpperCase() === "TRUE",
-      canExport:
-        String(row.get("Can_Export") || "FALSE").toUpperCase() === "TRUE",
+      canVoid: bool(row.get("Can_Void")),
+      canRefund: bool(row.get("Can_Refund")),
+      canDelete: bool(row.get("Can_Delete")),
+      canEditInventory: bool(row.get("Can_Edit_Inventory")),
+      canExport: bool(row.get("Can_Export")),
+      canViewActivity: bool(row.get("Can_View_Activity")),
+      canManageStaff: bool(row.get("Can_Manage_Staff")),
     };
   } catch (e: any) {
-    if (String(e.message).includes("not found")) {
-      return null;
-    }
+    if (String(e.message).includes("not found")) return null;
     console.error("Get permissions error:", e);
     return null;
   }
@@ -82,15 +91,18 @@ export async function setManagerPermissions(
         permissions.email.toLowerCase()
     );
 
+    const fields: Record<string, string> = {
+      Can_Void: permissions.canVoid ? "TRUE" : "FALSE",
+      Can_Refund: permissions.canRefund ? "TRUE" : "FALSE",
+      Can_Delete: permissions.canDelete ? "TRUE" : "FALSE",
+      Can_Edit_Inventory: permissions.canEditInventory ? "TRUE" : "FALSE",
+      Can_Export: permissions.canExport ? "TRUE" : "FALSE",
+      Can_View_Activity: permissions.canViewActivity ? "TRUE" : "FALSE",
+      Can_Manage_Staff: permissions.canManageStaff ? "TRUE" : "FALSE",
+    };
+
     if (existing) {
-      existing.set("Can_Void", permissions.canVoid ? "TRUE" : "FALSE");
-      existing.set("Can_Refund", permissions.canRefund ? "TRUE" : "FALSE");
-      existing.set("Can_Delete", permissions.canDelete ? "TRUE" : "FALSE");
-      existing.set(
-        "Can_Edit_Inventory",
-        permissions.canEditInventory ? "TRUE" : "FALSE"
-      );
-      existing.set("Can_Export", permissions.canExport ? "TRUE" : "FALSE");
+      for (const [k, v] of Object.entries(fields)) existing.set(k, v);
       existing.set("Updated_By", updatedBy);
       existing.set("Updated_At", new Date().toISOString());
       await existing.save();
@@ -98,11 +110,7 @@ export async function setManagerPermissions(
       await sheet.addRow({
         Permission_ID: `PERM-${String(rows.length + 1).padStart(4, "0")}`,
         Manager_Email: permissions.email,
-        Can_Void: permissions.canVoid ? "TRUE" : "FALSE",
-        Can_Refund: permissions.canRefund ? "TRUE" : "FALSE",
-        Can_Delete: permissions.canDelete ? "TRUE" : "FALSE",
-        Can_Edit_Inventory: permissions.canEditInventory ? "TRUE" : "FALSE",
-        Can_Export: permissions.canExport ? "TRUE" : "FALSE",
+        ...fields,
         Updated_By: updatedBy,
         Updated_At: new Date().toISOString(),
       });
@@ -114,27 +122,32 @@ export async function setManagerPermissions(
   }
 }
 
+export type PermissionKey =
+  | "canVoid"
+  | "canRefund"
+  | "canDelete"
+  | "canEditInventory"
+  | "canExport"
+  | "canViewActivity"
+  | "canManageStaff";
+
 /**
- * Check if a user has a specific permission.
- * Owner always has all permissions.
+ * Check if user has permission.
+ * - Owner: always true
+ * - Manager: needs explicit grant
+ * - Staff/Employee: always false
  */
 export async function hasPermission(
   email: string,
   role: string,
-  permission: keyof Omit<ManagerPermissions, "email">
+  permission: PermissionKey
 ): Promise<boolean> {
-  const normalizedRole = String(role || "").toLowerCase().trim();
-
-  // Owner always has all permissions
-  if (normalizedRole === "owner") return true;
-
-  // Managers need explicit permission
-  if (normalizedRole === "manager") {
+  const r = String(role || "").toLowerCase().trim();
+  if (r === "owner") return true;
+  if (r === "manager") {
     const perms = await getManagerPermissions(email);
     if (!perms) return false;
     return perms[permission];
   }
-
-  // Staff never has these permissions
   return false;
 }
