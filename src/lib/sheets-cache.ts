@@ -58,10 +58,12 @@ function getTTL(sheetName: string): number {
 }
 
 export async function getCachedRows(sheetName: string): Promise<any[]> {
+  const ttl = getTTL(sheetName);
   const now = Date.now();
   const cached = cache.get(sheetName);
 
-  if (cached && now - cached.timestamp < getTTL(sheetName)) {
+  // ✅ TTL 0 = never use cache
+  if (ttl > 0 && cached && now - cached.timestamp < ttl) {
     return cached.data;
   }
 
@@ -70,7 +72,10 @@ export async function getCachedRows(sheetName: string): Promise<any[]> {
     const rows = await sheet.getRows();
     const data = rows.map((r) => r.toObject());
 
-    cache.set(sheetName, { data, timestamp: now });
+    // Only cache if TTL > 0
+    if (ttl > 0) {
+      cache.set(sheetName, { data, timestamp: now });
+    }
     return data;
   } catch (e: any) {
     if (
