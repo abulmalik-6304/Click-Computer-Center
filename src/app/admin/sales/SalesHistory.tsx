@@ -44,7 +44,11 @@ const SALE_STATUS_COLORS: Record<string, string> = {
 };
 
 export default function SalesHistory({ userRole }: { userRole: string }) {
-  const isOwner = userRole === "owner";
+  // ✅ Normalize role — lowercase + trim for safety
+  const normalizedRole = String(userRole || "staff").toLowerCase().trim();
+  const isOwner = normalizedRole === "owner";
+  const isOwnerOrManager = ["owner", "manager"].includes(normalizedRole);
+
   const [voidTarget, setVoidTarget] = useState<Sale | null>(null); // ✅ አዲስ
 
   const [q, setQ] = useState("");
@@ -70,8 +74,6 @@ export default function SalesHistory({ userRole }: { userRole: string }) {
   });
   const [loading, setLoading] = useState(true);
   const [active, setActive] = useState<Sale | null>(null);
-
-  const isOwnerOrManager = ["owner", "manager"].includes(userRole);
 
   const load = useCallback(async () => {
     setLoading(true);
