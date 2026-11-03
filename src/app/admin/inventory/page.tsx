@@ -3,6 +3,7 @@ import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { redirect } from "next/navigation";
 import { getSheet, SHEETS } from "@/lib/google-sheets";
+import { calculateAllStock } from "@/lib/inventory-stock";
 import InventoryClient from "./InventoryClient";
 
 export const revalidate = 0;
@@ -22,6 +23,8 @@ export interface InventoryItem {
   status: string;
   supplierId: string;
   date: string;
+  totalPurchased: number;
+  totalSold: number;
 }
 
 export default async function InventoryPage() {
@@ -34,29 +37,64 @@ export default async function InventoryPage() {
   try {
     const sheet = await getSheet(SHEETS.INVENTORY);
     const rows = await sheet.getRows();
+
+    // ✅ Calculate stock from Stock_In_TBL - Sales_Items_TBL
+    const stockMap = await calculateAllStock();
+
     items = rows
       .map((r) => {
         const obj = r.toObject() as any;
+        const itemId = String(obj.Item_ID || obj.ItemID || obj.id || "");
+
+        // Get calculated stock
+        const calc = stockMap[itemId];
+        const totalPurchased = calc?.totalPurchased ?? 0;
+        const totalSold = calc?.totalSold ?? 0;
+        const stock = calc?.currentStock ?? 0;
+
+        // Also read Stock_Quantity (in case it's filled)
+        const sheetStock = Number(
+          obj.Stock_Quantity ?? obj.StockQuantity ?? obj.Stock ?? 0
+        ) || 0;
+
+        // Use whichever is bigger — calculated or sheet value
+        const finalStock = Math.max(stock, sheetStock);
+
+        const costRaw =
+          obj.Cost_Price ?? obj.CostPrice ?? obj.costPrice ??
+          obj.Avg_Cost ?? obj.AvgCost ?? 0;
+        const costPrice = Number(costRaw) || 0;
+
+        const sellRaw =
+          obj.Selling_Price ?? obj.SellingPrice ?? obj.sellingPrice ??
+          obj.Price ?? obj.price ?? 0;
+        const sellingPrice = Number(sellRaw) || 0;
+
+        const reorderRaw = obj.Reorder_Level ?? obj.ReorderLevel ?? 10;
+        const reorderLevel = Number(reorderRaw) || 10;
+
         return {
-          id: String(obj.Item_ID || ""),
-          name: String(obj.Item_Name || ""),
-          code: String(obj.Item_Code || ""),
-          category: String(obj.Category || obj.Unit_Type || "General"),
-          image: String(obj.Item_Image || ""),
-          stock: Number(obj.Stock_Quantity || 0),
-          costPrice: Number(obj.Cost_Price || 0),
-          sellingPrice: Number(obj.Selling_Price || 0),
-          avgCost: Number(obj.Avg_Cost || obj.Cost_Price || 0),
-          unitType: String(obj.Unit_Type || "pcs"),
-          reorderLevel: Number(obj.Reorder_Level || 10),
-          status: String(obj.Status || "Active"),
-          supplierId: String(obj.Supplier_ID || ""),
-          date: String(obj.Date || ""),
+          id: itemId,
+          name: String(obj.Item_Name || obj.ItemName || obj.name || ""),
+          code: String(obj.Item_Code || obj.ItemCode || obj.code || ""),
+          category: String(obj.Category || obj.category || obj.Unit_Type || "General"),
+          image: String(obj.Item_Image || obj.ItemImage || obj.image || ""),
+          stock: finalStock,
+          costPrice,
+          sellingPrice,
+          avgCost: Number(obj.Avg_Cost || obj.AvgCost || costRaw) || costPrice,
+          unitType: String(obj.Unit_Type || obj.UnitType || "pcs"),
+          reorderLevel,
+          status: String(obj.Status || obj.status || "Active"),
+          supplierId: String(obj.Supplier_ID || obj.SupplierID || ""),
+          date: String(obj.Date || obj.date || ""),
+          totalPurchased,
+          totalSold,
         };
       })
-      .filter((i) => i.status !== "Archived");
-  } catch {
-    items = [];
+      .filter((i) => i.status !== "Archived" && i.name);
+  } catch (e) {
+    console.error("Inventory load error:", e);
   }
 
   return <InventoryClient initialItems={items} userRole={role} />;
