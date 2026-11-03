@@ -3,11 +3,11 @@ import { NextResponse } from "next/server";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { getSheet, SHEETS } from "@/lib/google-sheets";
+import { calculateAllStock } from "@/lib/inventory-stock";
 
 export const revalidate = 0;
 export const dynamic = "force-dynamic";
 
-// ─── GET: Fresh inventory data (no cache) ───
 export async function GET() {
   const session = await getServerSession(authOptions);
   if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
@@ -15,16 +15,22 @@ export async function GET() {
   try {
     const sheet = await getSheet(SHEETS.INVENTORY);
     const rows = await sheet.getRows();
+    const stockMap = await calculateAllStock();
+
     const items = rows
       .map((r) => {
         const obj = r.toObject() as any;
+        const itemId = String(obj.Item_ID || "");
+        const calc = stockMap[itemId];
+        const stock = calc?.currentStock ?? 0;
+
         return {
-          id: String(obj.Item_ID || ""),
+          id: itemId,
           name: String(obj.Item_Name || ""),
           code: String(obj.Item_Code || ""),
           category: String(obj.Category || obj.Unit_Type || "General"),
           image: String(obj.Item_Image || ""),
-          stock: Number(obj.Stock_Quantity || 0),
+          stock,
           costPrice: Number(obj.Cost_Price || 0),
           sellingPrice: Number(obj.Selling_Price || 0),
           avgCost: Number(obj.Avg_Cost || obj.Cost_Price || 0),
