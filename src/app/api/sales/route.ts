@@ -3,11 +3,14 @@ import { NextRequest, NextResponse } from "next/server";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { getSheet, SHEETS } from "@/lib/google-sheets";
-import { deductInventory } from "@/lib/financial-engine";
+import { calculateAllStock } from "@/lib/inventory-stock";
 
 export const revalidate = 0;
+export const dynamic = "force-dynamic";
 
-// ─── POST: Create sale (Draft or Completed) ───
+// ═══════════════════════════════════════════════════════════════
+// POST: Create Sale (Draft or Completed)
+// ═══════════════════════════════════════════════════════════════
 export async function POST(req: NextRequest) {
   const session = await getServerSession(authOptions);
   if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
@@ -21,15 +24,18 @@ export async function POST(req: NextRequest) {
       paymentMethod,
       discount,
       paidAmount,
-      saleStatus, // "Draft" | "Completed"
-      items, // [{ itemId, quantity, sellingPrice, costPerItem }]
+      saleStatus,
+      items,
     } = body;
 
     if (!Array.isArray(items) || items.length === 0) {
       return NextResponse.json({ error: "No items in cart" }, { status: 400 });
     }
 
-    // ─── Load Inventory ───
+    // ✅ Calculate current stock from Stock_In - Sales_Items
+    const stockMap = await calculateAllStock();
+
+    // Load inventory for validation
     const invSheet = await getSheet(SHEETS.INVENTORY);
     const invRows = await invSheet.getRows();
 
@@ -57,7 +63,10 @@ export async function POST(req: NextRequest) {
         );
       }
 
-      const currentStock = Number(invRow.get("Stock_Quantity") ?? 0);
+      // ✅ Use calculated stock, not Stock_Quantity
+      const calc = stockMap[cartItem.itemId];
+      const currentStock = calc?.currentStock ?? 0;
+
       const qty = Number(cartItem.quantity);
       const costPerItem = Number(
         invRow.get("Avg_Cost") ?? invRow.get("Cost_Price") ?? 0
@@ -115,21 +124,21 @@ export async function POST(req: NextRequest) {
     const invoiceNo = `INV-${new Date().getFullYear()}-${String(nextNum).padStart(4, "0")}`;
 
     await salesSheet.addRow({
-  Sales_ID: salesId,
-  Date: new Date().toISOString(),
-  Customer_Name: customerName || "Walk-in",
-  Receipt_File: "",
-  Recorded_By: session.user?.name ?? session.user?.email ?? "",
-  Total_Amount: totalAmount,
-  Sale_Status: saleStatus || "Completed",
-  Invoice_No: invoiceNo,
-  Customer_ID: customerId || "",
-  Payment_Method: paymentMethod || "Cash",
-  Discount: discountAmt,
-  Paid_Amount: paidAmountNum,
-  Payment_Status: paymentStatus,
-  Phone_Number: body.customerPhone || "",
-});
+      Sales_ID: salesId,
+      Date: new Date().toISOString(),
+      Customer_Name: customerName || "Walk-in",
+      Receipt_File: "",
+      Recorded_By: session.user?.name ?? session.user?.email ?? "",
+      Total_Amount: totalAmount,
+      Sale_Status: saleStatus || "Completed",
+      Invoice_No: invoiceNo,
+      Customer_ID: customerId || "",
+      Payment_Method: paymentMethod || "Cash",
+      Discount: discountAmt,
+      Paid_Amount: paidAmountNum,
+      Payment_Status: paymentStatus,
+      Phone_Number: body.customerPhone || "",
+    });
 
     // ─── Sales_Items_TBL ───
     const itemsSheet = await getSheet(SHEETS.SALES_ITEMS);
@@ -151,18 +160,6 @@ export async function POST(req: NextRequest) {
       });
     }
 
-    // ═══════════════════════════════════════════════════════════════
-    // 🔧 STOCK DEDUCTION — Only for Completed sales
-    // ═══════════════════════════════════════════════════════════════
-    if (saleStatus === "Completed") {
-      for (const line of lines) {
-        const currentStock = Number(line.invRow.get("Stock_Quantity") ?? 0);
-        const newStock = deductInventory(currentStock, line.quantity);
-        line.invRow.set("Stock_Quantity", newStock);
-        await line.invRow.save();
-      }
-    }
-
     return NextResponse.json({
       ok: true,
       salesId,
@@ -171,7 +168,6 @@ export async function POST(req: NextRequest) {
       paidAmount: paidAmountNum,
       paymentStatus,
       saleStatus,
-      stockDeducted: saleStatus === "Completed",
     });
   } catch (e: any) {
     console.error("Sale error:", e);
