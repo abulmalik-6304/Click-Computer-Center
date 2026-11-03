@@ -10,6 +10,9 @@ interface Props {
   invoiceNo: string;
   totalAmount: number;
   saleStatus: string;
+  canVoid?: boolean;
+  canRefund?: boolean;
+  canDelete?: boolean;
   onClose: () => void;
   onSuccess?: () => void;
 }
@@ -19,16 +22,27 @@ export default function VoidSaleModal({
   invoiceNo,
   totalAmount,
   saleStatus,
+  canVoid = false,
+  canRefund = false,
+  canDelete = false,
   onClose,
   onSuccess,
 }: Props) {
-  const [action, setAction] = useState<Action>("void");
+  const isDraft = saleStatus === "Draft";
+
+  // Determine default action based on permissions
+  const availableActions: Action[] = [];
+  if (canVoid && !isDraft) availableActions.push("void");
+  if (canRefund && !isDraft) availableActions.push("refund");
+  if (canDelete && isDraft) availableActions.push("delete");
+
+  const [action, setAction] = useState<Action>(
+    availableActions[0] || "void"
+  );
   const [reason, setReason] = useState("");
   const [confirm, setConfirm] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
-
-  const canDelete = saleStatus === "Draft";
 
   async function submit() {
     setError("");
@@ -62,23 +76,54 @@ export default function VoidSaleModal({
     }
   }
 
-  const actionLabels: Record<Action, { label: string; emoji: string; color: string }> = {
+  const actionInfo: Record<
+    Action,
+    { label: string; emoji: string; color: string; desc: string }
+  > = {
     void: {
       label: "Void Sale",
       emoji: "🚫",
       color: "bg-red-600 hover:bg-red-700",
+      desc: "ሽያጩ ስህተት ነበር — Stock ይመለሳል + ከሪፖርት ይወገዳል",
     },
     refund: {
       label: "Refund",
       emoji: "💵",
       color: "bg-orange-600 hover:bg-orange-700",
+      desc: "ደንበኛ መለሰ — Stock ይመለሳል + ከትርፍ አይቆጠርም",
     },
     delete: {
-      label: "Delete Sale",
+      label: "Delete Draft",
       emoji: "🗑",
       color: "bg-slate-900 hover:bg-slate-800",
+      desc: "Draft ሙሉ ሰርዝ (Stock አይመለስም — Draft ስለሆነ)",
     },
   };
+
+  if (availableActions.length === 0) {
+    return (
+      <div className="fixed inset-0 z-[70] bg-black/70 flex items-center justify-center p-4">
+        <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md p-6 space-y-4">
+          <div className="text-center">
+            <div className="text-5xl mb-3">🚫</div>
+            <h2 className="text-xl font-bold text-slate-900">No Permission</h2>
+            <p className="text-sm text-slate-600 mt-2">
+              You don&apos;t have permission to void, refund, or delete this sale.
+            </p>
+            <p className="text-xs text-slate-500 mt-2">
+              Contact the owner to request access.
+            </p>
+          </div>
+          <button
+            onClick={onClose}
+            className="w-full py-2.5 rounded-lg bg-slate-900 hover:bg-slate-800 text-white font-bold"
+          >
+            Close
+          </button>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="fixed inset-0 z-[70] bg-black/70 flex items-center justify-center p-4">
@@ -117,48 +162,49 @@ export default function VoidSaleModal({
             What do you want to do?
           </label>
           <div className="space-y-2">
-            {/* Void */}
-            <button
-              onClick={() => setAction("void")}
-              className={`w-full text-left p-3 rounded-lg border-2 transition ${
-                action === "void"
-                  ? "border-red-500 bg-red-50"
-                  : "border-slate-200 hover:border-slate-300"
-              }`}
-            >
-              <div className="flex items-center gap-2">
-                <span className="text-xl">🚫</span>
-                <div>
-                  <p className="font-bold text-slate-900 text-sm">Void Sale</p>
-                  <p className="text-xs text-slate-600">
-                    ሽያጩ ስህተት ነበር — Stock ይመለሳል + ሽያጩ ከሪፖርት ይወገዳል
-                  </p>
+            {availableActions.includes("void") && (
+              <button
+                onClick={() => setAction("void")}
+                className={`w-full text-left p-3 rounded-lg border-2 transition ${
+                  action === "void"
+                    ? "border-red-500 bg-red-50"
+                    : "border-slate-200 hover:border-slate-300"
+                }`}
+              >
+                <div className="flex items-center gap-2">
+                  <span className="text-xl">🚫</span>
+                  <div>
+                    <p className="font-bold text-slate-900 text-sm">Void Sale</p>
+                    <p className="text-xs text-slate-600">
+                      {actionInfo.void.desc}
+                    </p>
+                  </div>
                 </div>
-              </div>
-            </button>
+              </button>
+            )}
 
-            {/* Refund */}
-            <button
-              onClick={() => setAction("refund")}
-              className={`w-full text-left p-3 rounded-lg border-2 transition ${
-                action === "refund"
-                  ? "border-orange-500 bg-orange-50"
-                  : "border-slate-200 hover:border-slate-300"
-              }`}
-            >
-              <div className="flex items-center gap-2">
-                <span className="text-xl">💵</span>
-                <div>
-                  <p className="font-bold text-slate-900 text-sm">Refund</p>
-                  <p className="text-xs text-slate-600">
-                    ደንበኛ እቃውን መለሰ — Stock ይመለሳል + ገንዘቡ ተመላሽ
-                  </p>
+            {availableActions.includes("refund") && (
+              <button
+                onClick={() => setAction("refund")}
+                className={`w-full text-left p-3 rounded-lg border-2 transition ${
+                  action === "refund"
+                    ? "border-orange-500 bg-orange-50"
+                    : "border-slate-200 hover:border-slate-300"
+                }`}
+              >
+                <div className="flex items-center gap-2">
+                  <span className="text-xl">💵</span>
+                  <div>
+                    <p className="font-bold text-slate-900 text-sm">Refund</p>
+                    <p className="text-xs text-slate-600">
+                      {actionInfo.refund.desc}
+                    </p>
+                  </div>
                 </div>
-              </div>
-            </button>
+              </button>
+            )}
 
-            {/* Delete (Draft only) */}
-            {canDelete && (
+            {availableActions.includes("delete") && (
               <button
                 onClick={() => setAction("delete")}
                 className={`w-full text-left p-3 rounded-lg border-2 transition ${
@@ -170,9 +216,11 @@ export default function VoidSaleModal({
                 <div className="flex items-center gap-2">
                   <span className="text-xl">🗑</span>
                   <div>
-                    <p className="font-bold text-slate-900 text-sm">Delete Draft</p>
+                    <p className="font-bold text-slate-900 text-sm">
+                      Delete Draft
+                    </p>
                     <p className="text-xs text-slate-600">
-                      Draft ብቻ — ሙሉ ሰርዝ (Stock አይመለስም — Draft ስለሆነ)
+                      {actionInfo.delete.desc}
                     </p>
                   </div>
                 </div>
@@ -225,12 +273,12 @@ export default function VoidSaleModal({
             onClick={submit}
             disabled={loading || !confirm || !reason.trim()}
             className={`flex-1 py-2.5 rounded-lg text-white font-bold disabled:opacity-50 ${
-              actionLabels[action].color
+              actionInfo[action].color
             }`}
           >
             {loading
               ? "Processing…"
-              : `${actionLabels[action].emoji} ${actionLabels[action].label}`}
+              : `${actionInfo[action].emoji} ${actionInfo[action].label}`}
           </button>
         </div>
       </div>
