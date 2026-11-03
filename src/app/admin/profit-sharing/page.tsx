@@ -10,7 +10,7 @@ export const dynamic = "force-dynamic";
 
 export default async function ProfitSharingPage() {
   const session = await getServerSession(authOptions);
-  if (!session) redirect("/login");
+  if (!session) redir ect("/login");
 
   const role = String((session.user as any).role || "").toLowerCase();
   const email = String(session.user?.email || "");
