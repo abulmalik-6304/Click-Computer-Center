@@ -13,7 +13,7 @@ export interface EnrichedSale extends SaleRecord {
   paidAmount: number;
   paymentStatus: string;
   paymentMethod: string;
-  saleStatus: string;
+  saleStatus: string; // ✅ አለ
   invoiceNo: string;
   items: SaleItemLine[];
 }
@@ -40,7 +40,7 @@ export function mapSalesRow(r: any): {
   paidAmount: number;
   paymentStatus: string;
   paymentMethod: string;
-  saleStatus: string;
+  saleStatus: string; // ✅ አለ
   invoiceNo: string;
 } {
   return {
@@ -53,6 +53,7 @@ export function mapSalesRow(r: any): {
     paidAmount: Number(r.Paid_Amount ?? 0),
     paymentStatus: String(r.Payment_Status ?? "Unpaid"),
     paymentMethod: String(r.Payment_Method ?? "Cash"),
+    // ✅ ይህ መኖሩን አረጋግጥ — Voided/Refunded sales እንዲታወቁ
     saleStatus: String(r.Sale_Status ?? "Completed"),
     invoiceNo: String(r.Invoice_No ?? ""),
   };
@@ -103,7 +104,7 @@ export function buildEnrichedSales(
       paidAmount: s.paidAmount,
       paymentStatus: s.paymentStatus,
       paymentMethod: s.paymentMethod,
-      saleStatus: s.saleStatus,
+      saleStatus: s.saleStatus, // ✅ Voided/Refunded financial engine እንዲያገለል
       invoiceNo: s.invoiceNo,
       staffId: s.recordedBy,
       // Financial engine የሚጠቀመው
