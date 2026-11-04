@@ -12,6 +12,7 @@ import {
   ROLE_COLORS,
 } from "@/lib/staff-control";
 import { StaffDisplay, AwardedBadgeDisplay } from "./page";
+import AddStaffModal from "@/components/admin/staff/AddStaffModal";
 
 type AwardedBadge = AwardedBadgeDisplay;
 type ModalMode = "profile" | "badge" | "edit" | null;
@@ -36,6 +37,7 @@ export default function StaffClient({
   const [statusFilter, setStatusFilter] = useState<"all" | "active" | "suspended">("all");
   const [modal, setModal] = useState<ModalMode>(null);
   const [active, setActive] = useState<StaffDisplay | null>(null);
+  const [showAddStaff, setShowAddStaff] = useState(false); // ✅ አዲስ
 
   const badgesByStaff = useMemo(() => groupBadgesByStaff(badges as any), [badges]);
   const badgeTypeCounts = useMemo(() => countBadgeTypes(badges as any), [badges]);
@@ -71,7 +73,7 @@ export default function StaffClient({
 
   async function refresh() {
     try {
-      const res = await fetch("/api/staff/list");
+      const res = await fetch("/api/staff/list", { cache: "no-store" });
       const data = await res.json();
       if (Array.isArray(data.staff)) setStaff(data.staff);
     } catch (e) {
@@ -81,7 +83,7 @@ export default function StaffClient({
 
   async function refreshBadges() {
     try {
-      const res = await fetch("/api/badges");
+      const res = await fetch("/api/badges", { cache: "no-store" });
       const data = await res.json();
       if (data.all) setBadges(data.all);
     } catch (e) {
@@ -91,12 +93,20 @@ export default function StaffClient({
 
   return (
     <div className="p-4 sm:p-6 lg:p-10 space-y-6">
-      {/* Header */}
-      <div>
-        <h1 className="text-2xl sm:text-3xl font-bold text-slate-900">🏅 Staff & Badges</h1>
-        <p className="text-sm text-slate-500 mt-1">
-          {stats.total} members · {stats.active} active · {stats.suspended} suspended · {stats.totalBadges} badges
-        </p>
+      {/* Header — ✅ Add Staff button */}
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+        <div>
+          <h1 className="text-2xl sm:text-3xl font-bold text-slate-900">🏅 Staff & Badges</h1>
+          <p className="text-sm text-slate-500 mt-1">
+            {stats.total} members · {stats.active} active · {stats.suspended} suspended · {stats.totalBadges} badges
+          </p>
+        </div>
+        <button
+          onClick={() => setShowAddStaff(true)}
+          className="inline-flex items-center gap-2 px-4 py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white font-semibold rounded-lg shadow-sm"
+        >
+          ➕ Add Staff
+        </button>
       </div>
 
       {/* Stats */}
@@ -144,116 +154,123 @@ export default function StaffClient({
       </div>
 
       {/* Staff Grid */}
-      <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-5">
-        {filtered.map((s) => {
-          const sBadges = badgesByStaff[s.id] ?? [];
-          const st = normalizeStatus(s.status);
-          const isSuspended = st === "suspended";
-          const isSelf = s.email.toLowerCase() === userEmail.toLowerCase();
+      {filtered.length === 0 ? (
+        <div className="bg-white rounded-2xl border border-slate-200 p-12 text-center">
+          <p className="text-4xl mb-3">👥</p>
+          <p className="text-slate-500">No staff found</p>
+        </div>
+      ) : (
+        <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-5">
+          {filtered.map((s) => {
+            const sBadges = badgesByStaff[s.id] ?? [];
+            const st = normalizeStatus(s.status);
+            const isSuspended = st === "suspended";
+            const isSelf = s.email.toLowerCase() === userEmail.toLowerCase();
 
-          return (
-            <div
-              key={s.id}
-              className={`bg-white rounded-2xl border p-5 shadow-sm transition ${
-                isSuspended ? "border-red-200 bg-red-50/30" : "border-slate-200"
-              }`}
-            >
-              <div className="flex items-start gap-4">
-                <div className="relative">
-                  <img
-                    src={formatDriveUrl(s.photo)}
-                    alt={s.fullName}
-                    className={`w-14 h-14 rounded-full object-cover bg-slate-100 flex-shrink-0 ${
-                      isSuspended ? "ring-2 ring-red-400 grayscale" : "ring-2 ring-orange-500"
-                    }`}
-                    onError={(e) =>
-                      ((e.target as HTMLImageElement).src = "/placeholder.svg")
-                    }
-                  />
-                  {sBadges.length > 0 && (
-                    <span className="absolute -bottom-1 -right-1 bg-amber-400 text-white text-xs font-bold rounded-full w-6 h-6 flex items-center justify-center ring-2 ring-white">
-                      {sBadges.length}
-                    </span>
-                  )}
-                </div>
-                <div className="flex-1 min-w-0">
-                  <p className="font-bold text-slate-900 truncate">
-                    {s.fullName}
-                    {isSelf && <span className="text-xs text-slate-400 ml-1">(You)</span>}
-                  </p>
-                  <p className="text-sm text-slate-500 truncate">{s.email}</p>
-                  <div className="mt-2 flex items-center gap-2 flex-wrap">
-                    <span
-                      className={`px-2 py-0.5 rounded-full text-xs font-semibold capitalize ${
-                        ROLE_COLORS[s.role.toLowerCase()] ?? "bg-slate-100"
+            return (
+              <div
+                key={s.id}
+                className={`bg-white rounded-2xl border p-5 shadow-sm transition ${
+                  isSuspended ? "border-red-200 bg-red-50/30" : "border-slate-200"
+                }`}
+              >
+                <div className="flex items-start gap-4">
+                  <div className="relative">
+                    <img
+                      src={formatDriveUrl(s.photo)}
+                      alt={s.fullName}
+                      className={`w-14 h-14 rounded-full object-cover bg-slate-100 flex-shrink-0 ${
+                        isSuspended ? "ring-2 ring-red-400 grayscale" : "ring-2 ring-orange-500"
                       }`}
-                    >
-                      {s.role}
-                    </span>
-                    <span
-                      className={`px-2 py-0.5 rounded-full text-xs font-semibold ${STATUS_COLORS[st]}`}
-                    >
-                      {STATUS_LABELS[st]}
-                    </span>
-                  </div>
-                </div>
-              </div>
-
-              {sBadges.length > 0 && (
-                <div className="mt-3 pt-3 border-t border-slate-100">
-                  <div className="flex flex-wrap gap-1">
-                    {sBadges.slice(0, 3).map((b, idx) => {
-                      const def = BADGE_MAP[b.badgeId];
-                      if (!def) return null;
-                      return (
-                        <span
-                          key={idx}
-                          className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium ${def.color} ${def.textColor}`}
-                        >
-                          {def.emoji} {def.label}
-                        </span>
-                      );
-                    })}
-                    {sBadges.length > 3 && (
-                      <span className="text-xs text-slate-400 self-center">
-                        +{sBadges.length - 3}
+                      onError={(e) =>
+                        ((e.target as HTMLImageElement).src = "/placeholder.svg")
+                      }
+                    />
+                    {sBadges.length > 0 && (
+                      <span className="absolute -bottom-1 -right-1 bg-amber-400 text-white text-xs font-bold rounded-full w-6 h-6 flex items-center justify-center ring-2 ring-white">
+                        {sBadges.length}
                       </span>
                     )}
                   </div>
+                  <div className="flex-1 min-w-0">
+                    <p className="font-bold text-slate-900 truncate">
+                      {s.fullName}
+                      {isSelf && <span className="text-xs text-slate-400 ml-1">(You)</span>}
+                    </p>
+                    <p className="text-sm text-slate-500 truncate">{s.email}</p>
+                    <div className="mt-2 flex items-center gap-2 flex-wrap">
+                      <span
+                        className={`px-2 py-0.5 rounded-full text-xs font-semibold capitalize ${
+                          ROLE_COLORS[s.role.toLowerCase()] ?? "bg-slate-100"
+                        }`}
+                      >
+                        {s.role}
+                      </span>
+                      <span
+                        className={`px-2 py-0.5 rounded-full text-xs font-semibold ${STATUS_COLORS[st]}`}
+                      >
+                        {STATUS_LABELS[st]}
+                      </span>
+                    </div>
+                  </div>
                 </div>
-              )}
 
-              {/* Actions */}
-              <div className="mt-4 pt-4 border-t border-slate-100 space-y-2">
-                <div className="grid grid-cols-2 gap-1">
-                  <button
-                    onClick={() => { setActive(s); setModal("profile"); }}
-                    className="py-2 text-xs bg-slate-100 hover:bg-slate-200 text-slate-700 font-medium rounded"
-                  >
-                    👤 View
-                  </button>
-                  <button
-                    onClick={() => { setActive(s); setModal("badge"); }}
-                    className="py-2 text-xs bg-orange-100 hover:bg-orange-200 text-orange-700 font-medium rounded"
-                  >
-                    🏅 Badge
-                  </button>
-                </div>
-
-                {/* Edit button — hide for self */}
-                {!isSelf && (
-                  <button
-                    onClick={() => { setActive(s); setModal("edit"); }}
-                    className="w-full py-2 text-xs bg-slate-700 hover:bg-slate-800 text-white font-medium rounded"
-                  >
-                    ✏️ Edit Profile {isOwner && "& Role"}
-                  </button>
+                {sBadges.length > 0 && (
+                  <div className="mt-3 pt-3 border-t border-slate-100">
+                    <div className="flex flex-wrap gap-1">
+                      {sBadges.slice(0, 3).map((b, idx) => {
+                        const def = BADGE_MAP[b.badgeId];
+                        if (!def) return null;
+                        return (
+                          <span
+                            key={idx}
+                            className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium ${def.color} ${def.textColor}`}
+                          >
+                            {def.emoji} {def.label}
+                          </span>
+                        );
+                      })}
+                      {sBadges.length > 3 && (
+                        <span className="text-xs text-slate-400 self-center">
+                          +{sBadges.length - 3}
+                        </span>
+                      )}
+                    </div>
+                  </div>
                 )}
+
+                {/* Actions */}
+                <div className="mt-4 pt-4 border-t border-slate-100 space-y-2">
+                  <div className="grid grid-cols-2 gap-1">
+                    <button
+                      onClick={() => { setActive(s); setModal("profile"); }}
+                      className="py-2 text-xs bg-slate-100 hover:bg-slate-200 text-slate-700 font-medium rounded"
+                    >
+                      👤 View
+                    </button>
+                    <button
+                      onClick={() => { setActive(s); setModal("badge"); }}
+                      className="py-2 text-xs bg-orange-100 hover:bg-orange-200 text-orange-700 font-medium rounded"
+                    >
+                      🏅 Badge
+                    </button>
+                  </div>
+
+                  {/* Edit button — hide for self */}
+                  {!isSelf && (
+                    <button
+                      onClick={() => { setActive(s); setModal("edit"); }}
+                      className="w-full py-2 text-xs bg-slate-700 hover:bg-slate-800 text-white font-medium rounded"
+                    >
+                      ✏️ Edit Profile {isOwner && "& Role"}
+                    </button>
+                  )}
+                </div>
               </div>
-            </div>
-          );
-        })}
-      </div>
+            );
+          })}
+        </div>
+      )}
 
       {/* Modals */}
       {modal === "profile" && active && (
@@ -276,6 +293,18 @@ export default function StaffClient({
           canEditRole={isOwner}
           onClose={() => { setModal(null); setActive(null); }}
           onSaved={() => { setModal(null); setActive(null); refresh(); }}
+        />
+      )}
+
+      {/* ✅ Add Staff Modal */}
+      {showAddStaff && (
+        <AddStaffModal
+          callerRole={userRole}
+          onClose={() => setShowAddStaff(false)}
+          onSuccess={() => {
+            setShowAddStaff(false);
+            refresh();
+          }}
         />
       )}
     </div>
@@ -384,7 +413,7 @@ function EditStaffModal({
           </label>
           <input
             type="text"
-                        value={form.profilePicture}
+            value={form.profilePicture}
             onChange={(e) => setForm({ ...form, profilePicture: e.target.value })}
             placeholder="https://drive.google.com/file/d/..."
             className="w-full rounded-lg border border-slate-300 px-3 py-2.5 text-slate-900"
