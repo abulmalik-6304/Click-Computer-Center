@@ -12,7 +12,6 @@ import {
   ROLE_COLORS,
 } from "@/lib/staff-control";
 import { StaffDisplay, AwardedBadgeDisplay } from "./page";
-import AddStaffModal from "@/components/admin/staff/AddStaffModal";
 
 type AwardedBadge = AwardedBadgeDisplay;
 type ModalMode = "profile" | "badge" | "edit" | null;
@@ -34,10 +33,9 @@ export default function StaffClient({
   const [badges, setBadges] = useState(initialBadges);
   const [q, setQ] = useState("");
   const [roleFilter, setRoleFilter] = useState<"all" | "owner" | "manager" | "employee" | "staff">("all");
-  const [statusFilter, setStatusFilter] = useState<"all" | "active" | "suspended">("all");
+  const [statusFilter, setStatusFilter] = useState<"all" | "active" | "suspended" | "inactive">("all");
   const [modal, setModal] = useState<ModalMode>(null);
   const [active, setActive] = useState<StaffDisplay | null>(null);
-  const [showAddStaff, setShowAddStaff] = useState(false); // ✅ አዲስ
 
   const badgesByStaff = useMemo(() => groupBadgesByStaff(badges as any), [badges]);
   const badgeTypeCounts = useMemo(() => countBadgeTypes(badges as any), [badges]);
@@ -55,11 +53,7 @@ export default function StaffClient({
     }
     if (roleFilter !== "all") out = out.filter((s) => s.role.toLowerCase() === roleFilter);
     if (statusFilter !== "all") {
-      out = out.filter((s) => {
-        const st = normalizeStatus(s.status);
-        if (statusFilter === "active") return st === "active";
-        return st === "suspended";
-      });
+      out = out.filter((s) => normalizeStatus(s.status) === statusFilter);
     }
     return out;
   }, [staff, q, roleFilter, statusFilter]);
@@ -68,12 +62,13 @@ export default function StaffClient({
     total: staff.length,
     active: staff.filter((s) => normalizeStatus(s.status) === "active").length,
     suspended: staff.filter((s) => normalizeStatus(s.status) === "suspended").length,
+    inactive: staff.filter((s) => normalizeStatus(s.status) === "inactive").length,
     totalBadges: badges.length,
   };
 
   async function refresh() {
     try {
-      const res = await fetch("/api/staff/list", { cache: "no-store" });
+      const res = await fetch("/api/staff/list");
       const data = await res.json();
       if (Array.isArray(data.staff)) setStaff(data.staff);
     } catch (e) {
@@ -83,7 +78,7 @@ export default function StaffClient({
 
   async function refreshBadges() {
     try {
-      const res = await fetch("/api/badges", { cache: "no-store" });
+      const res = await fetch("/api/badges");
       const data = await res.json();
       if (data.all) setBadges(data.all);
     } catch (e) {
@@ -93,27 +88,25 @@ export default function StaffClient({
 
   return (
     <div className="p-4 sm:p-6 lg:p-10 space-y-6">
-      {/* Header — ✅ Add Staff button */}
-      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
-        <div>
-          <h1 className="text-2xl sm:text-3xl font-bold text-slate-900">🏅 Staff & Badges</h1>
-          <p className="text-sm text-slate-500 mt-1">
-            {stats.total} members · {stats.active} active · {stats.suspended} suspended · {stats.totalBadges} badges
+      {/* Header */}
+      <div>
+        <h1 className="text-2xl sm:text-3xl font-bold text-slate-900">🏅 Staff & Badges</h1>
+        <p className="text-sm text-slate-500 mt-1">
+          {stats.total} members · {stats.active} active · {stats.suspended} suspended · {stats.inactive} inactive · {stats.totalBadges} badges
+        </p>
+        {!isOwner && (
+          <p className="text-xs text-blue-600 mt-1">
+            ℹ️ You are viewing staff/employee only
           </p>
-        </div>
-        <button
-          onClick={() => setShowAddStaff(true)}
-          className="inline-flex items-center gap-2 px-4 py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white font-semibold rounded-lg shadow-sm"
-        >
-          ➕ Add Staff
-        </button>
+        )}
       </div>
 
       {/* Stats */}
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+      <div className="grid grid-cols-2 lg:grid-cols-5 gap-4">
         <StatCard label="Total" value={stats.total} color="slate" />
         <StatCard label="Active" value={stats.active} color="emerald" />
         <StatCard label="Suspended" value={stats.suspended} color="red" />
+        <StatCard label="Inactive" value={stats.inactive} color="slate" />
         <StatCard label="Badges" value={stats.totalBadges} color="amber" />
       </div>
 
@@ -126,20 +119,25 @@ export default function StaffClient({
           className="w-full rounded-lg border border-slate-300 px-3 py-2.5 text-slate-900"
         />
         <div className="flex flex-wrap gap-2">
-          <span className="text-xs font-semibold text-slate-500 self-center">Role:</span>
-          {(["all", "owner", "manager", "employee", "staff"] as const).map((f) => (
-            <button
-              key={f}
-              onClick={() => setRoleFilter(f)}
-              className={`px-3 py-1.5 rounded-lg text-xs font-medium capitalize ${
-                roleFilter === f ? "bg-slate-900 text-white" : "bg-slate-100 text-slate-700"
-              }`}
-            >
-              {f}
-            </button>
-          ))}
+          {/* Owner-only role filter */}
+          {isOwner && (
+            <>
+              <span className="text-xs font-semibold text-slate-500 self-center">Role:</span>
+              {(["all", "staff", "employee", "manager"] as const).map((f) => (
+                <button
+                  key={f}
+                  onClick={() => setRoleFilter(f)}
+                  className={`px-3 py-1.5 rounded-lg text-xs font-medium capitalize ${
+                    roleFilter === f ? "bg-slate-900 text-white" : "bg-slate-100 text-slate-700"
+                  }`}
+                >
+                  {f}
+                </button>
+              ))}
+            </>
+          )}
           <span className="text-xs font-semibold text-slate-500 self-center ml-2">Status:</span>
-          {(["all", "active", "suspended"] as const).map((f) => (
+          {(["all", "active", "suspended", "inactive"] as const).map((f) => (
             <button
               key={f}
               onClick={() => setStatusFilter(f)}
@@ -154,121 +152,126 @@ export default function StaffClient({
       </div>
 
       {/* Staff Grid */}
-      {filtered.length === 0 ? (
-        <div className="bg-white rounded-2xl border border-slate-200 p-12 text-center">
-          <p className="text-4xl mb-3">👥</p>
-          <p className="text-slate-500">No staff found</p>
-        </div>
-      ) : (
-        <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-5">
-          {filtered.map((s) => {
-            const sBadges = badgesByStaff[s.id] ?? [];
-            const st = normalizeStatus(s.status);
-            const isSuspended = st === "suspended";
-            const isSelf = s.email.toLowerCase() === userEmail.toLowerCase();
+      <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-5">
+        {filtered.map((s) => {
+          const sBadges = badgesByStaff[s.id] ?? [];
+          const st = normalizeStatus(s.status);
+          const isSuspended = st === "suspended";
+          const isInactive = st === "inactive";
+          const isManagerOrOwner = ["owner", "manager"].includes(s.role);
+          const canEditThis = isOwner || !isManagerOrOwner;
 
-            return (
-              <div
-                key={s.id}
-                className={`bg-white rounded-2xl border p-5 shadow-sm transition ${
-                  isSuspended ? "border-red-200 bg-red-50/30" : "border-slate-200"
-                }`}
-              >
-                <div className="flex items-start gap-4">
-                  <div className="relative">
-                    <img
-                      src={formatDriveUrl(s.photo)}
-                      alt={s.fullName}
-                      className={`w-14 h-14 rounded-full object-cover bg-slate-100 flex-shrink-0 ${
-                        isSuspended ? "ring-2 ring-red-400 grayscale" : "ring-2 ring-orange-500"
+          return (
+            <div
+              key={s.id}
+              className={`bg-white rounded-2xl border p-5 shadow-sm transition ${
+                isSuspended ? "border-red-200 bg-red-50/30" :
+                isInactive ? "border-slate-300 bg-slate-50/30" :
+                "border-slate-200"
+              }`}
+            >
+              <div className="flex items-start gap-4">
+                <div className="relative">
+                  <img
+                    src={formatDriveUrl(s.photo)}
+                    alt={s.fullName}
+                    className={`w-14 h-14 rounded-full object-cover bg-slate-100 flex-shrink-0 ${
+                      isSuspended || isInactive ? "ring-2 ring-slate-400 grayscale" : "ring-2 ring-orange-500"
+                    }`}
+                    onError={(e) =>
+                      ((e.target as HTMLImageElement).src = "/placeholder.svg")
+                    }
+                  />
+                  {sBadges.length > 0 && (
+                    <span className="absolute -bottom-1 -right-1 bg-amber-400 text-white text-xs font-bold rounded-full w-6 h-6 flex items-center justify-center ring-2 ring-white">
+                      {sBadges.length}
+                    </span>
+                  )}
+                </div>
+                <div className="flex-1 min-w-0">
+                  <p className="font-bold text-slate-900 truncate">{s.fullName}</p>
+                  <p className="text-sm text-slate-500 truncate">{s.email}</p>
+                  <div className="mt-2 flex items-center gap-2 flex-wrap">
+                    <span
+                      className={`px-2 py-0.5 rounded-full text-xs font-semibold capitalize ${
+                        ROLE_COLORS[s.role.toLowerCase()] ?? "bg-slate-100"
                       }`}
-                      onError={(e) =>
-                        ((e.target as HTMLImageElement).src = "/placeholder.svg")
-                      }
-                    />
-                    {sBadges.length > 0 && (
-                      <span className="absolute -bottom-1 -right-1 bg-amber-400 text-white text-xs font-bold rounded-full w-6 h-6 flex items-center justify-center ring-2 ring-white">
-                        {sBadges.length}
+                    >
+                      {s.role}
+                    </span>
+                    <span
+                      className={`px-2 py-0.5 rounded-full text-xs font-semibold ${STATUS_COLORS[st]}`}
+                    >
+                      {STATUS_LABELS[st]}
+                    </span>
+                  </div>
+                </div>
+              </div>
+
+              {sBadges.length > 0 && (
+                <div className="mt-3 pt-3 border-t border-slate-100">
+                  <div className="flex flex-wrap gap-1">
+                    {sBadges.slice(0, 3).map((b, idx) => {
+                      const def = BADGE_MAP[b.badgeId];
+                      if (!def) return null;
+                      return (
+                        <span
+                          key={idx}
+                          className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium ${def.color} ${def.textColor}`}
+                        >
+                          {def.emoji} {def.label}
+                        </span>
+                      );
+                    })}
+                    {sBadges.length > 3 && (
+                      <span className="text-xs text-slate-400 self-center">
+                        +{sBadges.length - 3}
                       </span>
                     )}
                   </div>
-                  <div className="flex-1 min-w-0">
-                    <p className="font-bold text-slate-900 truncate">
-                      {s.fullName}
-                      {isSelf && <span className="text-xs text-slate-400 ml-1">(You)</span>}
-                    </p>
-                    <p className="text-sm text-slate-500 truncate">{s.email}</p>
-                    <div className="mt-2 flex items-center gap-2 flex-wrap">
-                      <span
-                        className={`px-2 py-0.5 rounded-full text-xs font-semibold capitalize ${
-                          ROLE_COLORS[s.role.toLowerCase()] ?? "bg-slate-100"
-                        }`}
-                      >
-                        {s.role}
-                      </span>
-                      <span
-                        className={`px-2 py-0.5 rounded-full text-xs font-semibold ${STATUS_COLORS[st]}`}
-                      >
-                        {STATUS_LABELS[st]}
-                      </span>
-                    </div>
-                  </div>
+                </div>
+              )}
+
+              {/* Actions */}
+              <div className="mt-4 pt-4 border-t border-slate-100 space-y-2">
+                <div className="grid grid-cols-2 gap-1">
+                  <button
+                    onClick={() => { setActive(s); setModal("profile"); }}
+                    className="py-2 text-xs bg-slate-100 hover:bg-slate-200 text-slate-700 font-medium rounded"
+                  >
+                    👤 View
+                  </button>
+                  <button
+                    onClick={() => { setActive(s); setModal("badge"); }}
+                    className="py-2 text-xs bg-orange-100 hover:bg-orange-200 text-orange-700 font-medium rounded"
+                  >
+                    🏅 Badge
+                  </button>
                 </div>
 
-                {sBadges.length > 0 && (
-                  <div className="mt-3 pt-3 border-t border-slate-100">
-                    <div className="flex flex-wrap gap-1">
-                      {sBadges.slice(0, 3).map((b, idx) => {
-                        const def = BADGE_MAP[b.badgeId];
-                        if (!def) return null;
-                        return (
-                          <span
-                            key={idx}
-                            className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium ${def.color} ${def.textColor}`}
-                          >
-                            {def.emoji} {def.label}
-                          </span>
-                        );
-                      })}
-                      {sBadges.length > 3 && (
-                        <span className="text-xs text-slate-400 self-center">
-                          +{sBadges.length - 3}
-                        </span>
-                      )}
-                    </div>
-                  </div>
+                {canEditThis && (
+                  <button
+                    onClick={() => { setActive(s); setModal("edit"); }}
+                    className="w-full py-2 text-xs bg-slate-700 hover:bg-slate-800 text-white font-medium rounded"
+                  >
+                    ✏️ Edit {isOwner ? "& Role" : "Profile"}
+                  </button>
                 )}
-
-                {/* Actions */}
-                <div className="mt-4 pt-4 border-t border-slate-100 space-y-2">
-                  <div className="grid grid-cols-2 gap-1">
-                    <button
-                      onClick={() => { setActive(s); setModal("profile"); }}
-                      className="py-2 text-xs bg-slate-100 hover:bg-slate-200 text-slate-700 font-medium rounded"
-                    >
-                      👤 View
-                    </button>
-                    <button
-                      onClick={() => { setActive(s); setModal("badge"); }}
-                      className="py-2 text-xs bg-orange-100 hover:bg-orange-200 text-orange-700 font-medium rounded"
-                    >
-                      🏅 Badge
-                    </button>
-                  </div>
-
-                  {/* Edit button — hide for self */}
-                  {!isSelf && (
-                    <button
-                      onClick={() => { setActive(s); setModal("edit"); }}
-                      className="w-full py-2 text-xs bg-slate-700 hover:bg-slate-800 text-white font-medium rounded"
-                    >
-                      ✏️ Edit Profile {isOwner && "& Role"}
-                    </button>
-                  )}
-                </div>
               </div>
-            );
-          })}
+            </div>
+          );
+        })}
+      </div>
+
+      {filtered.length === 0 && (
+        <div className="bg-white rounded-2xl border border-slate-200 p-12 text-center">
+          <p className="text-4xl mb-3">👥</p>
+          <p className="text-slate-500">No staff found</p>
+          {!isOwner && (
+            <p className="text-xs text-slate-400 mt-2">
+              You can only see staff/employee accounts
+            </p>
+          )}
         </div>
       )}
 
@@ -291,20 +294,9 @@ export default function StaffClient({
         <EditStaffModal
           staff={active}
           canEditRole={isOwner}
+          canEditStatus={isOwner || !["owner", "manager"].includes(active.role)}
           onClose={() => { setModal(null); setActive(null); }}
           onSaved={() => { setModal(null); setActive(null); refresh(); }}
-        />
-      )}
-
-      {/* ✅ Add Staff Modal */}
-      {showAddStaff && (
-        <AddStaffModal
-          callerRole={userRole}
-          onClose={() => setShowAddStaff(false)}
-          onSuccess={() => {
-            setShowAddStaff(false);
-            refresh();
-          }}
         />
       )}
     </div>
@@ -315,11 +307,13 @@ export default function StaffClient({
 function EditStaffModal({
   staff,
   canEditRole,
+  canEditStatus,
   onClose,
   onSaved,
 }: {
   staff: StaffDisplay;
   canEditRole: boolean;
+  canEditStatus: boolean;
   onClose: () => void;
   onSaved: () => void;
 }) {
@@ -339,18 +333,21 @@ function EditStaffModal({
     setError("");
 
     try {
+      const updates: any = {
+        userName: form.userName,
+        phone: form.phone,
+        profilePicture: form.profilePicture,
+      };
+
+      if (canEditRole) updates.role = form.role;
+      if (canEditStatus) updates.status = form.status;
+
       const res = await fetch("/api/staff/update", {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           targetEmail: staff.email,
-          updates: {
-            userName: form.userName,
-            phone: form.phone,
-            profilePicture: form.profilePicture,
-            status: form.status,
-            ...(canEditRole ? { role: form.role } : {}),
-          },
+          updates,
         }),
       });
       const data = await res.json();
@@ -381,6 +378,12 @@ function EditStaffModal({
           >
             ✕
           </button>
+        </div>
+
+        <div className="p-3 bg-slate-50 border border-slate-200 rounded-lg">
+          <p className="text-sm text-slate-600">Editing:</p>
+          <p className="font-bold text-slate-900">{staff.fullName}</p>
+          <p className="text-xs text-slate-500">{staff.email}</p>
         </div>
 
         <div>
@@ -420,7 +423,6 @@ function EditStaffModal({
           />
         </div>
 
-        {/* Role — only owner can edit */}
         {canEditRole && (
           <div>
             <label className="block text-sm font-semibold text-slate-900 mb-1">
@@ -441,20 +443,22 @@ function EditStaffModal({
           </div>
         )}
 
-        <div>
-          <label className="block text-sm font-semibold text-slate-900 mb-1">
-            Status
-          </label>
-          <select
-            value={form.status}
-            onChange={(e) => setForm({ ...form, status: e.target.value })}
-            className="w-full rounded-lg border border-slate-300 px-3 py-2.5 text-slate-900"
-          >
-            <option value="Active">✅ Active</option>
-            <option value="Suspended">🚫 Suspended</option>
-            <option value="Inactive">⚪ Inactive</option>
-          </select>
-        </div>
+        {canEditStatus && (
+          <div>
+            <label className="block text-sm font-semibold text-slate-900 mb-1">
+              Status
+            </label>
+            <select
+              value={form.status}
+              onChange={(e) => setForm({ ...form, status: e.target.value })}
+              className="w-full rounded-lg border border-slate-300 px-3 py-2.5 text-slate-900"
+            >
+              <option value="Active">✅ Active</option>
+              <option value="Suspended">🚫 Suspended</option>
+              <option value="Inactive">⚪ Inactive</option>
+            </select>
+          </div>
+        )}
 
         {error && (
           <div className="p-3 bg-red-50 border border-red-200 rounded-lg">
@@ -483,7 +487,7 @@ function EditStaffModal({
   );
 }
 
-// ─── Profile View Modal ───
+// ─── Profile View ───
 function ProfileModal({
   staff,
   badges,
@@ -513,9 +517,7 @@ function ProfileModal({
           <div>
             <p className="font-bold text-slate-900 text-lg">{staff.fullName}</p>
             <p className="text-sm text-slate-500">{staff.email}</p>
-            <p className="text-sm text-slate-500 capitalize">
-              {staff.role} · {staff.jobRole || "—"}
-            </p>
+            <p className="text-sm text-slate-500 capitalize">{staff.role}</p>
           </div>
         </div>
 
@@ -539,7 +541,7 @@ function ProfileModal({
                   <div key={i} className={`flex items-start gap-3 p-3 rounded-lg ${def.color}`}>
                     <span className="text-2xl">{def.emoji}</span>
                     <div className="flex-1 min-w-0">
-                      <p className={`font-semibold text-sm ${def.textColor}`}>{def.label}</p>
+                                            <p className={`font-semibold text-sm ${def.textColor}`}>{def.label}</p>
                       {b.note && (
                         <p className="text-xs text-slate-600 mt-0.5 italic">"{b.note}"</p>
                       )}
