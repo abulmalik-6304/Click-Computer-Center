@@ -5,6 +5,8 @@ import { useState } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { signOut } from "next-auth/react";
+import { toDriveImageUrl as formatDriveUrl } from "@/lib/drive-url";
+import ProfilePhotoModal from "@/components/admin/ProfilePhotoModal";
 
 const NAV = [
   { href: "/admin/dashboard", label: "Dashboard", icon: "📊", roles: ["owner", "manager", "employee", "staff"] },
@@ -16,7 +18,7 @@ const NAV = [
   { href: "/admin/reports", label: "Reports", icon: "📈", roles: ["owner", "manager"] },
   { href: "/admin/export", label: "Export Center", icon: "📤", roles: ["owner", "manager"] },
   { href: "/admin/announcements", label: "Announcements", icon: "📢", roles: ["owner", "manager", "employee", "staff"] },
-  { href: "/admin/staff", label: "Staff & Badges", icon: "🏅", roles: ["owner", "manager"] },  // ✅ Manager ተካቷል
+  { href: "/admin/staff", label: "Staff & Badges", icon: "🏅", roles: ["owner", "manager"] }, // ✅ Manager ተካቷል
 ];
 
 export default function AdminShell({
@@ -25,11 +27,16 @@ export default function AdminShell({
   role,
 }: {
   children: React.ReactNode;
-  user: { name?: string | null; image?: string | null };
+  user: {
+    name?: string | null;
+    image?: string | null;
+    phone?: string | null; // ✅ አዲስ
+  };
   role: string;
 }) {
   const pathname = usePathname();
   const [open, setOpen] = useState(false);
+  const [showProfileModal, setShowProfileModal] = useState(false);
 
   const initials = (user.name || "U")
     .split(" ")
@@ -101,9 +108,24 @@ export default function AdminShell({
             <span className="text-base">⚙️</span> Settings
           </Link>
           <div className="flex items-center gap-3 px-3 py-2 pt-3">
-            <div className="w-9 h-9 rounded-full bg-orange-500 flex items-center justify-center text-white font-bold text-sm flex-shrink-0">
-              {initials}
-            </div>
+            <button
+              onClick={() => setShowProfileModal(true)}
+              className="w-9 h-9 rounded-full bg-orange-500 flex items-center justify-center text-white font-bold text-sm flex-shrink-0 hover:ring-2 hover:ring-orange-300 transition overflow-hidden"
+              title="Edit Profile"
+            >
+              {user.image ? (
+                <img
+                  src={formatDriveUrl(user.image)}
+                  alt={user.name || "User"}
+                  className="w-9 h-9 rounded-full object-cover"
+                  onError={(e) =>
+                    ((e.target as HTMLImageElement).src = "/placeholder.svg")
+                  }
+                />
+              ) : (
+                initials
+              )}
+            </button>
             <div className="flex-1 min-w-0">
               <p className="text-white font-semibold text-sm truncate">
                 {user.name || "User"}
@@ -132,12 +154,37 @@ export default function AdminShell({
             ☰
           </button>
           <p className="font-bold text-slate-900">Click Computer</p>
-          <div className="w-9 h-9 rounded-full bg-orange-500 flex items-center justify-center text-white font-bold text-sm">
-            {initials}
-          </div>
+          <button
+            onClick={() => setShowProfileModal(true)}
+            className="w-9 h-9 rounded-full bg-orange-500 flex items-center justify-center text-white font-bold text-sm overflow-hidden hover:ring-2 hover:ring-orange-300 transition"
+            title="Edit Profile"
+          >
+            {user.image ? (
+              <img
+                src={formatDriveUrl(user.image)}
+                alt={user.name || "User"}
+                className="w-9 h-9 rounded-full object-cover"
+                onError={(e) =>
+                  ((e.target as HTMLImageElement).src = "/placeholder.svg")
+                }
+              />
+            ) : (
+              initials
+            )}
+          </button>
         </header>
 
         <main className="flex-1 min-w-0">{children}</main>
+
+        {/* ✅ Profile Modal */}
+        {showProfileModal && (
+          <ProfilePhotoModal
+            currentName={user.name || ""}
+            currentPhoto={user.image || ""}
+            currentPhone={user.phone || ""}
+            onClose={() => setShowProfileModal(false)}
+          />
+        )}
       </div>
     </div>
   );
