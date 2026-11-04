@@ -1,37 +1,53 @@
 // src/app/api/staff/list/route.ts
 import { NextResponse } from "next/server";
-import { getSheet, SHEETS } from "@/lib/google-sheets";
-import { mapUserRow, mapEmployeeRow, AppUser, Employee } from "@/lib/data-mappers";
+import { getServerSession } from "next-auth";
+import { authOptions } from "@/lib/auth";
+import { getCachedRows } from "@/lib/sheets-cache";
+import { SHEETS } from "@/lib/google-sheets";
+import { normalizeRole } from "@/lib/roles";
 
 export const revalidate = 0;
+export const dynamic = "force-dynamic";
 
 export async function GET() {
+  const session = await getServerSession(authOptions);
+  if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+
+  const callerRole = normalizeRole((session.user as any).role);
+  const callerEmail = String(session.user?.email || "").toLowerCase();
+
   try {
-    const userSheet = await getSheet(SHEETS.USERS);
-    const userRows = await userSheet.getRows();
-    const users = userRows.map((r) => mapUserRow(r.toObject()));
+    const userData = await getCachedRows(SHEETS.USERS);
 
-    let employees: Employee[] = [];
-    try {
-      const empSheet = await getSheet(SHEETS.EMPLOYEES);
-      const empRows = await empSheet.getRows();
-      employees = empRows.map((r) => mapEmployeeRow(r.toObject()));
-    } catch { /* optional */ }
+    let staff = userData.map((obj, idx) => ({
+      id: String(obj.User_Email || `USR-${idx + 1}`),
+      fullName: String(obj.User_Name || obj.User_Email || "Unknown"),
+      email: String(obj.User_Email || "").toLowerCase().trim(),
+      role: normalizeRole(obj.Role),
+      status: String(obj.Status || "Active"),
+      photo: String(obj["Profile Picture"] || ""),
+      phone: String(obj["Phone No"] || ""),
+      jobRole: String(obj.Role || "staff"),
+      lastSeen: String(obj.Last_Seen || ""),
+    }));
 
-    const staff = users.map((u: AppUser, idx: number) => {
-      const emp = employees.find((e) => e.email.toLowerCase() === u.email.toLowerCase());
-      return {
-        id: emp?.id || `USR-${idx + 1}`,
-        fullName: emp?.fullName || u.userName || u.email,
-        email: u.email,
-        role: u.role,
-        status: u.status,
-        photo: u.profilePicture || emp?.photo || "",
-        phone: u.phone || emp?.phone || "",
-        jobRole: emp?.jobRole || u.role,
-        lastSeen: u.lastSeen || "",
-      };
-    });
+    // ═══════════════════════════════════════════════════════════════
+    // ✅ ROLE-BASED FILTERING
+    // ═══════════════════════════════════════════════════════════════
+    if (callerRole === "owner") {
+      // Owner sees ALL except themselves
+      staff = staff.filter((s) => s.email !== callerEmail);
+    } else if (callerRole === "manager") {
+      // Manager sees ONLY staff/employee (not managers, not owners, not self)
+      staff = staff.filter(
+        (s) =>
+          s.email !== callerEmail &&
+          ["staff", "employee"].includes(s.role)
+      );
+    } else {
+      // Staff/Employee cannot see the list
+      return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+    }
 
     return NextResponse.json({ staff });
   } catch (e: any) {
