@@ -5,6 +5,7 @@ import { redirect } from "next/navigation";
 import { getCachedRows } from "@/lib/sheets-cache";
 import { SHEETS } from "@/lib/google-sheets";
 import { hasPermission } from "@/lib/permissions";
+import { normalizeRole } from "@/lib/roles";
 import StaffClient from "./StaffClient";
 
 export const revalidate = 0;
@@ -35,12 +36,11 @@ export default async function StaffPage() {
   const session = await getServerSession(authOptions);
   if (!session) redirect("/login");
 
-  const role = String((session.user as any).role || "staff").toLowerCase();
-  const email = String(session.user?.email || "");
+  const role = normalizeRole((session.user as any).role);
+  const email = String(session.user?.email || "").toLowerCase().trim();
 
-  // ✅ Check permission — owner always, manager needs grant
+  // ✅ Check permission
   const canManageStaff = await hasPermission(email, role, "canManageStaff");
-
   if (!canManageStaff) {
     return (
       <div className="p-10 text-center">
@@ -49,9 +49,6 @@ export default async function StaffPage() {
           <h1 className="text-xl font-bold text-red-900 mb-2">Access Denied</h1>
           <p className="text-sm text-red-700">
             You don&apos;t have permission to manage staff.
-          </p>
-          <p className="text-xs text-red-600 mt-2">
-            Contact the owner to request access.
           </p>
         </div>
       </div>
@@ -65,11 +62,12 @@ export default async function StaffPage() {
 
   try {
     const userData = await getCachedRows(SHEETS.USERS);
+
     staff = userData.map((obj, idx) => ({
       id: String(obj.User_Email || `USR-${idx + 1}`),
       fullName: String(obj.User_Name || obj.User_Email || "Unknown"),
       email: String(obj.User_Email || "").toLowerCase().trim(),
-      role: String(obj.Role || "staff").toLowerCase(),
+      role: normalizeRole(obj.Role),
       status: String(obj.Status || "Active"),
       photo: String(obj["Profile Picture"] || ""),
       phone: String(obj["Phone No"] || ""),
@@ -77,6 +75,24 @@ export default async function StaffPage() {
       lastSeen: String(obj.Last_Seen || ""),
     }));
 
+    // ═══════════════════════════════════════════════════════════════
+    // ✅ FILTER STAFF LIST BASED ON CALLER ROLE
+    // ═══════════════════════════════════════════════════════════════
+    if (isOwner) {
+      // Owner: sees everyone EXCEPT themselves
+      staff = staff.filter((s) => s.email !== email);
+    } else if (role === "manager") {
+      // Manager: sees ONLY staff/employee (not owners/managers/self)
+      staff = staff.filter(
+        (s) =>
+          s.email !== email &&
+          ["staff", "employee"].includes(s.role)
+      );
+    } else {
+      staff = [];
+    }
+
+    // Load badges
     try {
       const badgeData = await getCachedRows("Badges_TBL");
       badges = badgeData.map((obj) => ({
