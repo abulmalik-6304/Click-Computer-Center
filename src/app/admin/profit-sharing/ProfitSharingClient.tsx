@@ -81,7 +81,10 @@ export default function ProfitSharingClient({
     setLoading(true);
     setError("");
     try {
-      const res = await fetch(`/api/profit-sharing?year=${year}&month=${month}`);
+      // ✅ cache: 'no-store' — always fresh
+      const res = await fetch(`/api/profit-sharing?year=${year}&month=${month}`, {
+        cache: "no-store",
+      });
       const data = await res.json();
       if (!res.ok) {
         setError(data.error || "Failed");
@@ -97,7 +100,9 @@ export default function ProfitSharingClient({
 
   async function loadLogs() {
     try {
-      const res = await fetch("/api/profit-sharing/log");
+      const res = await fetch("/api/profit-sharing/log", {
+        cache: "no-store",
+      });
       const data = await res.json();
       if (Array.isArray(data.logs)) setLogs(data.logs);
     } catch (e) {
@@ -113,7 +118,7 @@ export default function ProfitSharingClient({
     if (showLogs && isOwner) loadLogs();
   }, [showLogs, isOwner]);
 
-  // ─── Log helper ───
+  // ─── Log helper — NEVER throws ───
   async function logAction(action: "print" | "copy" | "export") {
     if (!calc) return;
     try {
@@ -131,7 +136,8 @@ export default function ProfitSharingClient({
         }),
       });
     } catch (e) {
-      console.warn("Log failed:", e);
+      // ✅ Silently ignore — logging failure should never break the report
+      console.warn("Log failed (non-critical):", e);
     }
   }
 
@@ -174,14 +180,13 @@ export default function ProfitSharingClient({
     return lines.join("\n");
   }
 
-  // ─── Copy ───
+  // ─── Copy — works even if logging fails ───
   async function copyReport() {
     const text = buildTextReport();
     try {
       await navigator.clipboard.writeText(text);
       setCopied(true);
       setTimeout(() => setCopied(false), 2500);
-      logAction("copy");
     } catch {
       const ta = document.createElement("textarea");
       ta.value = text;
@@ -191,11 +196,12 @@ export default function ProfitSharingClient({
       document.body.removeChild(ta);
       setCopied(true);
       setTimeout(() => setCopied(false), 2500);
-      logAction("copy");
     }
+    // ✅ Fire-and-forget log — never blocks / never throws
+    logAction("copy");
   }
 
-  // ─── Print ───
+  // ─── Print — works even if logging fails ───
   function printReport() {
     if (!calc) return;
     const html = `
@@ -262,6 +268,7 @@ export default function ProfitSharingClient({
       w.document.close();
       setTimeout(() => w.print(), 400);
     }
+    // ✅ Fire-and-forget log — never blocks / never throws
     logAction("print");
   }
 
@@ -378,7 +385,7 @@ export default function ProfitSharingClient({
           className="rounded-lg border border-slate-300 px-3 py-2 text-sm text-slate-900"
         >
           {MONTHS.map((m, i) => (
-                        <option key={i} value={i + 1}>
+            <option key={i} value={i + 1}>
               {m}
             </option>
           ))}
