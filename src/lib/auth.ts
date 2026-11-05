@@ -2,9 +2,8 @@
 import type { NextAuthOptions } from "next-auth";
 import CredentialsProvider from "next-auth/providers/credentials";
 import { getSheet, SHEETS } from "./google-sheets";
+import { normalizeRole } from "./roles";
 import bcrypt from "bcryptjs";
-
-export type Role = "owner" | "manager" | "staff" | "Employee" | "Owner" | "Manager";
 
 export const authOptions: NextAuthOptions = {
   session: { strategy: "jwt" },
@@ -21,7 +20,7 @@ export const authOptions: NextAuthOptions = {
 
         const inputUser = creds.username.trim().toLowerCase();
 
-        // 👑 Owner bypass (አብዱልመሊክ)
+        // 👑 Owner bypass
         if (inputUser === "tahareabdu24@gmail.com" || inputUser.includes("abdulmelik")) {
           return {
             id: "owner-tahar",
@@ -38,20 +37,26 @@ export const authOptions: NextAuthOptions = {
 
           const rows = await sheet.getRows();
           const userRow = rows.find((r) => {
-            const email = (r.get("User_Email") || r.get("User_Name") || "").toLowerCase().trim();
+            const email = (r.get("User_Email") || r.get("User_Name") || "")
+              .toLowerCase()
+              .trim();
             return email === inputUser;
           });
 
           if (!userRow) return null;
 
-          // ─── 🚫 STATUS CHECK ───
+          // Status check
           const status = String(userRow.get("Status") || "Active").toLowerCase();
           if (status === "suspended" || status === "inactive" || status === "blocked") {
             throw new Error(`Your account is ${status}. Please contact the administrator.`);
           }
 
-          // ─── Password check ───
-          const storedPass = userRow.get("Password") || userRow.get("Password_Hash") || userRow.get("password") || "";
+          // Password check
+          const storedPass =
+            userRow.get("Password") ||
+            userRow.get("Password_Hash") ||
+            userRow.get("password") ||
+            "";
           let isValid = false;
           if (storedPass.startsWith("$2a$") || storedPass.startsWith("$2b$")) {
             isValid = await bcrypt.compare(creds.password, storedPass);
@@ -61,16 +66,20 @@ export const authOptions: NextAuthOptions = {
           if (!isValid) return null;
 
           const userEmail = userRow.get("User_Email") || creds.username;
-          const assignedRole = (userRow.get("Role") || "staff").toLowerCase();
+
+          // ✅ Normalize role — "Admin" becomes "owner"
+          const rawRole = userRow.get("Role");
+          const assignedRole = normalizeRole(rawRole);
+
           const userName = userRow.get("User_Name") || userEmail;
           const profilePic = userRow.get("Profile Picture") || "";
 
-          // ─── Update Last_Seen ───
+          // Update Last_Seen
           try {
             userRow.set("Last_Seen", new Date().toISOString());
             await userRow.save();
           } catch {
-            // skip if fails
+            /* skip */
           }
 
           return {
