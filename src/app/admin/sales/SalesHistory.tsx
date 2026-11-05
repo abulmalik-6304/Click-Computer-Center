@@ -90,7 +90,9 @@ export default function SalesHistory({
     params.set("limit", "20");
 
     try {
-      const res = await fetch(`/api/sales/history?${params.toString()}`);
+      const res = await fetch(`/api/sales/history?${params.toString()}`, {
+        cache: "no-store",
+      });
       const data = await res.json();
       if (Array.isArray(data.rows)) {
         let filtered = data.rows;
@@ -335,6 +337,10 @@ export default function SalesHistory({
             setActive(null);
           }}
           onClose={() => setActive(null)}
+          onDeleted={() => {
+            setActive(null);
+            load();
+          }}
         />
       )}
 
@@ -390,6 +396,7 @@ function SaleDetailModal({
   canDelete,
   onVoid,
   onClose,
+  onDeleted,
 }: {
   sale: Sale;
   canVoid: boolean;
@@ -397,8 +404,11 @@ function SaleDetailModal({
   canDelete: boolean;
   onVoid: () => void;
   onClose: () => void;
+  onDeleted: () => void;
 }) {
   const [copied, setCopied] = useState(false);
+  const [deleting, setDeleting] = useState(false);
+  const [deleteError, setDeleteError] = useState("");
 
   const isVoided = sale.saleStatus === "Voided";
   const isRefunded = sale.saleStatus === "Refunded";
@@ -409,9 +419,52 @@ function SaleDetailModal({
   // - Has relevant permission
   const canTakeVoid = canVoid && !isVoided && !isRefunded;
   const canTakeRefund = canRefund && !isVoided && !isRefunded;
-  const canTakeDelete = canDelete && isDraft;
+  const canTakeDelete = canDelete && !isVoided && !isRefunded;
 
   const showAnyAction = canTakeVoid || canTakeRefund || canTakeDelete;
+
+  async function handleHardDelete() {
+    if (!confirm(
+      `⚠️ PERMANENTLY DELETE ${sale.invoiceNo || sale.salesId}?\n\n` +
+      `This will:\n` +
+      `• Restore stock to inventory\n` +
+      `• Remove revenue from reports\n` +
+      `• Cannot be undone\n\n` +
+      `Continue?`
+    )) return;
+
+    const reason = prompt("Reason for deletion (required):");
+    if (!reason?.trim()) {
+      alert("Deletion cancelled — reason required");
+      return;
+    }
+
+    setDeleting(true);
+    setDeleteError("");
+
+    try {
+      const res = await fetch("/api/sales/delete", {
+        method: "DELETE",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ salesId: sale.salesId, reason }),
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        setDeleteError(data.error || "Delete failed");
+        return;
+      }
+      alert(
+        `✅ Sale deleted!\n` +
+        `• ${data.restoredItems} items restored\n` +
+        `• ${data.revenueRemoved.toLocaleString()} ETB removed from revenue`
+      );
+      onDeleted();
+    } catch (e: any) {
+      setDeleteError(e.message);
+    } finally {
+      setDeleting(false);
+    }
+  }
 
   function buildReceiptText(): string {
     const items = sale.items
@@ -629,13 +682,13 @@ function SaleDetailModal({
             </button>
             <button
               onClick={onClose}
-                            className="py-2.5 rounded-lg bg-slate-100 hover:bg-slate-200 text-slate-700 font-semibold text-sm"
+              className="py-2.5 rounded-lg bg-slate-100 hover:bg-slate-200 text-slate-700 font-semibold text-sm"
             >
               Close
             </button>
           </div>
 
-          {/* Row 2: Void / Refund / Delete — only if permission + applicable */}
+          {/* Row 2: Void / Refund / Hard Delete */}
           {showAnyAction && (
             <div
               className={`grid gap-2 ${
@@ -666,16 +719,24 @@ function SaleDetailModal({
               )}
               {canTakeDelete && (
                 <button
-                  onClick={onVoid}
-                  className="py-2.5 rounded-lg bg-slate-900 hover:bg-slate-800 text-white font-semibold text-sm"
+                  onClick={handleHardDelete}
+                  disabled={deleting}
+                  className="py-2.5 rounded-lg bg-red-700 hover:bg-red-800 text-white font-semibold text-sm disabled:opacity-50"
+                  title="Permanently delete — restores stock"
                 >
-                  🗑 Delete
+                  {deleting ? "Deleting…" : "🗑 Hard Delete"}
                 </button>
               )}
             </div>
           )}
 
-          {!showAnyAction && !isVoided && !isRefunded && !isDraft && (
+          {deleteError && (
+            <div className="p-3 bg-red-50 border border-red-200 rounded-lg">
+              <p className="text-sm text-red-700">{deleteError}</p>
+            </div>
+          )}
+
+          {!showAnyAction && !isVoided && !isRefunded && (
             <p className="text-xs text-slate-400 text-center py-1">
               ⓘ No actions available — ask owner for permission
             </p>
