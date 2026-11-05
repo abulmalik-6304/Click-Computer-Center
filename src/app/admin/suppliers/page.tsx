@@ -3,6 +3,8 @@ import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { redirect } from "next/navigation";
 import { getCachedRows } from "@/lib/sheets-cache";
+import { hasPermission } from "@/lib/permissions";
+import { normalizeRole } from "@/lib/roles";
 import SuppliersClient from "./SuppliersClient";
 
 export const revalidate = 0;
@@ -21,13 +23,15 @@ export default async function SuppliersPage() {
   const session = await getServerSession(authOptions);
   if (!session) redirect("/login");
 
-  const role = String((session.user as any).role || "staff").toLowerCase();
+  const role = normalizeRole((session.user as any).role);
+  const email = String(session.user?.email || "");
+
+  const canPrint = await hasPermission(email, role, "canPrintSuppliers");
 
   let suppliers: Supplier[] = [];
 
   try {
     const data = await getCachedRows("Supplier_TBL");
-
     suppliers = data.map((obj, idx) => ({
       id: String(obj.Supplier_ID || `SUP-${idx + 1}`),
       name: String(obj.Supplier_Name || ""),
@@ -40,5 +44,11 @@ export default async function SuppliersPage() {
     console.error("Suppliers load error:", e);
   }
 
-  return <SuppliersClient initialSuppliers={suppliers} userRole={role} />;
+  return (
+    <SuppliersClient
+      initialSuppliers={suppliers}
+      userRole={role}
+      canPrint={canPrint}
+    />
+  );
 }
