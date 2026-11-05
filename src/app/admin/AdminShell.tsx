@@ -12,13 +12,15 @@ const NAV = [
   { href: "/admin/dashboard", label: "Dashboard", icon: "📊", roles: ["owner", "manager", "employee", "staff"] },
   { href: "/admin/inventory", label: "Inventory", icon: "📦", roles: ["owner", "manager", "employee", "staff"] },
   { href: "/admin/sales", label: "Sales / POS", icon: "🧾", roles: ["owner", "manager", "employee", "staff"] },
+  { href: "/admin/customers", label: "Customers", icon: "🧑", roles: ["owner", "manager", "employee", "staff"] }, // ✅ አዲስ
+  { href: "/admin/suppliers", label: "Suppliers", icon: "🏭", roles: ["owner", "manager"] }, // ✅ አዲስ
   { href: "/admin/expenses", label: "Expenses", icon: "📉", roles: ["owner", "manager"] },
   { href: "/admin/income", label: "Income", icon: "💰", roles: ["owner", "manager"] },
   { href: "/admin/profit-sharing", label: "Profit Report", icon: "💵", roles: ["owner", "manager"] },
   { href: "/admin/reports", label: "Reports", icon: "📈", roles: ["owner", "manager"] },
   { href: "/admin/export", label: "Export Center", icon: "📤", roles: ["owner", "manager"] },
   { href: "/admin/announcements", label: "Announcements", icon: "📢", roles: ["owner", "manager", "employee", "staff"] },
-  { href: "/admin/staff", label: "Staff & Badges", icon: "🏅", roles: ["owner", "manager"] }, // ✅ Manager ተካቷል
+  { href: "/admin/staff", label: "Staff & Badges", icon: "🏅", roles: ["owner", "manager"] },
 ];
 
 export default function AdminShell({
@@ -30,7 +32,7 @@ export default function AdminShell({
   user: {
     name?: string | null;
     image?: string | null;
-    phone?: string | null; // ✅ አዲስ
+    phone?: string | null;
   };
   role: string;
 }) {
