@@ -2,10 +2,12 @@
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { redirect } from "next/navigation";
-import { getSheet, SHEETS } from "@/lib/google-sheets";
+import { getCachedRows } from "@/lib/sheets-cache";
+import { SHEETS } from "@/lib/google-sheets";
 import CustomersClient from "./CustomersClient";
 
 export const revalidate = 0;
+export const dynamic = "force-dynamic";
 
 export interface Customer {
   id: string;
@@ -15,73 +17,69 @@ export interface Customer {
   email: string;
   address: string;
   recordedBy: string;
-}
-
-export interface CustomerWithStats extends Customer {
   totalPurchases: number;
   totalAmount: number;
   lastPurchase: string;
   transactionCount: number;
 }
 
+// ✅ አስቀድሞ ያለውን CustomerWithStats ለ backward compat ያስቀምጡ
+export interface CustomerWithStats extends Customer {}
+
 export default async function CustomersPage() {
   const session = await getServerSession(authOptions);
   if (!session) redirect("/login");
 
+  const role = String((session.user as any).role || "staff").toLowerCase();
+
   let customers: Customer[] = [];
-  let salesByName: Record<string, { amount: number; count: number; last: string }> = {};
 
   try {
-    const sheet = await getSheet("Customer_TBL");
-    const rows = await sheet.getRows();
-    customers = rows.map((r) => {
-      const obj = r.toObject() as any;
+    const [customerData, salesData] = await Promise.all([
+      getCachedRows("Customer_TBL"),
+      getCachedRows(SHEETS.SALES),
+    ]);
+
+    const salesByName: Record<string, { amount: number; count: number; last: string }> = {};
+    for (const sale of salesData) {
+      const status = String(sale.Sale_Status || "").toLowerCase();
+      if (status === "voided" || status === "refunded") continue;
+
+      const name = String(sale.Customer_Name || "Walk-in").trim().toLowerCase();
+      const amount = Number(sale.Total_Amount || 0);
+      const date = String(sale.Date || "");
+
+      if (!salesByName[name]) {
+        salesByName[name] = { amount: 0, count: 0, last: "" };
+      }
+      salesByName[name].amount += amount;
+      salesByName[name].count += 1;
+      if (!salesByName[name].last || date > salesByName[name].last) {
+        salesByName[name].last = date;
+      }
+    }
+
+    customers = customerData.map((obj, idx) => {
+      const name = String(obj.Customer_Name || "");
+      const stats = salesByName[name.trim().toLowerCase()];
+
       return {
-        id: String(obj.Customer_ID || ""),
-        name: String(obj.Customer_Name || ""),
+        id: String(obj.Customer_ID || `CUS-${idx + 1}`),
+        name,
         phone: String(obj.Phone_Number || ""),
         type: String(obj.Customer_Type || "Regular"),
         email: String(obj.Customer_Email || ""),
         address: String(obj.Address || ""),
         recordedBy: String(obj.Recorded_By || ""),
+        totalPurchases: stats?.count ?? 0,
+        totalAmount: stats?.amount ?? 0,
+        lastPurchase: stats?.last ?? "",
+        transactionCount: stats?.count ?? 0,
       };
     });
-
-    // Sales stats by customer name
-    try {
-      const salesSheet = await getSheet(SHEETS.SALES);
-      const salesRows = await salesSheet.getRows();
-      for (const r of salesRows) {
-        const obj = r.toObject() as any;
-        const name = String(obj.Customer_Name || "Walk-in").trim().toLowerCase();
-        const amount = Number(obj.Total_Amount || 0);
-        const date = String(obj.Date || "");
-        if (!salesByName[name]) {
-          salesByName[name] = { amount: 0, count: 0, last: "" };
-        }
-        salesByName[name].amount += amount;
-        salesByName[name].count += 1;
-        if (!salesByName[name].last || date > salesByName[name].last) {
-          salesByName[name].last = date;
-        }
-      }
-    } catch {
-      // skip
-    }
-  } catch {
-    customers = [];
+  } catch (e) {
+    console.error("Customers load error:", e);
   }
 
-  const withStats: CustomerWithStats[] = customers.map((c) => {
-    const stats = salesByName[c.name.trim().toLowerCase()];
-    return {
-      ...c,
-      totalPurchases: stats?.count ?? 0,
-      totalAmount: stats?.amount ?? 0,
-      lastPurchase: stats?.last ?? "",
-      transactionCount: stats?.count ?? 0,
-    };
-  });
-
-  return <CustomersClient initialCustomers={withStats} />;
+  return <CustomersClient initialCustomers={customers} userRole={role} />;
 }
