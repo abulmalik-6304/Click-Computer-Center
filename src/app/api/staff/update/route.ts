@@ -98,7 +98,11 @@ export async function PUT(req: NextRequest) {
     // Apply updates
     if (updates.userName !== undefined) targetRow.set("User_Name", updates.userName);
     if (updates.phone !== undefined) targetRow.set("Phone No", updates.phone);
-    if (updates.role !== undefined) targetRow.set("Role", updates.role);
+    if (updates.role !== undefined) {
+      // ✅ Write lowercase to sheet (owner/manager/staff/employee)
+      const normalizedNewRole = normalizeRole(updates.role);
+      targetRow.set("Role", normalizedNewRole);
+    }
     if (updates.profilePicture !== undefined)
       targetRow.set("Profile Picture", updates.profilePicture);
     if (updates.status !== undefined) targetRow.set("Status", updates.status);
