@@ -10,6 +10,22 @@ interface DetailData {
   stats: any;
   stockInLogs: any[];
   salesLogs: any[];
+  priceAnalysis?: {
+    lastPurchaseCost: number;
+    firstPurchaseCost: number;
+    minPurchaseCost: number;
+    maxPurchaseCost: number;
+    avgPurchaseCost: number;
+    lastSalePrice: number;
+    lastSaleCost: number;
+    priceHistory: {
+      date: string;
+      costPrice: number;
+      sellingPrice: number;
+      quantity: number;
+      source: string;
+    }[];
+  };
 }
 
 export default function ItemDetailModal({
@@ -33,7 +49,9 @@ export default function ItemDetailModal({
       setLoading(true);
       setError("");
       try {
-        const res = await fetch(`/api/inventory/detail?itemId=${itemId}`);
+        const res = await fetch(`/api/inventory/detail?itemId=${itemId}`, {
+          cache: "no-store",
+        });
         const d = await res.json();
         if (!res.ok) {
           setError(d.error || "Failed to load");
@@ -350,6 +368,79 @@ export default function ItemDetailModal({
                   label="Profit Margin"
                   value={`${data.stats.profitMargin ?? 0}%`}
                 />
+              </Section>
+            )}
+
+            {/* ✅ PRICE HISTORY — Dynamic prices over time */}
+            {canSeeFinance && data.priceAnalysis && (
+              <Section title="📊 Price History (Dynamic Pricing)" icon="💰">
+                <div className="grid grid-cols-2 gap-3 mb-3">
+                  <div className="p-2 bg-blue-50 border border-blue-200 rounded">
+                    <p className="text-xs text-blue-700">Min Purchase Cost</p>
+                    <p className="font-bold text-slate-900">
+                      {data.priceAnalysis.minPurchaseCost.toLocaleString()} ETB
+                    </p>
+                  </div>
+                  <div className="p-2 bg-orange-50 border border-orange-200 rounded">
+                    <p className="text-xs text-orange-700">Max Purchase Cost</p>
+                    <p className="font-bold text-slate-900">
+                      {data.priceAnalysis.maxPurchaseCost.toLocaleString()} ETB
+                    </p>
+                  </div>
+                  <div className="p-2 bg-emerald-50 border border-emerald-200 rounded">
+                    <p className="text-xs text-emerald-700">Avg Purchase Cost</p>
+                    <p className="font-bold text-slate-900">
+                      {data.priceAnalysis.avgPurchaseCost.toLocaleString()} ETB
+                    </p>
+                  </div>
+                  <div className="p-2 bg-slate-50 border border-slate-200 rounded">
+                    <p className="text-xs text-slate-700">Last Sale Cost (Frozen)</p>
+                    <p className="font-bold text-slate-900">
+                      {data.priceAnalysis.lastSaleCost.toLocaleString()} ETB
+                    </p>
+                  </div>
+                </div>
+
+                {data.priceAnalysis.priceHistory.length > 0 && (
+                  <div className="overflow-hidden border border-slate-200 rounded-lg">
+                    <table className="w-full text-xs">
+                      <thead className="bg-slate-100">
+                        <tr>
+                          <th className="text-left px-2 py-2 font-semibold">Date</th>
+                          <th className="text-right px-2 py-2 font-semibold">Cost</th>
+                          <th className="text-right px-2 py-2 font-semibold">Sale</th>
+                          <th className="text-center px-2 py-2 font-semibold">Qty</th>
+                          <th className="text-left px-2 py-2 font-semibold">Source</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {data.priceAnalysis.priceHistory.map((p, idx) => (
+                          <tr key={idx} className="border-t border-slate-100">
+                            <td className="px-2 py-1.5">{p.date.slice(0, 10)}</td>
+                            <td className="px-2 py-1.5 text-right">
+                              {p.costPrice.toLocaleString()}
+                            </td>
+                            <td className="px-2 py-1.5 text-right">
+                              {p.sellingPrice > 0 ? p.sellingPrice.toLocaleString() : "—"}
+                            </td>
+                            <td className="px-2 py-1.5 text-center">{p.quantity}</td>
+                            <td className="px-2 py-1.5">
+                              <span
+                                className={`px-1.5 py-0.5 rounded text-xs font-medium ${
+                                  p.source === "purchase"
+                                    ? "bg-blue-100 text-blue-700"
+                                    : "bg-emerald-100 text-emerald-700"
+                                }`}
+                              >
+                                {p.source === "purchase" ? "📥 Buy" : "🛒 Sale"}
+                              </span>
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                )}
               </Section>
             )}
 
