@@ -57,26 +57,62 @@ export async function POST(req: NextRequest) {
         );
       }
 
+      const invObj = invRow.toObject() as any;
+
+      // ═══════════════════════════════════════════════════════════════
+      // ✅ CRITICAL FIX — Use || instead of ?? to catch empty strings
+      // ═══════════════════════════════════════════════════════════════
+      // Inventory_TBL has "Cost_Price" (NOT Avg_Cost)
+      // If Avg_Cost is empty string "", ?? won't skip it — || will
+      const rawCost =
+        invObj.Cost_Price ||
+        invObj.Avg_Cost ||
+        invObj.CostPrice ||
+        invObj.AvgCost ||
+        invObj.costPrice ||
+        invObj.cost ||
+        0;
+
+      const costPerItem = Number(rawCost) || 0;
+
+      // ═══════════════════════════════════════════════════════════════
+      // ✅ SELLING PRICE — same robust pattern
+      // ═══════════════════════════════════════════════════════════════
+      const rawSelling =
+        invObj.Selling_Price ||
+        invObj.SellingPrice ||
+        invObj.sellingPrice ||
+        invObj.Price ||
+        invObj.price ||
+        cartItem.sellingPrice ||
+        0;
+
+      const sellingPrice = Number(rawSelling) || 0;
+
       const calc = stockMap[cartItem.itemId];
       const currentStock = calc?.currentStock ?? 0;
       const qty = Number(cartItem.quantity);
 
-      // ═══════════════════════════════════════════════════════════════
-      // ✅ FROZEN COSTS — capture at sale time (Avg_Cost is dynamic)
-      // ═══════════════════════════════════════════════════════════════
-      const costPerItem = Number(
-        invRow.get("Avg_Cost") ?? invRow.get("Cost_Price") ?? 0
+      // ✅ Debug log
+      console.log(
+        `💰 [${invObj.Item_ID}] ${invObj.Item_Name}: ` +
+        `rawCost=${rawCost}, cost=${costPerItem}, sell=${sellingPrice}, qty=${qty}`
       );
-      const sellingPrice = Number(
-        cartItem.sellingPrice ?? invRow.get("Selling_Price") ?? 0
-      );
+
+      // ⚠️ Validate cost was found
+      if (costPerItem <= 0) {
+        console.error(
+          `⚠️ WARNING: Cost_Price not found for ${invObj.Item_Name}. ` +
+          `Check Inventory_TBL columns: ${Object.keys(invObj).join(", ")}`
+        );
+      }
 
       // Price floor: cost + 10%
       const floorPrice = costPerItem * 1.1;
       if (sellingPrice < floorPrice) {
         return NextResponse.json(
           {
-            error: `Selling price for ${invRow.get("Item_Name")} too low. Min: ${floorPrice.toFixed(2)} ETB`,
+            error: `Selling price for ${invObj.Item_Name} too low. Min: ${floorPrice.toFixed(2)} ETB (cost: ${costPerItem} ETB)`,
           },
           { status: 400 }
         );
@@ -85,24 +121,23 @@ export async function POST(req: NextRequest) {
       if (saleStatus === "Completed" && currentStock < qty) {
         return NextResponse.json(
           {
-            error: `Insufficient stock for ${invRow.get("Item_Name")}: have ${currentStock}, need ${qty}`,
+            error: `Insufficient stock for ${invObj.Item_Name}: have ${currentStock}, need ${qty}`,
           },
           { status: 400 }
         );
       }
 
-      // ✅ FROZEN VALUES — written permanently to Sales_Items_TBL
       const lineTotalPrice = Math.round(sellingPrice * qty * 100) / 100;
       const lineTotalCost = Math.round(costPerItem * qty * 100) / 100;
 
       lines.push({
-        itemId: invRow.get("Item_ID"),
-        itemName: invRow.get("Item_Name"),
+        itemId: invObj.Item_ID,
+        itemName: invObj.Item_Name,
         sellingPrice,
         quantity: qty,
         totalPrice: lineTotalPrice,
-        costPerItem,  // ✅ FROZEN — current Avg_Cost at sale time
-        totalCost: lineTotalCost,  // ✅ FROZEN — costPerItem × qty
+        costPerItem,   // ✅ FROZEN
+        totalCost: lineTotalCost,
         invRow,
       });
     }
@@ -138,7 +173,7 @@ export async function POST(req: NextRequest) {
     });
 
     // ═══════════════════════════════════════════════════════════════
-    // ✅ SALES_ITEMS — Frozen cost saved permanently
+    // ✅ SALES_ITEMS_TBL — Cost_Per_Item (column H) + Total_Cost_Amount (column I)
     // ═══════════════════════════════════════════════════════════════
     const itemsSheet = await getSheet(SHEETS.SALES_ITEMS);
     const itemRows = await itemsSheet.getRows();
@@ -151,15 +186,14 @@ export async function POST(req: NextRequest) {
         Sales_ID: salesId,
         Item_ID: line.itemId,
         Item_Name: line.itemName,
-        Selling_Price: line.sellingPrice,  // ✅ FROZEN
+        Selling_Price: line.sellingPrice,
         Quantity: line.quantity,
-        Total_Price: line.totalPrice,  // ✅ FROZEN
-        Cost_Per_Item: line.costPerItem,  // ✅ FROZEN (cost at sale time)
-        Total_Cost_Amount: line.totalCost,  // ✅ FROZEN
+        Total_Price: line.totalPrice,
+        Cost_Per_Item: line.costPerItem,   // ✅ FROZEN — inventory cost
+        Total_Cost_Amount: line.totalCost,  // ✅ FROZEN — cost × qty
       });
     }
 
-    // Invalidate caches
     await refreshCache(SHEETS.SALES);
     await refreshCache(SHEETS.SALES_ITEMS);
 
@@ -171,6 +205,12 @@ export async function POST(req: NextRequest) {
       paidAmount: paidAmountNum,
       paymentStatus,
       saleStatus,
+      lines: lines.map((l) => ({
+        item: l.itemName,
+        cost: l.costPerItem,
+        sell: l.sellingPrice,
+        qty: l.quantity,
+      })),
     });
   } catch (e: any) {
     console.error("Sale error:", e);
