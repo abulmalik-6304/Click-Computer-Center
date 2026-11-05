@@ -11,11 +11,18 @@ function fmt(n: any): string {
   return isNaN(num) ? "0" : num.toLocaleString();
 }
 
+// ✅ Phone cleaner — strips spaces, dashes, +
 function cleanPhone(phone: string): string {
-  return String(phone || "").replace(/[^\d+]/g, ""
+  return String(phone || "").replace(/[^\d+]/g, "").replace(/^\+/, "");
+}
+
+// ✅ WhatsApp URL
+function whatsAppUrl(phone: string): string {
+  const clean = cleanPhone(phone);
   return clean ? `https://wa.me/${clean}` : "";
 }
 
+// ✅ Telegram URL
 function telegramUrl(phone: string): string {
   const clean = cleanPhone(phone);
   return clean ? `https://t.me/+${clean}` : "";
