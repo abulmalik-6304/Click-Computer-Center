@@ -20,6 +20,8 @@ export const PERMISSION_HEADERS = [
   "Can_View_Activity",
   "Can_Manage_Staff",
   "Can_View_Profit",
+  "Can_Print_Customers", // ✅ አዲስ
+  "Can_Print_Suppliers", // ✅ አዲስ
   "Updated_By",
   "Updated_At",
 ];
@@ -34,6 +36,8 @@ export interface ManagerPermissions {
   canViewActivity: boolean;
   canManageStaff: boolean;
   canViewProfit: boolean;
+  canPrintCustomers: boolean; // ✅ አዲስ
+  canPrintSuppliers: boolean; // ✅ አዲስ
 }
 
 export const DEFAULT_PERMISSIONS: Omit<ManagerPermissions, "email"> = {
@@ -45,6 +49,8 @@ export const DEFAULT_PERMISSIONS: Omit<ManagerPermissions, "email"> = {
   canViewActivity: false,
   canManageStaff: false,
   canViewProfit: false,
+  canPrintCustomers: false, // ✅ አዲስ
+  canPrintSuppliers: false, // ✅ አዲስ
 };
 
 export type PermissionKey =
@@ -55,7 +61,9 @@ export type PermissionKey =
   | "canExport"
   | "canViewActivity"
   | "canManageStaff"
-  | "canViewProfit";
+  | "canViewProfit"
+  | "canPrintCustomers" // ✅ አዲስ
+  | "canPrintSuppliers"; // ✅ አዲስ
 
 // ═══════════════════════════════════════════════════════════════
 // GET: Load permissions for a manager
@@ -73,18 +81,28 @@ export async function getManagerPermissions(
     );
     if (!row) return null;
 
-    const bool = (v: any) => String(v || "FALSE").toUpperCase() === "TRUE";
+    const obj = row.toObject() as any;
+    const getBool = (keys: string[]): boolean => {
+      for (const k of keys) {
+        if (obj[k] !== undefined && obj[k] !== null && obj[k] !== "") {
+          return String(obj[k]).toUpperCase() === "TRUE";
+        }
+      }
+      return false;
+    };
 
     return {
-      email: String(row.get("Manager_Email") || ""),
-      canVoid: bool(row.get("Can_Void")),
-      canRefund: bool(row.get("Can_Refund")),
-      canDelete: bool(row.get("Can_Delete")),
-      canEditInventory: bool(row.get("Can_Edit_Inventory")),
-      canExport: bool(row.get("Can_Export")),
-      canViewActivity: bool(row.get("Can_View_Activity")),
-      canManageStaff: bool(row.get("Can_Manage_Staff")),
-      canViewProfit: bool(row.get("Can_View_Profit")),
+      email: String(obj.Manager_Email || ""),
+      canVoid: getBool(["Can_Void", "CanVoid", "canVoid"]),
+      canRefund: getBool(["Can_Refund", "CanRefund", "canRefund"]),
+      canDelete: getBool(["Can_Delete", "CanDelete", "canDelete"]),
+      canEditInventory: getBool(["Can_Edit_Inventory", "CanEditInventory", "canEditInventory"]),
+      canExport: getBool(["Can_Export", "CanExport", "canExport"]),
+      canViewActivity: getBool(["Can_View_Activity", "CanViewActivity", "canViewActivity"]),
+      canManageStaff: getBool(["Can_Manage_Staff", "CanManageStaff", "canManageStaff"]),
+      canViewProfit: getBool(["Can_View_Profit", "CanViewProfit", "canViewProfit"]),
+      canPrintCustomers: getBool(["Can_Print_Customers", "CanPrintCustomers", "canPrintCustomers"]), // ✅
+      canPrintSuppliers: getBool(["Can_Print_Suppliers", "CanPrintSuppliers", "canPrintSuppliers"]), // ✅
     };
   } catch (e: any) {
     if (String(e.message).includes("not found")) return null;
@@ -128,6 +146,8 @@ export async function setManagerPermissions(
       Can_View_Activity: permissions.canViewActivity ? "TRUE" : "FALSE",
       Can_Manage_Staff: permissions.canManageStaff ? "TRUE" : "FALSE",
       Can_View_Profit: permissions.canViewProfit ? "TRUE" : "FALSE",
+      Can_Print_Customers: permissions.canPrintCustomers ? "TRUE" : "FALSE", // ✅
+      Can_Print_Suppliers: permissions.canPrintSuppliers ? "TRUE" : "FALSE", // ✅
     };
 
     if (existing) {
