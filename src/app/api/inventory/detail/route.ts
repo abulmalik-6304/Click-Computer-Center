@@ -38,7 +38,7 @@ export async function GET(req: NextRequest) {
       code: String(invObj.Item_Code || ""),
       category: String(invObj.Category || invObj.Unit_Type || "General"),
       image: String(invObj.Item_Image || ""),
-      stock,  // ✅ CALCULATED
+      stock, // ✅ CALCULATED
       costPrice: Number(invObj.Cost_Price || 0),
       sellingPrice: Number(invObj.Selling_Price || 0),
       avgCost: Number(invObj.Avg_Cost || invObj.Cost_Price || 0),
@@ -147,6 +147,71 @@ export async function GET(req: NextRequest) {
     const profitMargin =
       totalRevenue > 0 ? Math.round((totalProfit / totalRevenue) * 1000) / 10 : 0;
 
+    // ═══════════════════════════════════════════════════════════════
+    // ✅ PRICE HISTORY — Track how costs/prices changed over time
+    // ═══════════════════════════════════════════════════════════════
+    const priceHistory: {
+      date: string;
+      costPrice: number;
+      sellingPrice: number;
+      quantity: number;
+      source: "purchase" | "sale";
+    }[] = [];
+
+    // From Stock_In — purchase prices
+    try {
+      const stockSheet = await getSheet(SHEETS.STOCK_IN);
+      const stockRows = await stockSheet.getRows();
+      for (const r of stockRows) {
+        const obj = r.toObject() as any;
+        if (String(obj.Item_ID) !== itemId) continue;
+        priceHistory.push({
+          date: String(obj.Date || ""),
+          costPrice: Number(obj.Buying_Price || 0),
+          sellingPrice: 0,
+          quantity: Number(obj.Quantity_In || 0),
+          source: "purchase",
+        });
+      }
+    } catch {
+      /* ignore */
+    }
+
+    // From Sales_Items — frozen sale prices
+    for (const log of salesLogs) {
+      priceHistory.push({
+        date: log.saleDate,
+        costPrice: log.costPerItem,
+        sellingPrice: log.sellingPrice,
+        quantity: log.quantity,
+        source: "sale",
+      });
+    }
+
+    // Sort newest first
+    priceHistory.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
+
+    // Calculate price changes
+    const purchaseHistory = priceHistory.filter((p) => p.source === "purchase");
+    const saleHistory = priceHistory.filter((p) => p.source === "sale");
+
+    const priceAnalysis = {
+      lastPurchaseCost: purchaseHistory[0]?.costPrice ?? 0,
+      firstPurchaseCost: purchaseHistory[purchaseHistory.length - 1]?.costPrice ?? 0,
+      minPurchaseCost: purchaseHistory.length > 0
+        ? Math.min(...purchaseHistory.map((p) => p.costPrice))
+        : 0,
+      maxPurchaseCost: purchaseHistory.length > 0
+        ? Math.max(...purchaseHistory.map((p) => p.costPrice))
+        : 0,
+      avgPurchaseCost: purchaseHistory.length > 0
+        ? round2(purchaseHistory.reduce((s, p) => s + p.costPrice, 0) / purchaseHistory.length)
+        : 0,
+      lastSalePrice: saleHistory[0]?.sellingPrice ?? 0,
+      lastSaleCost: saleHistory[0]?.costPrice ?? 0,
+      priceHistory: priceHistory.slice(0, 20), // Last 20
+    };
+
     return NextResponse.json({
       item: isOwnerOrManager
         ? { ...item, supplierName }
@@ -174,6 +239,7 @@ export async function GET(req: NextRequest) {
       },
       stockInLogs: isOwnerOrManager ? stockInLogs.slice(0, 20) : [],
       salesLogs: isOwnerOrManager ? salesLogs.slice(0, 20) : salesLogs.slice(0, 5),
+      priceAnalysis: isOwnerOrManager ? priceAnalysis : null, // ✅ አዲስ
     });
   } catch (e: any) {
     console.error("Detail error:", e);
