@@ -2,26 +2,31 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import { CustomerWithStats } from "./page";
+import { Customer } from "./page";
+import { CUSTOMER_TYPE_COLORS, CUSTOMER_TYPE_ICONS } from "@/lib/supplier-customer-types";
 
 type ModalMode = "create" | "edit" | null;
 
-const TYPE_COLORS: Record<string, string> = {
-  regular: "bg-slate-100 text-slate-700",
-  vip: "bg-amber-100 text-amber-700",
-  wholesale: "bg-emerald-100 text-emerald-700",
-};
+function fmt(n: any): string {
+  const num = Number(n);
+  return isNaN(num) ? "0" : num.toLocaleString();
+}
 
 export default function CustomersClient({
   initialCustomers,
+  userRole,
 }: {
-  initialCustomers: CustomerWithStats[];
+  initialCustomers: Customer[];
+  userRole: string;
 }) {
   const [items, setItems] = useState(initialCustomers);
   const [q, setQ] = useState("");
   const [typeFilter, setTypeFilter] = useState<"all" | "regular" | "vip" | "wholesale">("all");
   const [modal, setModal] = useState<ModalMode>(null);
-  const [active, setActive] = useState<CustomerWithStats | null>(null);
+  const [active, setActive] = useState<Customer | null>(null);
+
+  const canEdit = ["owner", "manager"].includes(userRole);
+  const canDelete = ["owner", "manager"].includes(userRole);
 
   const filtered = useMemo(() => {
     let out = items;
@@ -49,12 +54,9 @@ export default function CustomersClient({
 
   async function refresh() {
     try {
-      const res = await fetch("/api/customers");
+      const res = await fetch("/api/customers", { cache: "no-store" });
       const data = await res.json();
-      if (Array.isArray(data.customers)) {
-        // Reload from server (which recalculates stats)
-        window.location.reload();
-      }
+      if (Array.isArray(data.customers)) setItems(data.customers);
     } catch (e) {
       console.error(e);
     }
@@ -62,19 +64,21 @@ export default function CustomersClient({
 
   return (
     <div className="p-4 sm:p-6 lg:p-10 space-y-6">
+      {/* Header */}
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
         <div>
           <h1 className="text-2xl sm:text-3xl font-bold text-slate-900">🧑 Customers</h1>
           <p className="text-sm text-slate-500 mt-1">
-            {stats.total} customers · {stats.vip} VIP · {stats.wholesale} wholesale
-          </p>
-        </div>
-        <button
-          onClick={() => { setActive(null); setModal("create"); }}
-          className="inline-flex items-center gap-2 px-4 py-2.5 bg-orange-500 hover:bg-orange-600 text-white font-semibold rounded-lg shadow-sm transition"
-        >
-          + Add Customer
-        </button>
+            {stats.total} customers · {stats.vip} VIP · {stats.wholesale}
+                    </div>
+        {canEdit && (
+          <button
+            onClick={() => { setActive(null); setModal("create"); }}
+            className="inline-flex items-center gap-2 px-4 py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white font-semibold rounded-lg shadow-sm"
+          >
+            + Add Customer
+          </button>
+        )}
       </div>
 
       {/* Stats */}
@@ -82,10 +86,14 @@ export default function CustomersClient({
         <StatCard label="Total Customers" value={stats.total} color="slate" />
         <StatCard label="VIP" value={stats.vip} color="amber" />
         <StatCard label="Wholesale" value={stats.wholesale} color="emerald" />
-        <StatCard label="Lifetime Value" value={`${stats.lifetimeValue.toLocaleString()} ETB`} color="emerald" />
+        <StatCard
+          label="Lifetime Value"
+          value={`${fmt(stats.lifetimeValue)} ETB`}
+          color="emerald"
+        />
       </div>
 
-      {/* Filters */}
+      {/* Filter Bar */}
       <div className="bg-white p-4 rounded-2xl border border-slate-200 space-y-3">
         <input
           value={q}
@@ -109,11 +117,19 @@ export default function CustomersClient({
         </div>
       </div>
 
-      {/* List */}
+      {/* Grid */}
       {filtered.length === 0 ? (
         <div className="bg-white rounded-2xl border border-slate-200 p-12 text-center">
           <p className="text-4xl mb-3">🧑</p>
-          <p className="text-slate-500">No customers yet</p>
+          <p className="text-slate-500">No customers found</p>
+          {canEdit && (
+            <button
+              onClick={() => setModal("create")}
+              className="mt-4 px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white font-semibold rounded-lg text-sm"
+            >
+              Add the first one
+            </button>
+          )}
         </div>
       ) : (
         <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-5">
@@ -124,23 +140,27 @@ export default function CustomersClient({
             >
               <div className="flex items-start gap-3">
                 <div className="w-12 h-12 rounded-full bg-orange-100 text-orange-700 flex items-center justify-center text-xl font-bold flex-shrink-0">
-                  {c.name.charAt(0).toUpperCase()}
+                  {c.name.charAt(0).toUpperCase() || "?"}
                 </div>
                 <div className="flex-1 min-w-0">
                   <p className="font-bold text-slate-900 truncate">{c.name}</p>
-                  <p className="text-sm text-slate-500 truncate">{c.phone || "—"}</p>
+                  <p className="text-sm text-slate-500 truncate">{c.phone || "No phone"}</p>
                   <span
-                    className={`inline-block mt-1 px-2 py-0.5 rounded-full text-xs font-semibold capitalize ${
-                      TYPE_COLORS[c.type.toLowerCase()] ?? "bg-slate-100"
+                    className={`inline-flex items-center gap-1 mt-1 px-2 py-0.5 rounded-full text-xs font-semibold ${
+                      CUSTOMER_TYPE_COLORS[c.type.toLowerCase()] ?? "bg-slate-100"
                     }`}
                   >
-                    {c.type}
+                    {CUSTOMER_TYPE_ICONS[c.type.toLowerCase()] ?? "👤"} {c.type}
                   </span>
                 </div>
               </div>
 
               <div className="mt-4 pt-4 border-t border-slate-100 space-y-1 text-sm">
-                {c.email && <p className="text-slate-700 truncate">📧 {c.email}</p>}
+                {c.email && (
+                  <p className="text-slate-700 truncate">
+                    <span className="text-slate-500">📧</span> {c.email}
+                  </p>
+                )}
                 <div className="flex justify-between">
                   <span className="text-slate-500">Purchases:</span>
                   <span className="font-semibold text-slate-900">{c.transactionCount}</span>
@@ -148,203 +168,243 @@ export default function CustomersClient({
                 <div className="flex justify-between">
                   <span className="text-slate-500">Lifetime value:</span>
                   <span className="font-semibold text-emerald-600">
-                    {c.totalAmount.toLocaleString()} ETB
+                    {fmt(c.totalAmount)} ETB
                   </span>
                 </div>
                 {c.lastPurchase && (
                   <div className="flex justify-between">
                     <span className="text-slate-500">Last:</span>
-                    <span className="text-slate-700">{c.lastPurchase.slice(0, 10)}</span>
+                    <span className="text-slate-700 text-xs">
+                      {c.lastPurchase.slice(0, 10)}
+                    </span>
                   </div>
                 )}
               </div>
 
-              <div className="mt-4 flex gap-2">
-                <button
-                  onClick={() => { setActive(c); setModal("edit"); }}
-                  className="flex-1 px-3 py-2 text-sm font-medium rounded-lg bg-slate-100 hover:bg-slate-200 text-slate-700 transition"
-                >
-                  ✏️ Edit
-                </button>
-                <button
-                  onClick={() => handleDelete(c.id)}
-                  className="px-3 py-2 text-sm font-medium rounded-lg bg-red-50 hover:bg-red-100 text-red-600 transition"
-                >
-                  🗑️
-                </button>
-              </div>
+              {canEdit && (
+                <div className="mt-4 pt-4 border-t border-slate-100 grid grid-cols-2 gap-2">
+                  <button
+                    onClick={() => { setActive(c); setModal("edit"); }}
+                    className="py-2 text-xs bg-slate-100 hover:bg-slate-200 text-slate-700 font-medium rounded-lg"
+                  >
+                    ✏️ Edit
+                  </button>
+                  <button
+                    onClick={async () => {
+                      if (!confirm(`Delete "${c.name}"?`)) return;
+                      await fetch("/api/customers", {
+                        method: "DELETE",
+                        headers: { "Content-Type": "application/json" },
+                        body: JSON.stringify({ id: c.id }),
+                      });
+                      refresh();
+                    }}
+                    className="py-2 text-xs bg-red-100 hover:bg-red-200 text-red-700 font-medium rounded-lg"
+                  >
+                    🗑 Delete
+                  </button>
+                </div>
+              )}
             </div>
           ))}
         </div>
       )}
 
-      {/* Modal */}
-      {modal && (
-        <CustomerModal
-          mode={modal}
-          customer={active}
+      {modal === "create" && (
+        <CustomerForm
+          title="Add Customer"
+          onClose={() => setModal(null)}
+          onSaved={() => { setModal(null); refresh(); }}
+        />
+      )}
+      {modal === "edit" && active && (
+        <CustomerForm
+          title={`Edit: ${active.name}`}
+          existing={active}
           onClose={() => { setModal(null); setActive(null); }}
-          onSaved={refresh}
+          onSaved={() => { setModal(null); setActive(null); refresh(); }}
         />
       )}
     </div>
   );
-
-  async function handleDelete(id: string) {
-    if (!confirm("Delete this customer? This cannot be undone.")) return;
-    try {
-      const res = await fetch(`/api/customers/${id}`, { method: "DELETE" });
-      if (res.ok) {
-        setItems((prev) => prev.filter((c) => c.id !== id));
-      } else {
-        alert("Failed to delete customer");
-      }
-    } catch (e) {
-      console.error(e);
-      alert("Failed to delete customer");
-    }
-  }
 }
 
-function StatCard({
-  label,
-  value,
-  color,
-}: {
-  label: string;
-  value: string | number;
-  color: "slate" | "amber" | "emerald";
-}) {
-  const colorMap = {
-    slate: "bg-slate-50 border-slate-200 text-slate-900",
-    amber: "bg-amber-50 border-amber-200 text-amber-900",
-    emerald: "bg-emerald-50 border-emerald-200 text-emerald-900",
-  };
-  return (
-    <div className={`rounded-2xl border p-4 ${colorMap[color]}`}>
-      <p className="text-xs font-semibold opacity-70">{label}</p>
-      <p className="text-xl sm:text-2xl font-bold mt-1">{value}</p>
-    </div>
-  );
-}
-
-function CustomerModal({
-  mode,
-  customer,
+// ─── Customer Form Modal ───
+function CustomerForm({
+  title,
+  existing,
   onClose,
   onSaved,
 }: {
-  mode: "create" | "edit";
-  customer: CustomerWithStats | null;
+  title: string;
+  existing?: Customer;
   onClose: () => void;
   onSaved: () => void;
 }) {
-  const [name, setName] = useState(customer?.name ?? "");
-  const [phone, setPhone] = useState(customer?.phone ?? "");
-  const [email, setEmail] = useState(customer?.email ?? "");
-  const [type, setType] = useState(customer?.type ?? "regular");
+  const [form, setForm] = useState({
+    name: existing?.name ?? "",
+    phone: existing?.phone ?? "",
+    email: existing?.email ?? "",
+    type: existing?.type ?? "Regular",
+    address: existing?.address ?? "",
+  });
   const [saving, setSaving] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+  const [error, setError] = useState("");
 
-  async function handleSubmit(e: React.FormEvent) {
+  async function submit(e: React.FormEvent) {
     e.preventDefault();
-    setError(null);
     setSaving(true);
+    setError("");
     try {
-      const url = mode === "create" ? "/api/customers" : `/api/customers/${customer?.id}`;
-      const method = mode === "create" ? "POST" : "PATCH";
-      const res = await fetch(url, {
+      const method = existing ? "PUT" : "POST";
+      const body = existing ? { id: existing.id, ...form } : form;
+      const res = await fetch("/api/customers", {
         method,
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ name, phone, email, type }),
+        body: JSON.stringify(body),
       });
+      const data = await res.json();
       if (!res.ok) {
-        const data = await res.json().catch(() => ({}));
-        throw new Error(data.error || "Failed to save customer");
+        setError(data.error || "Failed");
+        setSaving(false);
+        return;
       }
       onSaved();
-      onClose();
     } catch (e: any) {
-      setError(e.message || "Failed to save customer");
-    } finally {
+      setError(e.message);
       setSaving(false);
     }
   }
 
   return (
-    <div className="fixed inset-0 bg-black/40 flex items-center justify-center p-4 z-50">
-      <div className="bg-white rounded-2xl shadow-xl w-full max-w-md p-6 space-y-4">
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60">
+      <form
+        onSubmit={submit}
+        className="bg-white rounded-2xl shadow-2xl w-full max-w-md max-h-[90vh] overflow-y-auto p-6 space-y-4"
+      >
         <div className="flex items-center justify-between">
-          <h2 className="text-lg font-bold text-slate-900">
-            {mode === "create" ? "Add Customer" : "Edit Customer"}
-          </h2>
-          <button onClick={onClose} className="text-slate-400 hover:text-slate-600 text-xl">
+          <h2 className="text-xl font-bold text-slate-900">{title}</h2>
+          <button
+            type="button"
+            onClick={onClose}
+            className="text-slate-400 hover:text-slate-900 text-xl"
+          >
             ✕
           </button>
         </div>
 
+        <Field
+          label="Full Name *"
+          value={form.name}
+          onChange={(v) => setForm({ ...form, name: v })}
+          required
+        />
+        <Field
+          label="Phone"
+          type="tel"
+          value={form.phone}
+          onChange={(v) => setForm({ ...form, phone: v })}
+          placeholder="+251 9XX XXX XXX"
+        />
+        <Field
+          label="Email"
+          type="email"
+          value={form.email}
+          onChange={(v) => setForm({ ...form, email: v })}
+        />
+
+        <div>
+          <label className="block text-sm font-semibold text-slate-900 mb-1">
+            Customer Type
+          </label>
+          <select
+            value={form.type}
+            onChange={(e) => setForm({ ...form, type: e.target.value })}
+            className="w-full rounded-lg border border-slate-300 px-3 py-2.5 text-slate-900"
+          >
+            <option value="Regular">👤 Regular</option>
+            <option value="VIP">⭐ VIP</option>
+            <option value="Wholesale">🏪 Wholesale</option>
+          </select>
+        </div>
+
+        <Field
+          label="Address"
+          value={form.address}
+          onChange={(v) => setForm({ ...form, address: v })}
+        />
+
         {error && (
-          <div className="bg-red-50 text-red-600 text-sm px-3 py-2 rounded-lg">{error}</div>
+          <div className="p-3 bg-red-50 border border-red-200 rounded-lg">
+            <p className="text-sm text-red-700">{error}</p>
+          </div>
         )}
 
-        <form onSubmit={handleSubmit} className="space-y-3">
-          <div>
-            <label className="text-sm font-medium text-slate-700">Name *</label>
-            <input
-              required
-              value={name}
-              onChange={(e) => setName(e.target.value)}
-              className="w-full mt-1 rounded-lg border border-slate-300 px-3 py-2 text-slate-900"
-            />
-          </div>
-          <div>
-            <label className="text-sm font-medium text-slate-700">Phone</label>
-            <input
-              value={phone}
-              onChange={(e) => setPhone(e.target.value)}
-              className="w-full mt-1 rounded-lg border border-slate-300 px-3 py-2 text-slate-900"
-            />
-          </div>
-          <div>
-            <label className="text-sm font-medium text-slate-700">Email</label>
-            <input
-              type="email"
-              value={email}
-              onChange={(e) => setEmail(e.target.value)}
-              className="w-full mt-1 rounded-lg border border-slate-300 px-3 py-2 text-slate-900"
-            />
-          </div>
-          <div>
-            <label className="text-sm font-medium text-slate-700">Type</label>
-            <select
-              value={type}
-              onChange={(e) => setType(e.target.value)}
-              className="w-full mt-1 rounded-lg border border-slate-300 px-3 py-2 text-slate-900 capitalize"
-            >
-              <option value="regular">Regular</option>
-              <option value="vip">VIP</option>
-              <option value="wholesale">Wholesale</option>
-            </select>
-          </div>
+        <div className="flex gap-2">
+          <button
+            type="button"
+            onClick={onClose}
+            className="flex-1 py-2.5 rounded-lg border border-slate-300 text-slate-700 font-medium"
+          >
+            Cancel
+          </button>
+          <button
+            type="submit"
+            disabled={saving}
+            className="flex-1 py-2.5 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white font-semibold disabled:opacity-50"
+          >
+            {saving ? "Saving…" : existing ? "Save Changes" : "Add Customer"}
+          </button>
+        </div>
+      </form>
+    </div>
+  );
+}
 
-          <div className="flex gap-2 pt-2">
-            <button
-              type="button"
-              onClick={onClose}
-              className="flex-1 px-3 py-2 text-sm font-medium rounded-lg bg-slate-100 hover:bg-slate-200 text-slate-700 transition"
-            >
-              Cancel
-            </button>
-            <button
-              type="submit"
-              disabled={saving}
-              className="flex-1 px-3 py-2 text-sm font-semibold rounded-lg bg-orange-500 hover:bg-orange-600 text-white transition disabled:opacity-50"
-            >
-              {saving ? "Saving…" : "Save"}
-            </button>
-          </div>
-        </form>
-      </div>
+function StatCard({ label, value, color }: { label: string; value: any; color: string }) {
+  const cls =
+    {
+      slate: "text-slate-700 bg-slate-50",
+      emerald: "text-emerald-700 bg-emerald-50",
+      orange: "text-orange-700 bg-orange-50",
+      amber: "text-amber-700 bg-amber-50",
+    }[color] ?? "text-slate-700 bg-slate-50";
+  return (
+    <div className={`${cls} p-4 rounded-2xl border border-slate-200`}>
+      <p className="text-xs font-medium opacity-75">{label}</p>
+      <p className="mt-1 text-xl font-bold">{value}</p>
+    </div>
+  );
+}
+
+function Field({
+  label,
+  value,
+  onChange,
+  type = "text",
+  required,
+  placeholder,
+}: {
+  label: string;
+  value: string;
+  onChange: (v: string) => void;
+  type?: string;
+  required?: boolean;
+  placeholder?: string;
+}) {
+  return (
+    <div>
+      <label className="block text-sm font-semibold text-slate-900 mb-1">
+        {label}
+      </label>
+      <input
+        type={type}
+        value={value}
+        onChange={(e) => onChange(e.target.value)}
+        required={required}
+        placeholder={placeholder}
+        className="w-full rounded-lg border border-slate-300 px-3 py-2.5 text-slate-900 focus:ring-2 focus:ring-orange-500"
+      />
     </div>
   );
 }
