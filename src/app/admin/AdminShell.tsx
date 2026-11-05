@@ -3,7 +3,7 @@
 
 import { useState } from "react";
 import Link from "next/link";
-import { usePathname } from "next/navigation";
+import { usePathname, useRouter } from "next/navigation";
 import { signOut } from "next-auth/react";
 import { toDriveImageUrl as formatDriveUrl } from "@/lib/drive-url";
 import ProfilePhotoModal from "@/components/admin/ProfilePhotoModal";
@@ -12,8 +12,8 @@ const NAV = [
   { href: "/admin/dashboard", label: "Dashboard", icon: "📊", roles: ["owner", "manager", "employee", "staff"] },
   { href: "/admin/inventory", label: "Inventory", icon: "📦", roles: ["owner", "manager", "employee", "staff"] },
   { href: "/admin/sales", label: "Sales / POS", icon: "🧾", roles: ["owner", "manager", "employee", "staff"] },
-  { href: "/admin/customers", label: "Customers", icon: "🧑", roles: ["owner", "manager", "employee", "staff"] }, // ✅ አዲስ
-  { href: "/admin/suppliers", label: "Suppliers", icon: "🏭", roles: ["owner", "manager"] }, // ✅ አዲስ
+  { href: "/admin/customers", label: "Customers", icon: "🧑", roles: ["owner", "manager", "employee", "staff"] },
+  { href: "/admin/suppliers", label: "Suppliers", icon: "🏭", roles: ["owner", "manager"] },
   { href: "/admin/expenses", label: "Expenses", icon: "📉", roles: ["owner", "manager"] },
   { href: "/admin/income", label: "Income", icon: "💰", roles: ["owner", "manager"] },
   { href: "/admin/profit-sharing", label: "Profit Report", icon: "💵", roles: ["owner", "manager"] },
@@ -37,15 +37,30 @@ export default function AdminShell({
   role: string;
 }) {
   const pathname = usePathname();
+  const router = useRouter();
   const [open, setOpen] = useState(false);
   const [showProfileModal, setShowProfileModal] = useState(false);
 
-  const initials = (user.name || "U")
+  // ✅ Safe role handling
+  const safeRole = String(role || "staff").toLowerCase().trim();
+  const safeName = user.name || "User";
+  const safeImage = user.image || "";
+  const safePhone = user.phone || "";
+
+  const initials = safeName
     .split(" ")
     .map((p) => p[0])
     .slice(0, 2)
     .join("")
     .toUpperCase();
+
+  // ✅ Profile saved handler — refresh server data so new photo/name appears
+  function handleProfileSaved() {
+    setShowProfileModal(false);
+    router.refresh();
+  }
+
+  const filteredNav = NAV.filter((n) => n.roles.includes(safeRole));
 
   return (
     <div className="min-h-screen bg-slate-100 flex">
@@ -77,7 +92,7 @@ export default function AdminShell({
         </div>
 
         <nav className="flex-1 px-3 py-4 space-y-1 overflow-y-auto">
-          {NAV.filter((n) => n.roles.includes(role.toLowerCase())).map((n) => {
+          {filteredNav.map((n) => {
             const active = pathname?.startsWith(n.href);
             return (
               <Link
@@ -115,10 +130,10 @@ export default function AdminShell({
               className="w-9 h-9 rounded-full bg-orange-500 flex items-center justify-center text-white font-bold text-sm flex-shrink-0 hover:ring-2 hover:ring-orange-300 transition overflow-hidden"
               title="Edit Profile"
             >
-              {user.image ? (
+              {safeImage ? (
                 <img
-                  src={formatDriveUrl(user.image)}
-                  alt={user.name || "User"}
+                  src={formatDriveUrl(safeImage)}
+                  alt={safeName}
                   className="w-9 h-9 rounded-full object-cover"
                   onError={(e) =>
                     ((e.target as HTMLImageElement).src = "/placeholder.svg")
@@ -130,9 +145,9 @@ export default function AdminShell({
             </button>
             <div className="flex-1 min-w-0">
               <p className="text-white font-semibold text-sm truncate">
-                {user.name || "User"}
+                {safeName}
               </p>
-              <p className="text-slate-400 text-xs capitalize">{role}</p>
+              <p className="text-slate-400 text-xs capitalize">{safeRole}</p>
             </div>
             <button
               onClick={() => signOut({ callbackUrl: "/login" })}
@@ -161,10 +176,10 @@ export default function AdminShell({
             className="w-9 h-9 rounded-full bg-orange-500 flex items-center justify-center text-white font-bold text-sm overflow-hidden hover:ring-2 hover:ring-orange-300 transition"
             title="Edit Profile"
           >
-            {user.image ? (
+            {safeImage ? (
               <img
-                src={formatDriveUrl(user.image)}
-                alt={user.name || "User"}
+                src={formatDriveUrl(safeImage)}
+                alt={safeName}
                 className="w-9 h-9 rounded-full object-cover"
                 onError={(e) =>
                   ((e.target as HTMLImageElement).src = "/placeholder.svg")
@@ -181,10 +196,11 @@ export default function AdminShell({
         {/* ✅ Profile Modal */}
         {showProfileModal && (
           <ProfilePhotoModal
-            currentName={user.name || ""}
-            currentPhoto={user.image || ""}
-            currentPhone={user.phone || ""}
+            currentName={safeName}
+            currentPhoto={safeImage}
+            currentPhone={safePhone}
             onClose={() => setShowProfileModal(false)}
+            onSaved={handleProfileSaved}
           />
         )}
       </div>
