@@ -530,3 +530,273 @@ function CustomerDetailModal({
                 <Kpi label="Lifetime" value={`${fmt(detail.stats.totalAmount)}`} color="emerald" />
                 <Kpi label="Paid" value={`${fmt(detail.stats.totalPaid)}`} color="emerald" />
                 <Kpi label="Outstanding" value={`${fmt(detail.stats.outstanding)}`} color={detail.stats.outstanding > 0 ? "red
+                : "slate"} />
+                <Kpi label="Transactions" value={`${detail.stats.totalPurchases}`} color="slate" />
+              </div>
+
+              {/* Transaction History */}
+              <div>
+                <h3 className="text-sm font-bold text-slate-900 mb-2">
+                  🧾 Transaction History ({detail.transactions?.length || 0})
+                </h3>
+                {detail.transactions?.length > 0 ? (
+                  <div className="overflow-x-auto border border-slate-200 rounded-lg">
+                    <table className="w-full text-xs">
+                      <thead className="bg-slate-100">
+                        <tr>
+                          <th className="text-left px-2 py-2 font-semibold">Date</th>
+                          <th className="text-left px-2 py-2 font-semibold">Invoice</th>
+                          <th className="text-left px-2 py-2 font-semibold">Items</th>
+                          <th className="text-right px-2 py-2 font-semibold">Total</th>
+                          <th className="text-right px-2 py-2 font-semibold">Paid</th>
+                          <th className="text-left px-2 py-2 font-semibold">Status</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {detail.transactions.map((t: Transaction) => (
+                          <tr key={t.salesId} className="border-t border-slate-100">
+                            <td className="px-2 py-1.5">{t.date.slice(0, 10)}</td>
+                            <td className="px-2 py-1.5 font-medium">{t.invoiceNo || t.salesId}</td>
+                            <td className="px-2 py-1.5">{t.items.length}</td>
+                            <td className="px-2 py-1.5 text-right">{fmt(t.totalAmount)}</td>
+                            <td className="px-2 py-1.5 text-right">{fmt(t.paidAmount)}</td>
+                            <td className="px-2 py-1.5">
+                              <span
+                                className={`px-1.5 py-0.5 rounded text-xs font-medium ${
+                                  t.paymentStatus === "Paid"
+                                    ? "bg-emerald-100 text-emerald-700"
+                                    : t.paymentStatus === "Partial"
+                                    ? "bg-orange-100 text-orange-700"
+                                    : "bg-red-100 text-red-700"
+                                }`}
+                              >
+                                {t.paymentStatus}
+                              </span>
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                ) : (
+                  <p className="text-sm text-slate-500 text-center py-4">
+                    No transactions yet
+                  </p>
+                )}
+              </div>
+            </>
+          ) : (
+            <p className="text-sm text-slate-500 text-center py-4">
+              Failed to load details
+            </p>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function Info({ label, value }: { label: string; value: string }) {
+  return (
+    <div>
+      <p className="text-xs text-slate-500">{label}</p>
+      <p className="text-sm font-medium text-slate-900">{value}</p>
+    </div>
+  );
+}
+
+function Kpi({ label, value, color }: { label: string; value: string; color: string }) {
+  const cls =
+    {
+      emerald: "bg-emerald-50 text-emerald-700 border-emerald-200",
+      red: "bg-red-50 text-red-700 border-red-200",
+      slate: "bg-slate-50 text-slate-700 border-slate-200",
+    }[color] ?? "bg-slate-50 text-slate-700 border-slate-200";
+
+  return (
+    <div className={`${cls} p-2 rounded-lg border text-center`}>
+      <p className="text-xs font-medium opacity-75">{label}</p>
+      <p className="text-sm font-bold mt-1">{value}</p>
+    </div>
+  );
+}
+
+// ─── Customer Form ───
+function CustomerForm({
+  title,
+  existing,
+  onClose,
+  onSaved,
+}: {
+  title: string;
+  existing?: Customer;
+  onClose: () => void;
+  onSaved: () => void;
+}) {
+  const [form, setForm] = useState({
+    name: existing?.name ?? "",
+    phone: existing?.phone ?? "",
+    email: existing?.email ?? "",
+    type: existing?.type ?? "Regular",
+    address: existing?.address ?? "",
+  });
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState("");
+
+  async function submit(e: React.FormEvent) {
+    e.preventDefault();
+    setSaving(true);
+    setError("");
+    try {
+      const method = existing ? "PUT" : "POST";
+      const body = existing ? { id: existing.id, ...form } : form;
+      const res = await fetch("/api/customers", {
+        method,
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(body),
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        setError(data.error || "Failed");
+        setSaving(false);
+        return;
+      }
+      onSaved();
+    } catch (e: any) {
+      setError(e.message);
+      setSaving(false);
+    }
+  }
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60">
+      <form
+        onSubmit={submit}
+        className="bg-white rounded-2xl shadow-2xl w-full max-w-md max-h-[90vh] overflow-y-auto p-6 space-y-4"
+      >
+        <div className="flex items-center justify-between">
+          <h2 className="text-xl font-bold text-slate-900">{title}</h2>
+          <button
+            type="button"
+            onClick={onClose}
+            className="text-slate-400 hover:text-slate-900 text-xl"
+          >
+            ✕
+          </button>
+        </div>
+
+        <Field
+          label="Full Name *"
+          value={form.name}
+          onChange={(v) => setForm({ ...form, name: v })}
+          required
+        />
+        <Field
+          label="Phone"
+          type="tel"
+          value={form.phone}
+          onChange={(v) => setForm({ ...form, phone: v })}
+          placeholder="+251 9XX XXX XXX"
+        />
+        <Field
+          label="Email"
+          type="email"
+          value={form.email}
+          onChange={(v) => setForm({ ...form, email: v })}
+        />
+
+        <div>
+          <label className="block text-sm font-semibold text-slate-900 mb-1">
+            Customer Type
+          </label>
+          <select
+            value={form.type}
+            onChange={(e) => setForm({ ...form, type: e.target.value })}
+            className="w-full rounded-lg border border-slate-300 px-3 py-2.5 text-slate-900"
+          >
+            <option value="Regular">👤 Regular</option>
+            <option value="VIP">⭐ VIP</option>
+            <option value="Wholesale">🏪 Wholesale</option>
+          </select>
+        </div>
+
+        <Field
+          label="Address"
+          value={form.address}
+          onChange={(v) => setForm({ ...form, address: v })}
+        />
+
+        {error && (
+          <div className="p-3 bg-red-50 border border-red-200 rounded-lg">
+            <p className="text-sm text-red-700">{error}</p>
+          </div>
+        )}
+
+        <div className="flex gap-2">
+          <button
+            type="button"
+            onClick={onClose}
+            className="flex-1 py-2.5 rounded-lg border border-slate-300 text-slate-700 font-medium"
+          >
+            Cancel
+          </button>
+          <button
+            type="submit"
+            disabled={saving}
+            className="flex-1 py-2.5 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white font-semibold disabled:opacity-50"
+          >
+            {saving ? "Saving…" : existing ? "Save Changes" : "Add Customer"}
+          </button>
+        </div>
+      </form>
+    </div>
+  );
+}
+
+function StatCard({ label, value, color }: { label: string; value: any; color: string }) {
+  const cls =
+    {
+      slate: "text-slate-700 bg-slate-50",
+      emerald: "text-emerald-700 bg-emerald-50",
+      orange: "text-orange-700 bg-orange-50",
+      amber: "text-amber-700 bg-amber-50",
+    }[color] ?? "text-slate-700 bg-slate-50";
+  return (
+    <div className={`${cls} p-4 rounded-2xl border border-slate-200`}>
+      <p className="text-xs font-medium opacity-75">{label}</p>
+      <p className="mt-1 text-xl font-bold">{value}</p>
+    </div>
+  );
+}
+
+function Field({
+  label,
+  value,
+  onChange,
+  type = "text",
+  required,
+  placeholder,
+}: {
+  label: string;
+  value: string;
+  onChange: (v: string) => void;
+  type?: string;
+  required?: boolean;
+  placeholder?: string;
+}) {
+  return (
+    <div>
+      <label className="block text-sm font-semibold text-slate-900 mb-1">
+        {label}
+      </label>
+      <input
+        type={type}
+        value={value}
+        onChange={(e) => onChange(e.target.value)}
+        required={required}
+        placeholder={placeholder}
+        className="w-full rounded-lg border border-slate-300 px-3 py-2.5 text-slate-900 focus:ring-2 focus:ring-orange-500"
+      />
+    </div>
+  );
+}
