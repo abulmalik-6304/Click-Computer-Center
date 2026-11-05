@@ -12,11 +12,7 @@ function fmt(n: any): string {
 }
 
 function cleanPhone(phone: string): string {
-  return String(phone || "").replace(/[^\d+]/g, "").replace(/^\+/, "");
-}
-
-function whatsAppUrl(phone: string): string {
-  const clean = cleanPhone(phone);
+  return String(phone || "").replace(/[^\d+]/g, ""
   return clean ? `https://wa.me/${clean}` : "";
 }
 
@@ -198,7 +194,7 @@ export default function SuppliersClient({
         />
       </div>
 
-      {/* ✅ COMPACT CARDS GRID */}
+      {/* Compact Cards Grid */}
       {filtered.length === 0 ? (
         <div className="bg-white rounded-2xl border border-slate-200 p-12 text-center">
           <p className="text-4xl mb-3">🏭</p>
@@ -259,7 +255,7 @@ export default function SuppliersClient({
 }
 
 // ═══════════════════════════════════════════════════════════════
-// ✅ SUPPLIER DETAIL MODAL
+// SUPPLIER DETAIL MODAL
 // ═══════════════════════════════════════════════════════════════
 function SupplierDetailModal({
   supplier,
@@ -330,7 +326,6 @@ function SupplierDetailModal({
       </style></head><body>
         <h1>Click Computer Center</h1>
         <p class="small">Supplier Statement · ${new Date().toLocaleString()}</p>
-
         <h2>Supplier Info</h2>
         <div class="info">
           <div><strong>Name:</strong> ${supplier.name}</div>
@@ -338,9 +333,8 @@ function SupplierDetailModal({
           <div><strong>Phone:</strong> ${supplier.phone || "—"}</div>
           <div><strong>Address:</strong> ${supplier.address || "—"}</div>
           <div><strong>Supply Item:</strong> ${supplier.supplyItem || "—"}</div>
-          <div><strong>Supplier ID:</strong> ${supplier.id}</div>
+          <div><strong>ID:</strong> ${supplier.id}</div>
         </div>
-
         <h2>Summary</h2>
         <div class="kpi">
           <div><div class="label">Total Purchases</div><div class="value">${fmt(detail.stats?.totalPurchaseValue || 0)} ETB</div></div>
@@ -348,7 +342,6 @@ function SupplierDetailModal({
           <div><div class="label">Transactions</div><div class="value">${detail.stats?.totalPurchases || 0}</div></div>
           <div><div class="label">Items</div><div class="value">${detail.stats?.itemsSupplied || 0}</div></div>
         </div>
-
         ${
           detail.items?.length > 0
             ? `
@@ -360,7 +353,6 @@ function SupplierDetailModal({
             `
             : ""
         }
-
         ${
           detail.purchases?.length > 0
             ? `
@@ -372,7 +364,6 @@ function SupplierDetailModal({
             `
             : `<p class="small">No purchase history yet.</p>`
         }
-
         <p class="footer">Click Computer Center · Confidential</p>
       </body></html>
     `;
@@ -607,7 +598,7 @@ function SupplierForm({
   }
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60">
       <form
         onSubmit={submit}
         className="bg-white rounded-2xl shadow-2xl w-full max-w-md max-h-[90vh] overflow-y-auto p-6 space-y-4"
