@@ -54,7 +54,9 @@ export async function GET() {
             canExport: false,
             canViewActivity: false,
             canManageStaff: false,
-            canViewProfit: false, // ✅ አዲስ
+            canViewProfit: false,
+            canPrintCustomers: false, // ✅ አዲስ
+            canPrintSuppliers: false, // ✅ አዲስ
           },
         };
       })
