@@ -4,6 +4,8 @@ import { authOptions } from "@/lib/auth";
 import { redirect } from "next/navigation";
 import { getCachedRows } from "@/lib/sheets-cache";
 import { SHEETS } from "@/lib/google-sheets";
+import { hasPermission } from "@/lib/permissions";
+import { normalizeRole } from "@/lib/roles";
 import CustomersClient from "./CustomersClient";
 
 export const revalidate = 0;
@@ -23,14 +25,17 @@ export interface Customer {
   transactionCount: number;
 }
 
-// ✅ አስቀድሞ ያለውን CustomerWithStats ለ backward compat ያስቀምጡ
 export interface CustomerWithStats extends Customer {}
 
 export default async function CustomersPage() {
   const session = await getServerSession(authOptions);
   if (!session) redirect("/login");
 
-  const role = String((session.user as any).role || "staff").toLowerCase();
+  const role = normalizeRole((session.user as any).role);
+  const email = String(session.user?.email || "");
+
+  // ✅ Check print permission
+  const canPrint = await hasPermission(email, role, "canPrintCustomers");
 
   let customers: Customer[] = [];
 
@@ -81,5 +86,11 @@ export default async function CustomersPage() {
     console.error("Customers load error:", e);
   }
 
-  return <CustomersClient initialCustomers={customers} userRole={role} />;
+  return (
+    <CustomersClient
+      initialCustomers={customers}
+      userRole={role}
+      canPrint={canPrint} // ✅ አዲስ
+    />
+  );
 }
