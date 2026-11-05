@@ -2,31 +2,31 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
-import { getSheet, SHEETS } from "@/lib/google-sheets";
+import { getSheet, getDoc } from "@/lib/google-sheets";
+import { getCachedRows, refreshCache } from "@/lib/sheets-cache";
 
 const SHEET = "Supplier_TBL";
 
 export const revalidate = 0;
+export const dynamic = "force-dynamic";
 
-// ─── GET ───
+// ─── GET: List all suppliers ───
 export async function GET() {
   const session = await getServerSession(authOptions);
   if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
   try {
-    const sheet = await getSheet(SHEET);
-    const rows = await sheet.getRows();
-    const suppliers = rows.map((r) => {
-      const obj = r.toObject() as any;
-      return {
-        id: String(obj.Supplier_ID || ""),
-        name: String(obj.Supplier_Name || ""),
-        phone: String(obj.Phone_Number || ""),
-        company: String(obj.Company_Name || ""),
-        supplyItem: String(obj.Supply_Item || ""),
-        address: String(obj.Address || ""),
-      };
-    });
+    const data = await getCachedRows(SHEET);
+
+    const suppliers = data.map((obj, idx) => ({
+      id: String(obj.Supplier_ID || `SUP-${idx + 1}`),
+      name: String(obj.Supplier_Name || ""),
+      phone: String(obj.Phone_Number || ""),
+      company: String(obj.Company_Name || ""),
+      supplyItem: String(obj.Supply_Item || ""),
+      address: String(obj.Address || ""),
+    }));
+
     return NextResponse.json({ suppliers });
   } catch (e: any) {
     if (String(e.message).includes("not found")) {
@@ -36,13 +36,14 @@ export async function GET() {
   }
 }
 
-// ─── POST ───
+// ─── POST: Create supplier ───
 export async function POST(req: NextRequest) {
   const session = await getServerSession(authOptions);
   if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
   try {
     const body = await req.json();
+
     if (!body.name?.trim()) {
       return NextResponse.json({ error: "Name is required" }, { status: 400 });
     }
@@ -51,7 +52,6 @@ export async function POST(req: NextRequest) {
     try {
       sheet = await getSheet(SHEET);
     } catch {
-      const { getDoc } = await import("@/lib/google-sheets");
       const doc = await getDoc();
       sheet = await doc.addSheet({
         title: SHEET,
@@ -79,13 +79,15 @@ export async function POST(req: NextRequest) {
       Address: body.address || "",
     });
 
+    await refreshCache(SHEET);
+
     return NextResponse.json({ ok: true, id });
   } catch (e: any) {
     return NextResponse.json({ error: e.message }, { status: 500 });
   }
 }
 
-// ─── PUT ───
+// ─── PUT: Update supplier ───
 export async function PUT(req: NextRequest) {
   const session = await getServerSession(authOptions);
   if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
@@ -106,18 +108,20 @@ export async function PUT(req: NextRequest) {
     if (body.address !== undefined) row.set("Address", body.address);
     await row.save();
 
+    await refreshCache(SHEET);
+
     return NextResponse.json({ ok: true });
   } catch (e: any) {
     return NextResponse.json({ error: e.message }, { status: 500 });
   }
 }
 
-// ─── DELETE ───
+// ─── DELETE: Delete supplier ───
 export async function DELETE(req: NextRequest) {
   const session = await getServerSession(authOptions);
   if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
-  const role = String((session.user as any).role || "staff").toLowerCase();
+  const role = String((session.user as any).role || "").toLowerCase();
   if (!["owner", "manager"].includes(role)) {
     return NextResponse.json({ error: "Forbidden" }, { status: 403 });
   }
@@ -132,6 +136,8 @@ export async function DELETE(req: NextRequest) {
     if (!row) return NextResponse.json({ error: "Not found" }, { status: 404 });
 
     await row.delete();
+    await refreshCache(SHEET);
+
     return NextResponse.json({ ok: true });
   } catch (e: any) {
     return NextResponse.json({ error: e.message }, { status: 500 });
