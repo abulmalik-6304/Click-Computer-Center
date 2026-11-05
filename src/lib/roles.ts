@@ -1,25 +1,44 @@
 // src/lib/roles.ts
 // ═══════════════════════════════════════════════════════════════
-// 👥 ROLE NORMALIZATION — accepts both "employee" and "staff"
+// 👥 ROLE NORMALIZATION
+// ✅ "Admin" / "Administrator" → "owner"
+// ✅ "Employee" / "Staff" → accepted
 // ═══════════════════════════════════════════════════════════════
 
 export type AppRole = "owner" | "manager" | "employee" | "staff";
 
 /**
- * Normalize any role string to a canonical form.
- * "Employee" → "employee", "Staff" → "staff", etc.
+ * Normalize any role string to canonical form.
+ * 
+ * Accepts:
+ *   "Admin", "Administrator", "Owner" → "owner"
+ *   "Manager" → "manager"
+ *   "Employee" → "employee"
+ *   "Staff" → "staff"
  */
 export function normalizeRole(raw: string | undefined | null): AppRole {
   const s = String(raw ?? "").toLowerCase().trim();
+
+  // ✅ Owner variants
   if (s === "owner") return "owner";
+  if (s === "admin") return "owner";           // ✅ Google Sheet uses "Admin"
+  if (s === "administrator") return "owner";   // ✅ Fallback
+
+  // Manager
   if (s === "manager") return "manager";
+
+  // Employee
   if (s === "employee") return "employee";
+
+  // Staff (default for known worker roles)
+  if (s === "staff") return "staff";
+
+  // Unknown → default to staff (safe)
   return "staff";
 }
 
 /**
  * Is this role an employee-type role?
- * Both "employee" and "staff" are treated as worker-level roles.
  */
 export function isWorkerRole(raw: string | undefined | null): boolean {
   const r = normalizeRole(raw);
@@ -27,7 +46,7 @@ export function isWorkerRole(raw: string | undefined | null): boolean {
 }
 
 /**
- * Is this role owner or manager? (can approve, edit, etc.)
+ * Is this role owner or manager?
  */
 export function isManagerOrOwner(raw: string | undefined | null): boolean {
   const r = normalizeRole(raw);
@@ -35,15 +54,7 @@ export function isManagerOrOwner(raw: string | undefined | null): boolean {
 }
 
 /**
- * Can this role view the admin dashboard?
- * Everyone except no-role.
- */
-export function canAccessAdmin(raw: string | undefined | null): boolean {
-  return normalizeRole(raw) !== ("none" as any);
-}
-
-/**
- * Display label for a role
+ * Display label
  */
 export function roleLabel(raw: string | undefined | null): string {
   const r = normalizeRole(raw);
@@ -70,7 +81,7 @@ export function isOnline(lastSeen: string | undefined | null): boolean {
   if (!lastSeen) return false;
   const d = new Date(lastSeen);
   if (isNaN(d.getTime())) return false;
-  return Date.now() - d.getTime() < 5 * 60 * 1000; // 5 minutes
+  return Date.now() - d.getTime() < 5 * 60 * 1000;
 }
 
 /**
