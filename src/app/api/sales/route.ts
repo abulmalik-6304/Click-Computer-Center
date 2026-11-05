@@ -4,13 +4,11 @@ import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { getSheet, SHEETS } from "@/lib/google-sheets";
 import { calculateAllStock } from "@/lib/inventory-stock";
+import { refreshCache } from "@/lib/sheets-cache";
 
 export const revalidate = 0;
 export const dynamic = "force-dynamic";
 
-// ═══════════════════════════════════════════════════════════════
-// POST: Create Sale (Draft or Completed)
-// ═══════════════════════════════════════════════════════════════
 export async function POST(req: NextRequest) {
   const session = await getServerSession(authOptions);
   if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
@@ -32,14 +30,10 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: "No items in cart" }, { status: 400 });
     }
 
-    // ✅ Calculate current stock from Stock_In - Sales_Items
     const stockMap = await calculateAllStock();
-
-    // Load inventory for validation
     const invSheet = await getSheet(SHEETS.INVENTORY);
     const invRows = await invSheet.getRows();
 
-    // ─── Validate items + compute line totals ───
     type Line = {
       itemId: string;
       itemName: string;
@@ -63,11 +57,13 @@ export async function POST(req: NextRequest) {
         );
       }
 
-      // ✅ Use calculated stock, not Stock_Quantity
       const calc = stockMap[cartItem.itemId];
       const currentStock = calc?.currentStock ?? 0;
-
       const qty = Number(cartItem.quantity);
+
+      // ═══════════════════════════════════════════════════════════════
+      // ✅ FROZEN COSTS — capture at sale time (Avg_Cost is dynamic)
+      // ═══════════════════════════════════════════════════════════════
       const costPerItem = Number(
         invRow.get("Avg_Cost") ?? invRow.get("Cost_Price") ?? 0
       );
@@ -75,18 +71,17 @@ export async function POST(req: NextRequest) {
         cartItem.sellingPrice ?? invRow.get("Selling_Price") ?? 0
       );
 
-      // ⚠️ Profit floor: price cannot be below cost + 10%
+      // Price floor: cost + 10%
       const floorPrice = costPerItem * 1.1;
       if (sellingPrice < floorPrice) {
         return NextResponse.json(
           {
-            error: `Selling price for ${invRow.get("Item_Name")} is too low. Minimum: ${floorPrice.toFixed(2)} ETB (cost + 10%)`,
+            error: `Selling price for ${invRow.get("Item_Name")} too low. Min: ${floorPrice.toFixed(2)} ETB`,
           },
           { status: 400 }
         );
       }
 
-      // ⚠️ Stock check for Completed sales only
       if (saleStatus === "Completed" && currentStock < qty) {
         return NextResponse.json(
           {
@@ -96,19 +91,22 @@ export async function POST(req: NextRequest) {
         );
       }
 
+      // ✅ FROZEN VALUES — written permanently to Sales_Items_TBL
+      const lineTotalPrice = Math.round(sellingPrice * qty * 100) / 100;
+      const lineTotalCost = Math.round(costPerItem * qty * 100) / 100;
+
       lines.push({
         itemId: invRow.get("Item_ID"),
         itemName: invRow.get("Item_Name"),
         sellingPrice,
         quantity: qty,
-        totalPrice: Math.round(sellingPrice * qty * 100) / 100,
-        costPerItem,
-        totalCost: Math.round(costPerItem * qty * 100) / 100,
+        totalPrice: lineTotalPrice,
+        costPerItem,  // ✅ FROZEN — current Avg_Cost at sale time
+        totalCost: lineTotalCost,  // ✅ FROZEN — costPerItem × qty
         invRow,
       });
     }
 
-    // ─── Totals ───
     const subtotal = lines.reduce((s, l) => s + l.totalPrice, 0);
     const discountAmt = Number(discount ?? 0);
     const totalAmount = Math.round((subtotal - discountAmt) * 100) / 100;
@@ -116,7 +114,6 @@ export async function POST(req: NextRequest) {
     const paymentStatus =
       paidAmountNum >= totalAmount ? "Paid" : paidAmountNum > 0 ? "Partial" : "Unpaid";
 
-    // ─── Sales_TBL ───
     const salesSheet = await getSheet(SHEETS.SALES);
     const salesRows = await salesSheet.getRows();
     const nextNum = salesRows.length + 1;
@@ -140,7 +137,9 @@ export async function POST(req: NextRequest) {
       Phone_Number: body.customerPhone || "",
     });
 
-    // ─── Sales_Items_TBL ───
+    // ═══════════════════════════════════════════════════════════════
+    // ✅ SALES_ITEMS — Frozen cost saved permanently
+    // ═══════════════════════════════════════════════════════════════
     const itemsSheet = await getSheet(SHEETS.SALES_ITEMS);
     const itemRows = await itemsSheet.getRows();
     let itemCounter = itemRows.length;
@@ -152,13 +151,17 @@ export async function POST(req: NextRequest) {
         Sales_ID: salesId,
         Item_ID: line.itemId,
         Item_Name: line.itemName,
-        Selling_Price: line.sellingPrice,
+        Selling_Price: line.sellingPrice,  // ✅ FROZEN
         Quantity: line.quantity,
-        Total_Price: line.totalPrice,
-        Cost_Per_Item: line.costPerItem,
-        Total_Cost_Amount: line.totalCost,
+        Total_Price: line.totalPrice,  // ✅ FROZEN
+        Cost_Per_Item: line.costPerItem,  // ✅ FROZEN (cost at sale time)
+        Total_Cost_Amount: line.totalCost,  // ✅ FROZEN
       });
     }
+
+    // Invalidate caches
+    await refreshCache(SHEETS.SALES);
+    await refreshCache(SHEETS.SALES_ITEMS);
 
     return NextResponse.json({
       ok: true,
