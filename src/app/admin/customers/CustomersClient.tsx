@@ -88,7 +88,6 @@ export default function CustomersClient({
     lifetimeValue: items.reduce((s, c) => s + c.totalAmount, 0),
   };
 
-  // Sort by totalAmount descending — top customers first
   const sortedFiltered = useMemo(() => {
     return [...filtered].sort((a, b) => b.totalAmount - a.totalAmount);
   }, [filtered]);
@@ -130,7 +129,6 @@ export default function CustomersClient({
     }
   }
 
-  // Print full list
   function printList() {
     const rows = filtered
       .map(
@@ -259,7 +257,7 @@ export default function CustomersClient({
         </div>
       </div>
 
-      {/* ✅ COMPACT CARDS GRID */}
+      {/* Compact Cards Grid */}
       {sortedFiltered.length === 0 ? (
         <div className="bg-white rounded-2xl border border-slate-200 p-12 text-center">
           <p className="text-4xl mb-3">🧑</p>
@@ -273,15 +271,12 @@ export default function CustomersClient({
               onClick={() => loadDetail(c)}
               className="bg-white rounded-xl border border-slate-200 p-3 hover:shadow-md hover:border-orange-400 transition text-center group"
             >
-              {/* Avatar */}
               <div className="w-14 h-14 mx-auto rounded-full bg-orange-100 text-orange-700 flex items-center justify-center text-xl font-bold group-hover:ring-2 group-hover:ring-orange-400 transition">
                 {c.name.charAt(0).toUpperCase() || "?"}
               </div>
-              {/* Name */}
               <p className="mt-2 font-semibold text-sm text-slate-900 truncate">
                 {c.name}
               </p>
-              {/* Type badge */}
               <span
                 className={`inline-block mt-1 px-1.5 py-0.5 rounded text-xs font-medium ${
                   CUSTOMER_TYPE_COLORS[c.type.toLowerCase()] ?? "bg-slate-100"
@@ -289,7 +284,6 @@ export default function CustomersClient({
               >
                 {CUSTOMER_TYPE_ICONS[c.type.toLowerCase()] ?? "👤"} {c.type}
               </span>
-              {/* Total */}
               <p className="mt-1.5 text-xs font-bold text-emerald-600">
                 {fmt(c.totalAmount)} ETB
               </p>
@@ -331,7 +325,7 @@ export default function CustomersClient({
 }
 
 // ═══════════════════════════════════════════════════════════════
-// ✅ CUSTOMER DETAIL MODAL
+// CUSTOMER DETAIL MODAL
 // ═══════════════════════════════════════════════════════════════
 function CustomerDetailModal({
   customer,
@@ -391,7 +385,6 @@ function CustomerDetailModal({
       </style></head><body>
         <h1>Click Computer Center</h1>
         <p class="small">Customer Statement · ${new Date().toLocaleString()}</p>
-
         <h2>Customer Info</h2>
         <div class="info">
           <div><strong>Name:</strong> ${customer.name}</div>
@@ -399,9 +392,8 @@ function CustomerDetailModal({
           <div><strong>Email:</strong> ${customer.email || "—"}</div>
           <div><strong>Type:</strong> ${customer.type}</div>
           <div><strong>Address:</strong> ${customer.address || "—"}</div>
-          <div><strong>Customer ID:</strong> ${customer.id}</div>
+          <div><strong>ID:</strong> ${customer.id}</div>
         </div>
-
         <h2>Summary</h2>
         <div class="kpi">
           <div><div class="label">Total Purchases</div><div class="value">${fmt(detail.stats?.totalAmount || 0)} ETB</div></div>
@@ -409,7 +401,6 @@ function CustomerDetailModal({
           <div><div class="label">Outstanding</div><div class="value">${fmt(detail.stats?.outstanding || 0)} ETB</div></div>
           <div><div class="label">Transactions</div><div class="value">${detail.stats?.totalPurchases || 0}</div></div>
         </div>
-
         <h2>Transaction History</h2>
         ${
           detail.transactions?.length > 0
@@ -419,7 +410,6 @@ function CustomerDetailModal({
               </table>`
             : `<p class="small">No transactions yet.</p>`
         }
-
         <p class="footer">Click Computer Center · Confidential</p>
       </body></html>
     `;
@@ -529,8 +519,11 @@ function CustomerDetailModal({
               <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
                 <Kpi label="Lifetime" value={`${fmt(detail.stats.totalAmount)}`} color="emerald" />
                 <Kpi label="Paid" value={`${fmt(detail.stats.totalPaid)}`} color="emerald" />
-                <Kpi label="Outstanding" value={`${fmt(detail.stats.outstanding)}`} color={detail.stats.outstanding > 0 ? "red
-                : "slate"} />
+                <Kpi
+                  label="Outstanding"
+                  value={`${fmt(detail.stats.outstanding)}`}
+                  color={detail.stats.outstanding > 0 ? "red" : "slate"}
+                />
                 <Kpi label="Transactions" value={`${detail.stats.totalPurchases}`} color="slate" />
               </div>
 
