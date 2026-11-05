@@ -4,6 +4,7 @@
 // ═══════════════════════════════════════════════════════════════
 
 import { getSheet, getDoc } from "./google-sheets";
+import { normalizeRole } from "./roles";
 // ✅ We use getSheet (not getCachedRows) for settings — always fresh
 
 const PERMISSIONS_SHEET = "Permissions_TBL";
@@ -158,7 +159,8 @@ export async function hasPermission(
   role: string,
   permission: PermissionKey
 ): Promise<boolean> {
-  const r = String(role || "").toLowerCase().trim();
+  // ✅ Normalize role — "Admin" → "owner"
+  const r = normalizeRole(role);
 
   // Owner always has all permissions
   if (r === "owner") return true;
