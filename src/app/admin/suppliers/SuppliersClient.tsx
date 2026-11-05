@@ -8,13 +8,18 @@ type ModalMode = "create" | "edit" | null;
 
 export default function SuppliersClient({
   initialSuppliers,
+  userRole,
 }: {
   initialSuppliers: Supplier[];
+  userRole: string;
 }) {
   const [items, setItems] = useState(initialSuppliers);
   const [q, setQ] = useState("");
   const [modal, setModal] = useState<ModalMode>(null);
   const [active, setActive] = useState<Supplier | null>(null);
+
+  const canEdit = ["owner", "manager"].includes(userRole);
+  const canDelete = ["owner", "manager"].includes(userRole);
 
   const filtered = useMemo(() => {
     if (!q) return items;
@@ -28,9 +33,15 @@ export default function SuppliersClient({
     );
   }, [items, q]);
 
+  const stats = {
+    total: items.length,
+    withCompany: items.filter((s) => s.company).length,
+    withPhone: items.filter((s) => s.phone).length,
+  };
+
   async function refresh() {
     try {
-      const res = await fetch("/api/suppliers");
+      const res = await fetch("/api/suppliers", { cache: "no-store" });
       const data = await res.json();
       if (Array.isArray(data.suppliers)) setItems(data.suppliers);
     } catch (e) {
@@ -40,19 +51,32 @@ export default function SuppliersClient({
 
   return (
     <div className="p-4 sm:p-6 lg:p-10 space-y-6">
+      {/* Header */}
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
         <div>
           <h1 className="text-2xl sm:text-3xl font-bold text-slate-900">🏭 Suppliers</h1>
-          <p className="text-sm text-slate-500 mt-1">{items.length} registered suppliers</p>
+          <p className="text-sm text-slate-500 mt-1">
+            {stats.total} registered suppliers
+          </p>
         </div>
-        <button
-          onClick={() => { setActive(null); setModal("create"); }}
-          className="inline-flex items-center gap-2 px-4 py-2.5 bg-orange-500 hover:bg-orange-600 text-white font-semibold rounded-lg shadow-sm transition"
-        >
-          + Add Supplier
-        </button>
+        {canEdit && (
+          <button
+            onClick={() => { setActive(null); setModal("create"); }}
+            className="inline-flex items-center gap-2 px-4 py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white font-semibold rounded-lg shadow-sm"
+          >
+            + Add Supplier
+          </button>
+        )}
       </div>
 
+      {/* Stats */}
+      <div className="grid grid-cols-3 gap-4">
+        <StatCard label="Total" value={stats.total} color="slate" />
+        <StatCard label="With Company" value={stats.withCompany} color="emerald" />
+        <StatCard label="With Phone" value={stats.withPhone} color="orange" />
+      </div>
+
+      {/* Search */}
       <div className="bg-white p-4 rounded-2xl border border-slate-200">
         <input
           value={q}
@@ -62,10 +86,19 @@ export default function SuppliersClient({
         />
       </div>
 
+      {/* Grid */}
       {filtered.length === 0 ? (
         <div className="bg-white rounded-2xl border border-slate-200 p-12 text-center">
           <p className="text-4xl mb-3">🏭</p>
-          <p className="text-slate-500">No suppliers yet</p>
+          <p className="text-slate-500">No suppliers found</p>
+          {canEdit && (
+            <button
+              onClick={() => setModal("create")}
+              className="mt-4 px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white font-semibold rounded-lg text-sm"
+            >
+              Add the first one
+            </button>
+          )}
         </div>
       ) : (
         <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-5">
@@ -84,7 +117,8 @@ export default function SuppliersClient({
                   <p className="text-xs text-slate-400 mt-1">{s.id}</p>
                 </div>
               </div>
-              <div className="mt-4 pt-4 border-t border-slate-100 space-y-1 text-sm">
+
+              <div className="mt-4 pt-4 border-t border-slate-100 space-y-1.5 text-sm">
                 {s.phone && (
                   <p className="text-slate-700">
                     <span className="text-slate-500">📞</span> {s.phone}
@@ -101,28 +135,31 @@ export default function SuppliersClient({
                   </p>
                 )}
               </div>
-              <div className="mt-4 pt-4 border-t border-slate-100 grid grid-cols-2 gap-2">
-                <button
-                  onClick={() => { setActive(s); setModal("edit"); }}
-                  className="py-2 text-xs bg-slate-100 hover:bg-slate-200 text-slate-700 font-medium rounded-lg"
-                >
-                  ✏️ Edit
-                </button>
-                <button
-                  onClick={async () => {
-                    if (!confirm(`Delete "${s.name}"?`)) return;
-                    await fetch("/api/suppliers", {
-                      method: "DELETE",
-                      headers: { "Content-Type": "application/json" },
-                      body: JSON.stringify({ id: s.id }),
-                    });
-                    refresh();
-                  }}
-                  className="py-2 text-xs bg-red-100 hover:bg-red-200 text-red-700 font-medium rounded-lg"
-                >
-                  🗑 Delete
-                </button>
-              </div>
+
+              {canEdit && (
+                <div className="mt-4 pt-4 border-t border-slate-100 grid grid-cols-2 gap-2">
+                  <button
+                    onClick={() => { setActive(s); setModal("edit"); }}
+                    className="py-2 text-xs bg-slate-100 hover:bg-slate-200 text-slate-700 font-medium rounded-lg"
+                  >
+                    ✏️ Edit
+                  </button>
+                  <button
+                    onClick={async () => {
+                      if (!confirm(`Delete "${s.name}"?`)) return;
+                      await fetch("/api/suppliers", {
+                        method: "DELETE",
+                        headers: { "Content-Type": "application/json" },
+                        body: JSON.stringify({ id: s.id }),
+                      });
+                      refresh();
+                    }}
+                    className="py-2 text-xs bg-red-100 hover:bg-red-200 text-red-700 font-medium rounded-lg"
+                  >
+                    🗑 Delete
+                  </button>
+                </div>
+              )}
             </div>
           ))}
         </div>
@@ -148,12 +185,20 @@ export default function SuppliersClient({
 }
 
 function SupplierForm({
-  title, existing, onClose, onSaved,
-}: { title: string; existing?: Supplier; onClose: () => void; onSaved: () => void }) {
+  title,
+  existing,
+  onClose,
+  onSaved,
+}: {
+  title: string;
+  existing?: Supplier;
+  onClose: () => void;
+  onSaved: () => void;
+}) {
   const [form, setForm] = useState({
     name: existing?.name ?? "",
-    phone: existing?.phone ?? "",
     company: existing?.company ?? "",
+    phone: existing?.phone ?? "",
     supplyItem: existing?.supplyItem ?? "",
     address: existing?.address ?? "",
   });
@@ -189,7 +234,7 @@ function SupplierForm({
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60">
       <form
         onSubmit={submit}
-        className="bg-white rounded-2xl shadow-2xl w-full max-w-lg max-h-[90vh] overflow-y-auto p-6 space-y-4"
+        className="bg-white rounded-2xl shadow-2xl w-full max-w-md max-h-[90vh] overflow-y-auto p-6 space-y-4"
       >
         <div className="flex items-center justify-between">
           <h2 className="text-xl font-bold text-slate-900">{title}</h2>
@@ -198,13 +243,13 @@ function SupplierForm({
 
         <Field label="Supplier Name *" value={form.name} onChange={(v) => setForm({ ...form, name: v })} required />
         <Field label="Company" value={form.company} onChange={(v) => setForm({ ...form, company: v })} />
-        <Field label="Phone" value={form.phone} onChange={(v) => setForm({ ...form, phone: v })} />
+        <Field label="Phone" type="tel" value={form.phone} onChange={(v) => setForm({ ...form, phone: v })} />
         <Field label="Supply Item(s)" value={form.supplyItem} onChange={(v) => setForm({ ...form, supplyItem: v })} placeholder="e.g. Laptops, Monitors" />
         <Field label="Address" value={form.address} onChange={(v) => setForm({ ...form, address: v })} />
 
         {error && (
           <div className="p-3 bg-red-50 border border-red-200 rounded-lg">
-            <p className="text-sm text-red-700">❌ {error}</p>
+            <p className="text-sm text-red-700">{error}</p>
           </div>
         )}
 
@@ -212,7 +257,7 @@ function SupplierForm({
           <button type="button" onClick={onClose} className="flex-1 py-2.5 rounded-lg border border-slate-300 text-slate-700 font-medium">
             Cancel
           </button>
-          <button type="submit" disabled={saving} className="flex-1 py-2.5 rounded-lg bg-orange-500 hover:bg-orange-600 text-white font-semibold disabled:opacity-50">
+          <button type="submit" disabled={saving} className="flex-1 py-2.5 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white font-semibold disabled:opacity-50">
             {saving ? "Saving…" : existing ? "Save Changes" : "Add Supplier"}
           </button>
         </div>
@@ -221,18 +266,45 @@ function SupplierForm({
   );
 }
 
+function StatCard({ label, value, color }: { label: string; value: any; color: string }) {
+  const cls = {
+    slate: "text-slate-700 bg-slate-50",
+    emerald: "text-emerald-700 bg-emerald-50",
+    orange: "text-orange-700 bg-orange-50",
+  }[color] ?? "text-slate-700 bg-slate-50";
+  return (
+    <div className={`${cls} p-4 rounded-2xl border border-slate-200`}>
+      <p className="text-xs font-medium opacity-75">{label}</p>
+      <p className="mt-1 text-xl font-bold">{value}</p>
+    </div>
+  );
+}
+
 function Field({
-  label, value, onChange, required, placeholder,
-}: { label: string; value: string; onChange: (v: string) => void; required?: boolean; placeholder?: string }) {
+  label,
+  value,
+  onChange,
+  type = "text",
+  required,
+  placeholder,
+}: {
+  label: string;
+  value: string;
+  onChange: (v: string) => void;
+  type?: string;
+  required?: boolean;
+  placeholder?: string;
+}) {
   return (
     <div>
       <label className="block text-sm font-semibold text-slate-900 mb-1">{label}</label>
       <input
+        type={type}
         value={value}
         onChange={(e) => onChange(e.target.value)}
         required={required}
         placeholder={placeholder}
-        className="w-full rounded-lg border border-slate-300 px-3 py-2.5 text-slate-900 focus:ring-2 focus:ring-orange-500 focus:border-orange-500"
+        className="w-full rounded-lg border border-slate-300 px-3 py-2.5 text-slate-900 focus:ring-2 focus:ring-orange-500"
       />
     </div>
   );
