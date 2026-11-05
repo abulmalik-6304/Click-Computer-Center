@@ -67,13 +67,19 @@ export default function CustomersClient({
       {/* Header */}
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
         <div>
-          <h1 className="text-2xl sm:text-3xl font-bold text-slate-900">🧑 Customers</h1>
+          <h1 className="text-2xl sm:text-3xl font-bold text-slate-900">
+            🧑 Customers
+          </h1>
           <p className="text-sm text-slate-500 mt-1">
-            {stats.total} customers · {stats.vip} VIP · {stats.wholesale}
-                    </div>
+            {stats.total} customers · {stats.vip} VIP · {stats.wholesale} wholesale
+          </p>
+        </div>
         {canEdit && (
           <button
-            onClick={() => { setActive(null); setModal("create"); }}
+            onClick={() => {
+              setActive(null);
+              setModal("create");
+            }}
             className="inline-flex items-center gap-2 px-4 py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white font-semibold rounded-lg shadow-sm"
           >
             + Add Customer
@@ -108,7 +114,9 @@ export default function CustomersClient({
               key={f}
               onClick={() => setTypeFilter(f)}
               className={`px-3 py-1.5 rounded-lg text-xs font-medium capitalize ${
-                typeFilter === f ? "bg-slate-900 text-white" : "bg-slate-100 text-slate-700"
+                typeFilter === f
+                  ? "bg-slate-900 text-white"
+                  : "bg-slate-100 text-slate-700"
               }`}
             >
               {f}
@@ -144,7 +152,9 @@ export default function CustomersClient({
                 </div>
                 <div className="flex-1 min-w-0">
                   <p className="font-bold text-slate-900 truncate">{c.name}</p>
-                  <p className="text-sm text-slate-500 truncate">{c.phone || "No phone"}</p>
+                  <p className="text-sm text-slate-500 truncate">
+                    {c.phone || "No phone"}
+                  </p>
                   <span
                     className={`inline-flex items-center gap-1 mt-1 px-2 py-0.5 rounded-full text-xs font-semibold ${
                       CUSTOMER_TYPE_COLORS[c.type.toLowerCase()] ?? "bg-slate-100"
@@ -163,7 +173,9 @@ export default function CustomersClient({
                 )}
                 <div className="flex justify-between">
                   <span className="text-slate-500">Purchases:</span>
-                  <span className="font-semibold text-slate-900">{c.transactionCount}</span>
+                  <span className="font-semibold text-slate-900">
+                    {c.transactionCount}
+                  </span>
                 </div>
                 <div className="flex justify-between">
                   <span className="text-slate-500">Lifetime value:</span>
@@ -184,7 +196,10 @@ export default function CustomersClient({
               {canEdit && (
                 <div className="mt-4 pt-4 border-t border-slate-100 grid grid-cols-2 gap-2">
                   <button
-                    onClick={() => { setActive(c); setModal("edit"); }}
+                    onClick={() => {
+                      setActive(c);
+                      setModal("edit");
+                    }}
                     className="py-2 text-xs bg-slate-100 hover:bg-slate-200 text-slate-700 font-medium rounded-lg"
                   >
                     ✏️ Edit
@@ -214,15 +229,25 @@ export default function CustomersClient({
         <CustomerForm
           title="Add Customer"
           onClose={() => setModal(null)}
-          onSaved={() => { setModal(null); refresh(); }}
+          onSaved={() => {
+            setModal(null);
+            refresh();
+          }}
         />
       )}
       {modal === "edit" && active && (
         <CustomerForm
           title={`Edit: ${active.name}`}
           existing={active}
-          onClose={() => { setModal(null); setActive(null); }}
-          onSaved={() => { setModal(null); setActive(null); refresh(); }}
+          onClose={() => {
+            setModal(null);
+            setActive(null);
+          }}
+          onSaved={() => {
+            setModal(null);
+            setActive(null);
+            refresh();
+          }}
         />
       )}
     </div>
@@ -361,7 +386,15 @@ function CustomerForm({
   );
 }
 
-function StatCard({ label, value, color }: { label: string; value: any; color: string }) {
+function StatCard({
+  label,
+  value,
+  color,
+}: {
+  label: string;
+  value: any;
+  color: string;
+}) {
   const cls =
     {
       slate: "text-slate-700 bg-slate-50",
