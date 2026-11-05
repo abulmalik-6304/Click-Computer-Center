@@ -18,7 +18,9 @@ interface Manager {
     canExport: boolean;
     canViewActivity: boolean;
     canManageStaff: boolean;
-    canViewProfit: boolean; // ✅ አዲስ
+    canViewProfit: boolean;
+    canPrintCustomers: boolean; // ✅ አዲስ
+    canPrintSuppliers: boolean; // ✅ አዲስ
   };
 }
 
@@ -208,6 +210,20 @@ export default function ManagerPermissions() {
                   enabled={m.permissions.canViewProfit}
                   loading={saving === m.email}
                   onClick={() => toggle(m, "canViewProfit")}
+                />
+                <Toggle
+                  label="Print Customers"
+                  icon="🧑"
+                  enabled={m.permissions.canPrintCustomers}
+                  loading={saving === m.email}
+                  onClick={() => toggle(m, "canPrintCustomers")}
+                />
+                <Toggle
+                  label="Print Suppliers"
+                  icon="🏭"
+                  enabled={m.permissions.canPrintSuppliers}
+                  loading={saving === m.email}
+                  onClick={() => toggle(m, "canPrintSuppliers")}
                 />
               </div>
             </div>
