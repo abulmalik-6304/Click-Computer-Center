@@ -5,6 +5,7 @@ import { redirect } from "next/navigation";
 import SettingsClient from "./SettingsClient";
 import SigninLogClient from "./SigninLogClient";
 import ManagerPermissions from "@/components/admin/settings/ManagerPermissions";
+import EmployeePermissions from "@/components/admin/settings/EmployeePermissions";
 import ProfitSharingSettings from "@/components/admin/settings/ProfitSharingSettings";
 
 export const revalidate = 0;
@@ -16,6 +17,7 @@ export default async function SettingsPage() {
 
   const role = String((session.user as any).role || "staff").toLowerCase();
   const isOwner = role === "owner";
+  const isManager = role === "manager";
 
   // ✅ Unique key forces React to remount children on every visit
   const pageKey = `settings-${Date.now()}`;
@@ -32,9 +34,17 @@ export default async function SettingsPage() {
         }}
       />
 
-      {/* ✅ Manager Permissions — Owner only, fresh each visit */}
+      {/* ✅ Manager Permissions — Owner only */}
       {isOwner && (
         <ManagerPermissions key={`perms-${pageKey}`} />
+      )}
+
+      {/* 🆕 Employee Permissions — Owner + Manager */}
+      {(isOwner || isManager) && (
+        <EmployeePermissions
+          key={`emp-perms-${pageKey}`}
+          canManage={isOwner || isManager}
+        />
       )}
 
       {/* ✅ Profit Sharing — Owner only */}
