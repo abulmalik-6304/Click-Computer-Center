@@ -3,7 +3,7 @@
 
 import { useMemo, useState } from "react";
 import { IncomeRecord } from "@/lib/income-types";
-import IncomeDetailModal from "./IncomeDetailModal";
+import IncomeDetailModal from "./IncomeDetailModal"; // ✅ ተስተካክሏል
 import {
   fmt,
   escapeHtml,
@@ -11,14 +11,11 @@ import {
   copyToClipboard,
   shareText,
 } from "@/lib/print-utils";
-import {
-  getSourceIcon,
-  getSourceLabel,
-} from "@/lib/income-categories";
+import { getSourceIcon, getSourceLabel } from "@/lib/income-categories";
 
 interface Props {
-  source: string;                    // e.g. "sales"
-  records: IncomeRecord[];           // all records of THIS source only
+  source: string; // e.g. "sales"
+  records: IncomeRecord[]; // all records of THIS source only
   canEdit: boolean;
   canDelete: boolean;
   onClose: () => void;
