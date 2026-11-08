@@ -1,85 +1,79 @@
 // src/lib/activity-log.ts
-"use client";
+// ═══════════════════════════════════════════════════════════════
+// 📝 ACTIVITY LOG — Fire-and-forget action logger
+// ═══════════════════════════════════════════════════════════════
 
-import { ActivityAction, ActivityLogEntry } from "./activity-log-types";
+export type ActivityAction =
+  | "income:create"
+  | "income:update"
+  | "income:delete"
+  | "income:print"
+  | "sales:create"
+  | "sales:void"
+  | "sales:refund"
+  | "sales:delete"
+  | "inventory:create"
+  | "inventory:update"
+  | "inventory:delete"
+  | "customer:create"
+  | "customer:update"
+  | "customer:delete"
+  | "supplier:create"
+  | "supplier:update"
+  | "supplier:delete"
+  | "staff:create"
+  | "staff:update"
+  | "staff:delete"
+  | "settings:update"
+  | string;
 
-const STORAGE_KEY = "ccc_activity_log_v1";
-const MAX_ENTRIES = 500;
-
-/** Read all log entries (newest first) */
-export function getActivityLog(): ActivityLogEntry[] {
-  if (typeof window === "undefined") return [];
-  try {
-    const raw = localStorage.getItem(STORAGE_KEY);
-    if (!raw) return [];
-    const arr = JSON.parse(raw);
-    return Array.isArray(arr) ? arr : [];
-  } catch {
-    return [];
-  }
+export interface LogActivityOptions {
+  targetId?: string;
+  targetLabel?: string;
+  details?: string;
+  userRole?: string;
 }
 
-/** Append a log entry */
+/**
+ * Log an activity to the server (fire-and-forget).
+ * Never throws — logging failures are silently ignored.
+ */
 export function logActivity(
   action: ActivityAction,
-  module: ActivityLogEntry["module"],
-  payload: {
-    userId?: string;
-    userName?: string;
-    userRole?: string;
-    targetId?: string;
-    targetLabel?: string;
-    details?: string;
-    metadata?: Record<string, any>;
-  } = {}
-): ActivityLogEntry {
-  const entry: ActivityLogEntry = {
-    id: `log_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`,
-    timestamp: new Date().toISOString(),
-    action,
-    module,
-    userId: payload.userId || "unknown",
-    userName:
-      payload.userName ||
-      (typeof window !== "undefined"
-        ? localStorage.getItem("userName") || "Unknown User"
-        : "Unknown User"),
-    userRole: payload.userRole || "unknown",
-    targetId: payload.targetId,
-    targetLabel: payload.targetLabel,
-    details: payload.details,
-    metadata: payload.metadata,
-  };
+  module: string,
+  opts: LogActivityOptions = {}
+): void {
+  // Fire and forget — don't await, don't throw
+  (async () => {
+    try {
+      // Get user info from localStorage (client-side only)
+      let userName = "";
+      let userEmail = "";
+      if (typeof window !== "undefined") {
+        userName = localStorage.getItem("userName") || "";
+        userEmail = localStorage.getItem("userEmail") || "";
+      }
 
-  try {
-    const existing = getActivityLog();
-    const updated = [entry, ...existing].slice(0, MAX_ENTRIES);
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(updated));
-  } catch (e) {
-    console.error("Failed to write activity log", e);
-  }
-
-  return entry;
-}
-
-/** Delete a single entry by id */
-export function deleteActivityLogEntry(id: string): boolean {
-  try {
-    const existing = getActivityLog();
-    const updated = existing.filter((e) => e.id !== id);
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(updated));
-    return true;
-  } catch {
-    return false;
-  }
-}
-
-/** Clear entire log */
-export function clearActivityLog(): boolean {
-  try {
-    localStorage.removeItem(STORAGE_KEY);
-    return true;
-  } catch {
-    return false;
-  }
+      await fetch("/api/activity-log", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          action,
+          module,
+          targetId: opts.targetId || "",
+          targetLabel: opts.targetLabel || "",
+          details: opts.details || "",
+          userRole: opts.userRole || "",
+          userName,
+          userEmail,
+          timestamp: new Date().toISOString(),
+        }),
+        // Don't fail the caller if logging fails
+        keepalive: true,
+      });
+    } catch (e) {
+      // ✅ Silent — logging is non-critical
+      console.warn("Activity log failed (non-critical):", e);
+    }
+  })();
 }
