@@ -37,9 +37,22 @@ export default async function IncomePage() {
   const role = normalizeRole((session.user as any).role);
   const email = String(session.user?.email || "");
 
-  // ✅ Check permissions
+  // ✅ ሁሉንም permissions አንብብ
   const canEditIncome = await hasPermission(email, role, "canEditIncome");
   const canDeleteIncome = await hasPermission(email, role, "canDeleteIncome");
+  const canAddIncome = await hasPermission(email, role, "canAddIncome");       // 🆕
+  const canExportIncome = await hasPermission(email, role, "canExportIncome"); // 🆕
+  const canPrintIncome = await hasPermission(email, role, "canPrintIncome");   // 🆕
+
+  // ✅ Debug log (ለማረጋገጥ)
+  console.log("🔍 [Income page] role:", role, "email:", email);
+  console.log("🔍 [Income page] permissions:", {
+    canEditIncome,
+    canDeleteIncome,
+    canAddIncome,
+    canExportIncome,
+    canPrintIncome,
+  });
 
   let income: IncomeItem[] = [];
   try {
@@ -81,6 +94,9 @@ export default async function IncomePage() {
       userRole={role}
       canEditIncome={canEditIncome}
       canDeleteIncome={canDeleteIncome}
+      canAddIncome={canAddIncome}           // 🆕
+      canExportIncome={canExportIncome}     // 🆕
+      canPrintIncome={canPrintIncome}       // 🆕
     />
   );
 }
