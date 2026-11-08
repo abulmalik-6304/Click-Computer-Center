@@ -3,7 +3,7 @@
 
 import { useMemo, useState } from "react";
 import { IncomeRecord } from "@/lib/income-types";
-import { IncomeDetailModal } from "./IncomeDetailModal";
+import IncomeDetailModal from "./IncomeDetailModal";
 import {
   fmt,
   escapeHtml,
