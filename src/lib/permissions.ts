@@ -22,8 +22,11 @@ export const PERMISSION_HEADERS = [
   "Can_View_Profit",
   "Can_Print_Customers",
   "Can_Print_Suppliers",
-  "Can_Edit_Income", // ✅ አዲስ
-  "Can_Delete_Income", // ✅ አዲስ
+  "Can_Edit_Income",
+  "Can_Delete_Income",
+  "Can_Add_Income", // 🆕
+  "Can_Export_Income", // 🆕
+  "Can_Print_Income", // 🆕
   "Updated_By",
   "Updated_At",
 ];
@@ -40,8 +43,11 @@ export interface ManagerPermissions {
   canViewProfit: boolean;
   canPrintCustomers: boolean;
   canPrintSuppliers: boolean;
-  canEditIncome: boolean; // ✅ አዲስ
-  canDeleteIncome: boolean; // ✅ አዲስ
+  canEditIncome: boolean;
+  canDeleteIncome: boolean;
+  canAddIncome: boolean; // 🆕
+  canExportIncome: boolean; // 🆕
+  canPrintIncome: boolean; // 🆕
 }
 
 export const DEFAULT_PERMISSIONS: Omit<ManagerPermissions, "email"> = {
@@ -55,8 +61,11 @@ export const DEFAULT_PERMISSIONS: Omit<ManagerPermissions, "email"> = {
   canViewProfit: false,
   canPrintCustomers: false,
   canPrintSuppliers: false,
-  canEditIncome: false, // ✅ አዲስ
-  canDeleteIncome: false, // ✅ አዲስ
+  canEditIncome: false,
+  canDeleteIncome: false,
+  canAddIncome: false, // 🆕
+  canExportIncome: false, // 🆕
+  canPrintIncome: false, // 🆕
 };
 
 export type PermissionKey =
@@ -70,8 +79,11 @@ export type PermissionKey =
   | "canViewProfit"
   | "canPrintCustomers"
   | "canPrintSuppliers"
-  | "canEditIncome" // ✅ አዲስ
-  | "canDeleteIncome"; // ✅ አዲስ
+  | "canEditIncome"
+  | "canDeleteIncome"
+  | "canAddIncome" // 🆕
+  | "canExportIncome" // 🆕
+  | "canPrintIncome"; // 🆕
 
 // ═══════════════════════════════════════════════════════════════
 // GET: Load permissions for a manager
@@ -104,15 +116,62 @@ export async function getManagerPermissions(
       canVoid: getBool(["Can_Void", "CanVoid", "canVoid"]),
       canRefund: getBool(["Can_Refund", "CanRefund", "canRefund"]),
       canDelete: getBool(["Can_Delete", "CanDelete", "canDelete"]),
-      canEditInventory: getBool(["Can_Edit_Inventory", "CanEditInventory", "canEditInventory"]),
+      canEditInventory: getBool([
+        "Can_Edit_Inventory",
+        "CanEditInventory",
+        "canEditInventory",
+      ]),
       canExport: getBool(["Can_Export", "CanExport", "canExport"]),
-      canViewActivity: getBool(["Can_View_Activity", "CanViewActivity", "canViewActivity"]),
-      canManageStaff: getBool(["Can_Manage_Staff", "CanManageStaff", "canManageStaff"]),
-      canViewProfit: getBool(["Can_View_Profit", "CanViewProfit", "canViewProfit"]),
-      canPrintCustomers: getBool(["Can_Print_Customers", "CanPrintCustomers", "canPrintCustomers"]),
-      canPrintSuppliers: getBool(["Can_Print_Suppliers", "CanPrintSuppliers", "canPrintSuppliers"]),
-      canEditIncome: getBool(["Can_Edit_Income", "CanEditIncome", "canEditIncome"]), // ✅
-      canDeleteIncome: getBool(["Can_Delete_Income", "CanDeleteIncome", "canDeleteIncome"]), // ✅
+      canViewActivity: getBool([
+        "Can_View_Activity",
+        "CanViewActivity",
+        "canViewActivity",
+      ]),
+      canManageStaff: getBool([
+        "Can_Manage_Staff",
+        "CanManageStaff",
+        "canManageStaff",
+      ]),
+      canViewProfit: getBool([
+        "Can_View_Profit",
+        "CanViewProfit",
+        "canViewProfit",
+      ]),
+      canPrintCustomers: getBool([
+        "Can_Print_Customers",
+        "CanPrintCustomers",
+        "canPrintCustomers",
+      ]),
+      canPrintSuppliers: getBool([
+        "Can_Print_Suppliers",
+        "CanPrintSuppliers",
+        "canPrintSuppliers",
+      ]),
+      canEditIncome: getBool([
+        "Can_Edit_Income",
+        "CanEditIncome",
+        "canEditIncome",
+      ]),
+      canDeleteIncome: getBool([
+        "Can_Delete_Income",
+        "CanDeleteIncome",
+        "canDeleteIncome",
+      ]),
+      canAddIncome: getBool([
+        "Can_Add_Income",
+        "CanAddIncome",
+        "canAddIncome",
+      ]), // 🆕
+      canExportIncome: getBool([
+        "Can_Export_Income",
+        "CanExportIncome",
+        "canExportIncome",
+      ]), // 🆕
+      canPrintIncome: getBool([
+        "Can_Print_Income",
+        "CanPrintIncome",
+        "canPrintIncome",
+      ]), // 🆕
     };
   } catch (e: any) {
     if (String(e.message).includes("not found")) return null;
@@ -158,8 +217,11 @@ export async function setManagerPermissions(
       Can_View_Profit: permissions.canViewProfit ? "TRUE" : "FALSE",
       Can_Print_Customers: permissions.canPrintCustomers ? "TRUE" : "FALSE",
       Can_Print_Suppliers: permissions.canPrintSuppliers ? "TRUE" : "FALSE",
-      Can_Edit_Income: permissions.canEditIncome ? "TRUE" : "FALSE", // ✅
-      Can_Delete_Income: permissions.canDeleteIncome ? "TRUE" : "FALSE", // ✅
+      Can_Edit_Income: permissions.canEditIncome ? "TRUE" : "FALSE",
+      Can_Delete_Income: permissions.canDeleteIncome ? "TRUE" : "FALSE",
+      Can_Add_Income: permissions.canAddIncome ? "TRUE" : "FALSE", // 🆕
+      Can_Export_Income: permissions.canExportIncome ? "TRUE" : "FALSE", // 🆕
+      Can_Print_Income: permissions.canPrintIncome ? "TRUE" : "FALSE", // 🆕
     };
 
     if (existing) {
