@@ -24,17 +24,18 @@ export async function GET() {
         const calc = stockMap[itemId];
         const stock = calc?.currentStock ?? 0;
 
-        return {
+                return {
           id: itemId,
           name: String(obj.Item_Name || ""),
           code: String(obj.Item_Code || ""),
           category: String(obj.Category || obj.Unit_Type || "General"),
           image: String(obj.Item_Image || ""),
           stock,
-          costPrice: Number(obj.Cost_Price || 0),
-          sellingPrice: Number(obj.Selling_Price || 0),
-          avgCost: Number(obj.Avg_Cost || obj.Cost_Price || 0),
+          costPrice,      // ✅ From inventory
+          sellingPrice,
+          avgCost: costPrice,
           unitType: String(obj.Unit_Type || "pcs"),
+          packSize: Number(obj.Pack_Size || obj.PackSize || 1) || 1,  // ✅ አዲስ
           reorderLevel: Number(obj.Reorder_Level || 10),
           status: String(obj.Status || "Active"),
           supplierId: String(obj.Supplier_ID || ""),
