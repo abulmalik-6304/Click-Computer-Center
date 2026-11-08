@@ -10,16 +10,21 @@ import {
   SOURCE_COLORS,
   buildSourceBreakdown,
 } from "@/lib/income-categories";
-import { IncomeItem } from "./page";
+import { IncomeRecord } from "@/lib/income-types";
 import IncomeFormModal from "@/components/admin/income/IncomeFormModal";
 
 type ModalMode = "add" | null;
+
+function fmt(n: any): string {
+  const num = Number(n);
+  return isNaN(num) ? "0" : num.toLocaleString();
+}
 
 export default function IncomeClient({
   initialIncome,
   userRole,
 }: {
-  initialIncome: IncomeItem[];
+  initialIncome: IncomeRecord[];
   userRole: string;
 }) {
   const [items, setItems] = useState(initialIncome);
@@ -30,6 +35,7 @@ export default function IncomeClient({
   const [categoryFilter, setCategoryFilter] = useState("all");
   const [modal, setModal] = useState<ModalMode>(null);
   const [loading, setLoading] = useState(false);
+  const [expanded, setExpanded] = useState<string | null>(null);
 
   const canEdit = ["owner", "manager"].includes(userRole);
   const canAdd = ["owner", "manager", "employee", "staff"].includes(userRole);
@@ -103,7 +109,7 @@ export default function IncomeClient({
   async function refresh() {
     setLoading(true);
     try {
-      const res = await fetch("/api/income", { cache: "no-store" });
+      const res = await fetch("/api/income");
       const data = await res.json();
       if (Array.isArray(data.income)) setItems(data.income);
     } catch (e) {
@@ -118,9 +124,7 @@ export default function IncomeClient({
       {/* Header */}
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
         <div>
-          <h1 className="text-2xl sm:text-3xl font-bold text-slate-900">
-            💰 Income
-          </h1>
+          <h1 className="text-2xl sm:text-3xl font-bold text-slate-900">💰 Income</h1>
           <p className="text-sm text-slate-500 mt-1">
             {items.length} total · {filtered.length} filtered
           </p>
@@ -139,19 +143,19 @@ export default function IncomeClient({
       <div className="grid sm:grid-cols-2 lg:grid-cols-4 gap-4">
         <StatCard
           label="Gross Income"
-          value={`${totals.gross.toLocaleString()} ETB`}
+          value={`${fmt(totals.gross)} ETB`}
           color="emerald"
           icon="💵"
         />
         <StatCard
           label="Material Cost"
-          value={`${totals.material.toLocaleString()} ETB`}
-          color="orange"
+          value={`${fmt(totals.material)} ETB`}
+          color="red"
           icon="📦"
         />
         <StatCard
           label="Net Income"
-          value={`${totals.net.toLocaleString()} ETB`}
+          value={`${fmt(totals.net)} ETB`}
           color={totals.net >= 0 ? "emerald" : "red"}
           icon="💎"
         />
@@ -190,11 +194,9 @@ export default function IncomeClient({
                     />
                   </div>
                   <p className="mt-2 text-sm font-bold text-slate-900">
-                    {b.total.toLocaleString()} ETB
+                    {fmt(b.total)} ETB
                   </p>
-                  <p className="text-xs text-slate-500">
-                    {b.count} transactions
-                  </p>
+                  <p className="text-xs text-slate-500">{b.count} transactions</p>
                 </div>
               );
             })}
@@ -270,92 +272,141 @@ export default function IncomeClient({
                 <th className="text-right px-3 py-3 font-semibold">Gross</th>
                 {canEdit && (
                   <th className="text-right px-3 py-3 font-semibold hidden md:table-cell">
-                    Cost
+                    Material
                   </th>
                 )}
                 <th className="text-right px-3 py-3 font-semibold">Net</th>
-                {canEdit && (
-                  <th className="text-right px-3 py-3 font-semibold">Actions</th>
-                )}
+                <th className="text-right px-3 py-3 font-semibold">Actions</th>
               </tr>
             </thead>
             <tbody>
               {filtered.length === 0 ? (
                 <tr>
-                  <td
-                    colSpan={canEdit ? 8 : 6}
-                    className="text-center py-10 text-slate-500"
-                  >
+                  <td colSpan={canEdit ? 8 : 6} className="text-center py-10 text-slate-500">
                     No income records found
                   </td>
                 </tr>
               ) : (
-                filtered.map((i) => (
-                  <tr
-                    key={i.id}
-                    className="border-t border-slate-100 hover:bg-slate-50"
-                  >
-                    <td className="px-3 py-3 text-slate-600">{i.date}</td>
-                    <td className="px-3 py-3">
-                      <span
-                        className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium ${
-                          SOURCE_COLORS[i.incomeSource.toLowerCase()] ??
-                          "bg-gray-100 text-gray-700"
-                        }`}
+                filtered.map((i) => {
+                  const isExpanded = expanded === i.id;
+                  const hasMaterials = i.materialsJson && i.materialsJson.length > 2;
+
+                  return (
+                    <>
+                      <tr
+                        key={i.id}
+                        className="border-t border-slate-100 hover:bg-slate-50"
                       >
-                        {getSourceIcon(i.incomeSource)}{" "}
-                        {getSourceLabel(i.incomeSource)}
-                      </span>
-                    </td>
-                    <td className="px-3 py-3 text-slate-700 hidden md:table-cell">
-                      {i.incomeCategory || "—"}
-                    </td>
-                    <td className="px-3 py-3 text-slate-600 hidden lg:table-cell">
-                      {i.description || "—"}
-                    </td>
-                    <td className="px-3 py-3 text-right font-medium text-emerald-600">
-                      +{i.grossIncome.toLocaleString()}
-                    </td>
-                    {canEdit && (
-                      <td className="px-3 py-3 text-right text-slate-600 hidden md:table-cell">
-                        {i.materialCost > 0
-                          ? `-${i.materialCost.toLocaleString()}`
-                          : "—"}
-                      </td>
-                    )}
-                    <td
-                      className={`px-3 py-3 text-right font-bold ${
-                        i.netIncome >= 0 ? "text-emerald-600" : "text-red-600"
-                      }`}
-                    >
-                      {i.netIncome.toLocaleString()}
-                    </td>
-                    {canEdit && (
-                      <td className="px-3 py-3 text-right">
-                        <button
-                          onClick={async () => {
-                            if (!confirm("Delete this income record?")) return;
-                            await fetch("/api/income", {
-                              method: "DELETE",
-                              headers: { "Content-Type": "application/json" },
-                              body: JSON.stringify({ id: i.id }),
-                            });
-                            refresh();
-                          }}
-                          className="px-2 py-1 text-xs bg-red-100 text-red-700 rounded hover:bg-red-200"
+                        <td className="px-3 py-3 text-slate-600">{i.date.slice(0, 10)}</td>
+                        <td className="px-3 py-3">
+                          <span
+                            className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium ${
+                              SOURCE_COLORS[i.incomeSource.toLowerCase()] ??
+                              "bg-gray-100 text-gray-700"
+                            }`}
+                          >
+                            {getSourceIcon(i.incomeSource)}{" "}
+                            {getSourceLabel(i.incomeSource)}
+                          </span>
+                        </td>
+                        <td className="px-3 py-3 text-slate-700 hidden md:table-cell">
+                          {i.incomeCategory || "—"}
+                        </td>
+                        <td className="px-3 py-3 text-slate-600 hidden lg:table-cell truncate max-w-xs">
+                          {i.description || "—"}
+                        </td>
+                        <td className="px-3 py-3 text-right font-medium text-emerald-600">
+                          +{fmt(i.grossIncome)}
+                        </td>
+                        {canEdit && (
+                          <td className="px-3 py-3 text-right text-slate-600 hidden md:table-cell">
+                            {i.materialCost > 0 ? `-${fmt(i.materialCost)}` : "—"}
+                          </td>
+                        )}
+                        <td
+                          className={`px-3 py-3 text-right font-bold ${
+                            i.netIncome >= 0 ? "text-emerald-600" : "text-red-600"
+                          }`}
                         >
-                          🗑
-                        </button>
-                      </td>
-                    )}
-                  </tr>
-                ))
+                          {fmt(i.netIncome)}
+                        </td>
+                        <td className="px-3 py-3 text-right">
+                          <div className="flex justify-end gap-1">
+                            {hasMaterials && (
+                              <button
+                                onClick={() =>
+                                  setExpanded(isExpanded ? null : i.id)
+                                }
+                                className="px-2 py-1 text-xs bg-blue-100 text-blue-700 rounded hover:bg-blue-200"
+                                title="View Materials"
+                              >
+                                {isExpanded ? "▲" : "📦"}
+                              </button>
+                            )}
+                            {canEdit && (
+                              <button
+                                onClick={async () => {
+                                  if (!confirm("Delete this income record?")) return;
+                                  await fetch("/api/income", {
+                                    method: "DELETE",
+                                    headers: { "Content-Type": "application/json" },
+                                    body: JSON.stringify({ id: i.id }),
+                                  });
+                                  refresh();
+                                }}
+                                className="px-2 py-1 text-xs bg-red-100 text-red-700 rounded hover:bg-red-200"
+                              >
+                                🗑
+                              </button>
+                            )}
+                          </div>
+                        </td>
+                      </tr>
+
+                      {/* Expanded Materials Row */}
+                      {isExpanded && hasMaterials && (
+                        <tr className="bg-slate-50">
+                          <td colSpan={canEdit ? 8 : 6} className="px-6 py-3">
+                            <div className="text-xs">
+                              <p className="font-semibold text-slate-700 mb-2">
+                                📦 Materials Used:
+                              </p>
+                              <div className="space-y-1">
+                                {(() => {
+                                  try {
+                                    const mats = JSON.parse(i.materialsJson || "[]");
+                                    return mats.map((m: any, idx: number) => (
+                                      <div
+                                        key={idx}
+                                        className="flex justify-between items-center py-1 border-b border-slate-200"
+                                      >
+                                        <span className="text-slate-700">
+                                          {m.itemName} · {m.usedQty} used
+                                        </span>
+                                        <span className="font-semibold text-red-600">
+                                          − {fmt(m.materialCost)} ETB
+                                        </span>
+                                      </div>
+                                    ));
+                                  } catch {
+                                    return <p>Unable to parse materials</p>;
+                                  }
+                                })()}
+                              </div>
+                            </div>
+                          </td>
+                        </tr>
+                      )}
+                    </>
+                  );
+                })
               )}
             </tbody>
           </table>
         </div>
       </div>
 
+      {/* Modal */}
       {modal === "add" && (
         <IncomeFormModal
           onClose={() => setModal(null)}
@@ -368,8 +419,6 @@ export default function IncomeClient({
     </div>
   );
 }
-
-// ─── Components ───
 
 function StatCard({
   label,
@@ -384,13 +433,14 @@ function StatCard({
 }) {
   const cls =
     {
-      emerald: "text-emerald-700 bg-emerald-50",
-      orange: "text-orange-700 bg-orange-50",
-      red: "text-red-700 bg-red-50",
-      slate: "text-slate-700 bg-slate-50",
-    }[color] ?? "text-slate-700 bg-slate-50";
+      emerald: "text-emerald-700 bg-emerald-50 border-emerald-200",
+      red: "text-red-700 bg-red-50 border-red-200",
+      slate: "text-slate-700 bg-slate-50 border-slate-200",
+      orange: "text-orange-700 bg-orange-50 border-orange-200",
+    }[color] ?? "text-slate-700 bg-slate-50 border-slate-200";
+
   return (
-    <div className={`${cls} p-4 rounded-2xl border border-slate-200`}>
+    <div className={`${cls} p-4 rounded-2xl border`}>
       <div className="flex items-start justify-between">
         <p className="text-xs font-medium opacity-75">{label}</p>
         <span className="text-lg">{icon}</span>
