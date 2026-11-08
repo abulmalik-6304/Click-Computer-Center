@@ -5,6 +5,8 @@ import { authOptions } from "@/lib/auth";
 import { getSheet, getDoc, SHEETS } from "@/lib/google-sheets";
 import { refreshCache } from "@/lib/sheets-cache";
 import { INCOME_SOURCES } from "@/lib/income-categories";
+import { hasPermission } from "@/lib/permissions";
+import { normalizeRole } from "@/lib/roles";
 import {
   calculateMaterialCost,
   calculateNetIncome,
@@ -281,14 +283,21 @@ export async function POST(req: NextRequest) {
   }
 }
 
-// ─── DELETE ───
+// ─── DELETE — Restore material stock + delete row ───
 export async function DELETE(req: NextRequest) {
   const session = await getServerSession(authOptions);
   if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
-  const role = String((session.user as any).role || "").toLowerCase();
-  if (!["owner", "manager"].includes(role)) {
-    return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+  const role = normalizeRole((session.user as any).role);
+  const email = String(session.user?.email || "");
+
+  // ✅ Check permission
+  const canDelete = await hasPermission(email, role, "canDeleteIncome");
+  if (!canDelete) {
+    return NextResponse.json(
+      { error: "You don't have permission to delete income" },
+      { status: 403 }
+    );
   }
 
   try {
@@ -300,11 +309,62 @@ export async function DELETE(req: NextRequest) {
     const row = rows.find((r) => String(r.get("Income_ID")) === String(id));
     if (!row) return NextResponse.json({ error: "Not found" }, { status: 404 });
 
-    await row.delete();
-    await refreshCache(SHEET);
+    const obj = row.toObject() as any;
+    const materialsJson = String(obj.Materials_Json || "");
 
-    return NextResponse.json({ ok: true });
+    // ═══════════════════════════════════════════════════════════════
+    // ✅ RESTORE MATERIAL STOCK
+    // ═══════════════════════════════════════════════════════════════
+    let restoredCount = 0;
+    const restoredMaterials: { name: string; qty: number }[] = [];
+
+    if (materialsJson) {
+      try {
+        const materials = JSON.parse(materialsJson);
+        if (Array.isArray(materials) && materials.length > 0) {
+          const invSheet = await getSheet(SHEETS.INVENTORY);
+          const invRows = await invSheet.getRows();
+
+          for (const m of materials) {
+            const itemId = String(m.itemId || "");
+            const qty = Number(m.usedQty || 0);
+            if (!itemId || qty <= 0) continue;
+
+            const invRow = invRows.find(
+              (r) => String(r.get("Item_ID")) === itemId
+            );
+            if (invRow) {
+              const currentStock = Number(invRow.get("Stock_Quantity") || 0);
+              invRow.set("Stock_Quantity", currentStock + qty);
+              await invRow.save();
+              restoredCount++;
+              restoredMaterials.push({
+                name: String(m.itemName || itemId),
+                qty,
+              });
+            }
+          }
+        }
+      } catch (e) {
+        console.warn("Failed to parse materials_json:", e);
+      }
+    }
+
+    // ✅ Delete income row
+    await row.delete();
+
+    // ✅ Invalidate caches
+    await refreshCache(SHEET);
+    await refreshCache(SHEETS.INVENTORY);
+
+    return NextResponse.json({
+      ok: true,
+      id,
+      restoredCount,
+      restoredMaterials,
+    });
   } catch (e: any) {
+    console.error("Income DELETE error:", e);
     return NextResponse.json({ error: e.message }, { status: 500 });
   }
 }
