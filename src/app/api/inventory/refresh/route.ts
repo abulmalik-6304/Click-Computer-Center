@@ -24,7 +24,7 @@ export async function GET() {
         const calc = stockMap[itemId];
         const stock = calc?.currentStock ?? 0;
 
-                return {
+        return {
           id: itemId,
           name: String(obj.Item_Name || ""),
           code: String(obj.Item_Code || ""),
