@@ -19,8 +19,10 @@ interface Manager {
     canViewActivity: boolean;
     canManageStaff: boolean;
     canViewProfit: boolean;
-    canPrintCustomers: boolean; // ✅ አዲስ
-    canPrintSuppliers: boolean; // ✅ አዲስ
+    canPrintCustomers: boolean;
+    canPrintSuppliers: boolean;
+    canEditIncome: boolean; // ✅ አዲስ
+    canDeleteIncome: boolean; // ✅ አዲስ
   };
 }
 
@@ -224,6 +226,20 @@ export default function ManagerPermissions() {
                   enabled={m.permissions.canPrintSuppliers}
                   loading={saving === m.email}
                   onClick={() => toggle(m, "canPrintSuppliers")}
+                />
+                <Toggle
+                  label="Edit Income"
+                  icon="✏️"
+                  enabled={m.permissions.canEditIncome}
+                  loading={saving === m.email}
+                  onClick={() => toggle(m, "canEditIncome")}
+                />
+                <Toggle
+                  label="Delete Income"
+                  icon="🗑"
+                  enabled={m.permissions.canDeleteIncome}
+                  loading={saving === m.email}
+                  onClick={() => toggle(m, "canDeleteIncome")}
                 />
               </div>
             </div>
