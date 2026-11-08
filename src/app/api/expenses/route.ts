@@ -32,6 +32,8 @@ export async function GET() {
           employeeName: String(o.Employee_Name || ""),
           jobRole: String(o.Job_Role || ""),
           paymentMonth: String(o.Payment_Month || ""),
+          allowance: Number(o.Allowance || 0), // 🆕
+          salary: Number(o.Salary || 0), // 🆕
         };
       })
       .sort(
@@ -80,9 +82,11 @@ export async function POST(req: NextRequest) {
       Description: body.description || "",
       Recorded_By:
         session.user?.name || session.user?.email || email || "",
-      Employee_Name: body.employeeName,
+      Employee_Name: body.employeeName || "",
       Job_Role: body.jobRole || "",
-      Payment_Month: body.paymentMonth,
+      Payment_Month: body.paymentMonth || "",
+      Allowance: Number(body.allowance) || 0, // 🆕
+      Salary: Number(body.salary) || 0, // 🆕
     };
 
     await sheet.addRow(newRow);
@@ -99,6 +103,8 @@ export async function POST(req: NextRequest) {
         employeeName: body.employeeName,
         jobRole: body.jobRole,
         paymentMonth: body.paymentMonth,
+        allowance: newRow.Allowance, // 🆕
+        salary: newRow.Salary, // 🆕
       },
     });
   } catch (e: any) {
@@ -142,6 +148,8 @@ export async function PUT(req: NextRequest) {
     existing.set("Employee_Name", body.employeeName);
     existing.set("Job_Role", body.jobRole || "");
     existing.set("Payment_Month", body.paymentMonth);
+    existing.set("Allowance", Number(body.allowance) || 0); // 🆕
+    existing.set("Salary", Number(body.salary) || 0); // 🆕
     // Recorded_By አይቀየርም (የተመዘገበው ሰው)
     await existing.save();
 
