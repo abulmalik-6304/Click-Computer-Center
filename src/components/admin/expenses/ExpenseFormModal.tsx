@@ -37,12 +37,42 @@ function normalizeDate(input?: string | null): string {
 }
 
 interface Employee {
+  // Core
   id: string;
+  empId: string;
+  email: string;
   name: string;
+  role: string;
+  status: string;
+
+  // Contact
+  phone: string;
+  emergencyContact: string;
+
+  // Employment
   jobRole: string;
   salary: number;
   allowance: number;
-  status: string;
+  hireDate: string;
+
+  // Personal
+  gender: string;
+  birthDate: string;
+
+  // ID Documents
+  nationalIdSide1: string;
+  nationalIdSide2: string;
+
+  // Address
+  homeAddress: string;
+  kebele: string;
+  city: string;
+  state: string;
+
+  // Other
+  notes: string;
+  photo: string;
+  lastSeen: string;
 }
 
 interface Props {
@@ -107,21 +137,25 @@ export default function ExpenseFormModal({ record, onClose, onSaved }: Props) {
     return employees.filter(
       (e) =>
         e.name.toLowerCase().includes(q) ||
-        e.jobRole.toLowerCase().includes(q)
+        e.jobRole.toLowerCase().includes(q) ||
+        (e.empId || "").toLowerCase().includes(q)
     );
   }, [employees, employeeSearch]);
 
-  // ✅ Select employee → auto-fill jobRole + salary
+  // ✅ Select employee → auto-fill jobRole + salary/allowance
   function selectEmployee(emp: Employee) {
     setEmployeeName(emp.name);
     setJobRole(emp.jobRole);
-    // ✅ If salary category → auto-fill amount from salary
+
+    // ✅ Salary → auto-fill salary amount
     if (category.toLowerCase() === "salary") {
       setAmount(Number(emp.salary) || 0);
-    } else if (category.toLowerCase() === "allowance") {
-      // Allowance → auto-fill allowance amount (if any), but user can override
-      if (emp.allowance > 0) setAmount(Number(emp.allowance) || 0);
     }
+    // ✅ Allowance → auto-fill allowance amount
+    else if (category.toLowerCase() === "allowance") {
+      setAmount(Number(emp.allowance) || 0);
+    }
+
     setShowEmployeePicker(false);
     setEmployeeSearch("");
   }
@@ -389,7 +423,7 @@ export default function ExpenseFormModal({ record, onClose, onSaved }: Props) {
                   <select
                     value={paymentMonth.split("-")[1] || ""}
                     onChange={(e) => {
-                      const [, , ] = paymentMonth.split("-");
+                      const [, ,] = paymentMonth.split("-");
                       const [y] = paymentMonth.split("-");
                       setPaymentMonth(
                         `${y || new Date().getFullYear()}-${e.target.value}`
@@ -543,7 +577,7 @@ export default function ExpenseFormModal({ record, onClose, onSaved }: Props) {
                 type="text"
                 value={employeeSearch}
                 onChange={(e) => setEmployeeSearch(e.target.value)}
-                placeholder="🔍 Search by name or job role…"
+                placeholder="🔍 Search by name, role, or Emp-ID…"
                 autoFocus
                 className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"
               />
@@ -566,25 +600,64 @@ export default function ExpenseFormModal({ record, onClose, onSaved }: Props) {
                     onClick={() => selectEmployee(emp)}
                     className="w-full text-left p-3 hover:bg-slate-50 border-b border-slate-100 flex items-center gap-3"
                   >
-                    <div className="w-10 h-10 rounded-full bg-emerald-100 flex items-center justify-center text-emerald-700 font-bold flex-shrink-0">
-                      {emp.name.charAt(0).toUpperCase()}
-                    </div>
+                    {/* Photo or Initial */}
+                    {emp.photo ? (
+                      <img
+                        src={emp.photo}
+                        alt={emp.name}
+                        className="w-12 h-12 rounded-full object-cover bg-slate-100 flex-shrink-0"
+                        onError={(e) =>
+                          ((e.target as HTMLImageElement).src =
+                            "/placeholder.svg")
+                        }
+                      />
+                    ) : (
+                      <div className="w-12 h-12 rounded-full bg-emerald-100 flex items-center justify-center text-emerald-700 font-bold text-lg flex-shrink-0">
+                        {emp.name.charAt(0).toUpperCase()}
+                      </div>
+                    )}
+
+                    {/* Info */}
                     <div className="flex-1 min-w-0">
                       <p className="text-sm font-medium text-slate-900 truncate">
                         {emp.name}
                       </p>
                       <p className="text-xs text-slate-500">
                         {emp.jobRole}
+                        {emp.empId && (
+                          <span className="ml-1 text-slate-400">
+                            · {emp.empId}
+                          </span>
+                        )}
                       </p>
-                    </div>
-                    {emp.salary > 0 && (
-                      <div className="text-right flex-shrink-0">
-                        <p className="text-xs font-bold text-emerald-600">
-                          {fmt(emp.salary)}
+                      {emp.department && (
+                        <p className="text-xs text-slate-400">
+                          📁 {emp.department}
                         </p>
-                        <p className="text-xs text-slate-500">ETB</p>
-                      </div>
-                    )}
+                      )}
+                    </div>
+
+                    {/* Salary / Allowance */}
+                    <div className="text-right flex-shrink-0 space-y-0.5">
+                      {emp.salary > 0 && (
+                        <div>
+                          <p className="text-xs font-bold text-emerald-600">
+                            💰 {emp.salary.toLocaleString()}
+                          </p>
+                          <p className="text-[10px] text-slate-500">Salary</p>
+                        </div>
+                      )}
+                      {emp.allowance > 0 && (
+                        <div>
+                          <p className="text-xs font-bold text-blue-600">
+                            📋 {emp.allowance.toLocaleString()}
+                          </p>
+                          <p className="text-[10px] text-slate-500">
+                            Allowance
+                          </p>
+                        </div>
+                      )}
+                    </div>
                   </button>
                 ))
               )}
