@@ -2,12 +2,19 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
-import { getSheet, SHEETS } from "@/lib/google-sheets";
+import { getSheet, getDoc, SHEETS } from "@/lib/google-sheets";
+import { refreshCache } from "@/lib/sheets-cache";
 import { INCOME_SOURCES } from "@/lib/income-categories";
-
-export const revalidate = 0;
+import {
+  calculateMaterialCost,
+  calculateNetIncome,
+  IncomeMaterial,
+} from "@/lib/income-types";
 
 const SHEET = "Income_TBL";
+
+export const revalidate = 0;
+export const dynamic = "force-dynamic";
 
 // ─── GET: List income ───
 export async function GET(req: NextRequest) {
@@ -39,11 +46,12 @@ export async function GET(req: NextRequest) {
         description: String(obj.Description || ""),
         grossIncome: Number(obj.Gross_Income || 0),
         usedMaterial: String(obj.Used_Material || ""),
-        costPriceMain: Number(obj.Cost_Price_Maine || 0),
+        costPriceMain: Number(obj["Cost_Price_ Maine"] || 0),
         packSize: Number(obj.Pack_Size || 0),
         usedQty: Number(obj.Used_Qty || 0),
         materialCost: Number(obj.Material_Cost || 0),
         netIncome: Number(obj.Net_Income || 0),
+        materialsJson: String(obj.Materials_Json || ""),
       };
     });
 
@@ -76,12 +84,10 @@ export async function GET(req: NextRequest) {
       );
     }
 
-    // Sort newest first
     income.sort(
       (a, b) => new Date(b.date).getTime() - new Date(a.date).getTime()
     );
 
-    // Totals
     const totalPrice = income.reduce((s, i) => s + i.totalPrice, 0);
     const totalCost = income.reduce((s, i) => s + i.materialCost, 0);
     const totalNet = income.reduce((s, i) => s + i.netIncome, 0);
@@ -112,34 +118,40 @@ export async function POST(req: NextRequest) {
   const session = await getServerSession(authOptions);
   if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
-  const role = String((session.user as any).role || "").toLowerCase();
-  if (!["owner", "manager", "employee", "staff"].includes(role)) {
-    return NextResponse.json({ error: "Forbidden" }, { status: 403 });
-  }
-
   try {
     const body = await req.json();
+    const {
+      date,
+      incomeSource,
+      incomeCategory,
+      price,
+      quantity,
+      description,
+      materials,
+    } = body;
 
     // ─── Validation ───
-    if (!body.incomeSource) {
-      return NextResponse.json({ error: "Income source required" }, { status: 400 });
+    if (!incomeSource || !incomeCategory) {
+      return NextResponse.json(
+        { error: "Source and category required" },
+        { status: 400 }
+      );
     }
-    if (!body.incomeCategory) {
-      return NextResponse.json({ error: "Income category required" }, { status: 400 });
-    }
-    if (!body.price || Number(body.price) <= 0) {
-      return NextResponse.json({ error: "Price must be > 0" }, { status: 400 });
+    if (!price || Number(price) <= 0) {
+      return NextResponse.json(
+        { error: "Price must be > 0" },
+        { status: 400 }
+      );
     }
 
-    // ─── Validate source/category relationship ───
     const src = INCOME_SOURCES.find(
-      (s) => s.value === String(body.incomeSource).toLowerCase()
+      (s) => s.value === String(incomeSource).toLowerCase()
     );
     if (!src) {
-      return NextResponse.json({ error: "Invalid income source" }, { status: 400 });
+      return NextResponse.json({ error: "Invalid source" }, { status: 400 });
     }
     const validCat = src.categories.find(
-      (c) => c.value === String(body.incomeCategory).toLowerCase()
+      (c) => c.value === String(incomeCategory).toLowerCase()
     );
     if (!validCat) {
       return NextResponse.json(
@@ -148,56 +160,128 @@ export async function POST(req: NextRequest) {
       );
     }
 
+    // ─── Process materials ───
+    const materialsList: IncomeMaterial[] = Array.isArray(materials)
+      ? materials
+      : [];
+
+    // Validate materials + get current inventory
+    const invSheet = await getSheet(SHEETS.INVENTORY);
+    const invRows = await invSheet.getRows();
+    const invById: Record<string, any> = {};
+    for (const r of invRows) {
+      invById[String(r.get("Item_ID"))] = r;
+    }
+
+    let totalMaterialCost = 0;
+    const validatedMaterials: IncomeMaterial[] = [];
+
+    for (const m of materialsList) {
+      const invRow = invById[m.itemId];
+      if (!invRow) {
+        return NextResponse.json(
+          { error: `Material ${m.itemId} not found` },
+          { status: 404 }
+        );
+      }
+
+      const itemName = String(invRow.get("Item_Name") || "");
+      const itemImage = String(invRow.get("Item_Image") || "");
+      const rawCost = Number(
+        invRow.get("Cost_Price") || invRow.get("Avg_Cost") || 0
+      ) || 0;
+      const packSize = Number(invRow.get("Pack_Size") || 1) || 1;
+      const usedQty = Number(m.usedQty) || 0;
+
+      if (usedQty <= 0) {
+        return NextResponse.json(
+          { error: `Used qty for ${itemName} must be > 0` },
+          { status: 400 }
+        );
+      }
+
+      const cost = calculateMaterialCost(rawCost, packSize, usedQty);
+      totalMaterialCost += cost;
+
+      validatedMaterials.push({
+        itemId: String(m.itemId),
+        itemName,
+        itemImage,
+        costPrice: rawCost,
+        packSize,
+        usedQty,
+        materialCost: cost,
+      });
+    }
+
+    // ─── Totals ───
+    const totalPrice = round2(Number(price) * Number(quantity || 1));
+    const grossIncome = totalPrice;
+    const materialCostTotal = round2(totalMaterialCost);
+    const netIncome = calculateNetIncome(totalPrice, materialCostTotal);
+
+    // ─── Save income ───
     const sheet = await getSheet(SHEET);
     const rows = await sheet.getRows();
     const nextNum = rows.length + 1;
     const id = `INC-${String(nextNum).padStart(4, "0")}`;
 
-    // ─── Compute derived values ───
-    const price = Number(body.price);
-    const qty = Number(body.quantity) || 1;
-    const totalPrice = round2(price * qty);
-
-    const costPriceMain = Number(body.costPriceMain) || 0;
-    const packSize = Number(body.packSize) || 0;
-    const usedQty = Number(body.usedQty) || 0;
-
-    // Material cost: (cost per pack / pack size) × used qty
-    const materialCost =
-      packSize > 0 && costPriceMain > 0
-        ? round2((costPriceMain / packSize) * usedQty)
-        : 0;
-
-    const grossIncome = totalPrice;
-    const netIncome = round2(grossIncome - materialCost);
+    // First material (legacy single-material columns)
+    const firstMaterial = validatedMaterials[0];
 
     await sheet.addRow({
       Income_ID: id,
-      Date: body.date || new Date().toISOString().slice(0, 10),
+      Date: date || new Date().toISOString().slice(0, 10),
       Income_Source: src.label,
-      Price: price,
-      Quantity: qty,
+      Price: Number(price),
+      Quantity: Number(quantity || 1),
       Total_Price: totalPrice,
       Recorded_By: session.user?.name ?? session.user?.email ?? "",
-      All_Income_Total: "", // Can be filled by formula
+      All_Income_Total: "",
       Income_Category: validCat.label,
-      Description: body.description || "",
+      Description: description || "",
       Gross_Income: grossIncome,
-      Used_Material: body.usedMaterial || "",
-      "Cost_Price_ Maine": costPriceMain,
-      Pack_Size: packSize,
-      Used_Qty: usedQty,
-      Material_Cost: materialCost,
+      Used_Material: firstMaterial?.itemName || "",
+      "Cost_Price_ Maine": firstMaterial?.costPrice || 0,
+      Pack_Size: firstMaterial?.packSize || 0,
+      Used_Qty: firstMaterial?.usedQty || 0,
+      Material_Cost: materialCostTotal,
       Net_Income: netIncome,
+      Materials_Json: JSON.stringify(validatedMaterials),
     });
 
-    return NextResponse.json({ ok: true, id, netIncome, materialCost });
+    // ═══════════════════════════════════════════════════════════════
+    // ✅ DEDUCT MATERIAL STOCK
+    // ═══════════════════════════════════════════════════════════════
+    for (const m of validatedMaterials) {
+      const invRow = invById[m.itemId];
+      if (!invRow) continue;
+
+      const currentStock = Number(invRow.get("Stock_Quantity") || 0);
+      const newStock = Math.max(0, currentStock - m.usedQty);
+      invRow.set("Stock_Quantity", newStock);
+      await invRow.save();
+    }
+
+    // Invalidate caches
+    await refreshCache(SHEET);
+    await refreshCache(SHEETS.INVENTORY);
+
+    return NextResponse.json({
+      ok: true,
+      id,
+      totalPrice,
+      materialCost: materialCostTotal,
+      netIncome,
+      materialsUsed: validatedMaterials.length,
+    });
   } catch (e: any) {
+    console.error("Income POST error:", e);
     return NextResponse.json({ error: e.message }, { status: 500 });
   }
 }
 
-// ─── DELETE: Delete income ───
+// ─── DELETE ───
 export async function DELETE(req: NextRequest) {
   const session = await getServerSession(authOptions);
   if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
@@ -217,6 +301,8 @@ export async function DELETE(req: NextRequest) {
     if (!row) return NextResponse.json({ error: "Not found" }, { status: 404 });
 
     await row.delete();
+    await refreshCache(SHEET);
+
     return NextResponse.json({ ok: true });
   } catch (e: any) {
     return NextResponse.json({ error: e.message }, { status: 500 });
