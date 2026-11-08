@@ -3,7 +3,7 @@
 
 import { useMemo, useState } from "react";
 import { IncomeRecord } from "@/lib/income-types";
-import IncomeDetailModal from "./IncomeDetailModal";
+import { IncomeDetailModal } from "./IncomeDetailModal";
 import {
   fmt,
   escapeHtml,
@@ -11,16 +11,20 @@ import {
   copyToClipboard,
   shareText,
 } from "@/lib/print-utils";
-import { getSourceIcon, getSourceLabel } from "@/lib/income-categories";
+import {
+  getSourceIcon,
+  getSourceLabel,
+} from "@/lib/income-categories";
 
 interface Props {
-  source: string;
-  records: IncomeRecord[];
+  source: string;                    // e.g. "sales"
+  records: IncomeRecord[];           // all records of THIS source only
   canEdit: boolean;
   canDelete: boolean;
   onClose: () => void;
   onEditRecord?: (r: IncomeRecord) => void;
   onDeleteRecord?: (r: IncomeRecord) => void;
+  onRefresh?: () => void;
 }
 
 export default function IncomeSourceModal({
@@ -31,6 +35,7 @@ export default function IncomeSourceModal({
   onClose,
   onEditRecord,
   onDeleteRecord,
+  onRefresh,
 }: Props) {
   const [copied, setCopied] = useState(false);
   const [detail, setDetail] = useState<IncomeRecord | null>(null);
@@ -65,14 +70,14 @@ export default function IncomeSourceModal({
     ];
     records.forEach((r, i) => {
       lines.push(
-        `${i + 1}. ${r.date.slice(0, 10)} · ${r.incomeCategory} · ${fmt(
-          r.totalPrice
-        )} ETB (Net ${fmt(r.netIncome)})`
+        `${i + 1}. ${r.date.slice(0, 10)} · ${r.incomeCategory}`,
+        `   ${fmt(r.totalPrice)} ETB · Net ${fmt(r.netIncome)} ETB`,
+        r.description ? `   📝 ${r.description}` : ""
       );
     });
     lines.push("───────────────────────");
     lines.push(`Generated: ${new Date().toLocaleString()}`);
-    return lines.join("\n");
+    return lines.filter(Boolean).join("\n");
   }
 
   async function copyAll() {
@@ -107,18 +112,10 @@ export default function IncomeSourceModal({
       bodyHtml: `
         <h2>${escapeHtml(icon)} ${escapeHtml(label)} Summary</h2>
         <div class="kpi">
-          <div><div class="label">Records</div><div class="value">${
-            records.length
-          }</div></div>
-          <div><div class="label">Gross</div><div class="value">${fmt(
-            totals.gross
-          )}</div></div>
-          <div><div class="label">Material</div><div class="value">${fmt(
-            totals.material
-          )}</div></div>
-          <div><div class="label">Net</div><div class="value">${fmt(
-            totals.net
-          )}</div></div>
+          <div><div class="label">Records</div><div class="value">${records.length}</div></div>
+          <div><div class="label">Gross</div><div class="value">${fmt(totals.gross)}</div></div>
+          <div><div class="label">Material</div><div class="value">${fmt(totals.material)}</div></div>
+          <div><div class="label">Net</div><div class="value">${fmt(totals.net)}</div></div>
         </div>
 
         <h2>All Records</h2>
@@ -154,13 +151,14 @@ export default function IncomeSourceModal({
     <>
       <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60">
         <div className="bg-white rounded-2xl shadow-2xl w-full max-w-4xl max-h-[92vh] overflow-y-auto">
+          {/* Header */}
           <div className="sticky top-0 bg-white border-b border-slate-200 px-5 py-3 flex items-center justify-between z-10">
             <div>
               <h2 className="text-lg font-bold text-slate-900">
                 {icon} {label} — All Records
               </h2>
               <p className="text-xs text-slate-500">
-                {records.length} records · Click row for detail
+                {records.length} records · Click any row for detail
               </p>
             </div>
             <div className="flex gap-1">
@@ -169,7 +167,7 @@ export default function IncomeSourceModal({
                 className="px-3 py-1.5 text-xs bg-slate-900 hover:bg-slate-800 text-white font-semibold rounded-lg"
                 title="Print All"
               >
-                🖨
+                🖨 Print
               </button>
               <button
                 onClick={copyAll}
@@ -199,6 +197,7 @@ export default function IncomeSourceModal({
           </div>
 
           <div className="p-5 space-y-4">
+            {/* KPI Cards */}
             <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
               <Kpi label="Records" value={String(records.length)} color="slate" />
               <Kpi label="Gross" value={fmt(totals.gross)} color="emerald" />
@@ -210,24 +209,19 @@ export default function IncomeSourceModal({
               />
             </div>
 
+            {/* Table */}
             <div className="overflow-x-auto border border-slate-200 rounded-lg max-h-96 overflow-y-auto">
               <table className="w-full text-xs">
                 <thead className="bg-slate-100 sticky top-0">
                   <tr>
                     <th className="text-left px-2 py-2 font-semibold">Date</th>
-                    <th className="text-left px-2 py-2 font-semibold">
-                      Category
-                    </th>
+                    <th className="text-left px-2 py-2 font-semibold">Category</th>
                     <th className="text-left px-2 py-2 font-semibold hidden md:table-cell">
                       Description
                     </th>
-                    <th className="text-right px-2 py-2 font-semibold">
-                      Gross
-                    </th>
+                    <th className="text-right px-2 py-2 font-semibold">Gross</th>
                     <th className="text-right px-2 py-2 font-semibold">Net</th>
-                    <th className="text-right px-2 py-2 font-semibold">
-                      Actions
-                    </th>
+                    <th className="text-right px-2 py-2 font-semibold">Actions</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -247,9 +241,7 @@ export default function IncomeSourceModal({
                       </td>
                       <td
                         className={`px-2 py-1.5 text-right font-semibold ${
-                          r.netIncome >= 0
-                            ? "text-emerald-600"
-                            : "text-red-600"
+                          r.netIncome >= 0 ? "text-emerald-600" : "text-red-600"
                         }`}
                       >
                         {fmt(r.netIncome)}
@@ -273,9 +265,7 @@ export default function IncomeSourceModal({
                     <td colSpan={3} className="px-2 py-2">
                       TOTAL ({records.length})
                     </td>
-                    <td className="px-2 py-2 text-right">
-                      {fmt(totals.gross)}
-                    </td>
+                    <td className="px-2 py-2 text-right">{fmt(totals.gross)}</td>
                     <td className="px-2 py-2 text-right">{fmt(totals.net)}</td>
                     <td />
                   </tr>
@@ -286,6 +276,7 @@ export default function IncomeSourceModal({
         </div>
       </div>
 
+      {/* Nested Detail Modal */}
       {detail && (
         <IncomeDetailModal
           record={detail}
