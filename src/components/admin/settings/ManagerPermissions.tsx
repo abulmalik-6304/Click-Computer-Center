@@ -21,8 +21,11 @@ interface Manager {
     canViewProfit: boolean;
     canPrintCustomers: boolean;
     canPrintSuppliers: boolean;
-    canEditIncome: boolean; // ✅ አዲስ
-    canDeleteIncome: boolean; // ✅ አዲስ
+    canEditIncome: boolean;
+    canDeleteIncome: boolean;
+    canAddIncome: boolean;       // 🆕
+    canExportIncome: boolean;    // 🆕
+    canPrintIncome: boolean;     // 🆕
   };
 }
 
@@ -37,7 +40,6 @@ export default function ManagerPermissions() {
     setLoading(true);
     setError("");
     try {
-      // ✅ cache: 'no-store' — always fresh
       const res = await fetch("/api/settings/permissions", {
         cache: "no-store",
       });
@@ -87,7 +89,9 @@ export default function ManagerPermissions() {
         return;
       }
 
-      setManagers(managers.map((m) => (m.email === manager.email ? updated : m)));
+      setManagers(
+        managers.map((m) => (m.email === manager.email ? updated : m))
+      );
       setSuccess(`✅ ${manager.name || manager.email} ተዘመነ`);
       setTimeout(() => setSuccess(""), 2000);
     } catch (e: any) {
@@ -155,8 +159,11 @@ export default function ManagerPermissions() {
                 </div>
               </div>
 
-              {/* Permission toggles */}
-              <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
+              {/* ─────────── Sales Permissions ─────────── */}
+              <p className="text-xs font-bold text-slate-400 uppercase tracking-wide mb-2">
+                💰 Sales
+              </p>
+              <div className="grid grid-cols-2 sm:grid-cols-3 gap-2 mb-3">
                 <Toggle
                   label="Void Sales"
                   icon="🚫"
@@ -178,6 +185,13 @@ export default function ManagerPermissions() {
                   loading={saving === m.email}
                   onClick={() => toggle(m, "canDelete")}
                 />
+              </div>
+
+              {/* ─────────── Inventory / Data ─────────── */}
+              <p className="text-xs font-bold text-slate-400 uppercase tracking-wide mb-2">
+                📦 Inventory & Data
+              </p>
+              <div className="grid grid-cols-2 sm:grid-cols-3 gap-2 mb-3">
                 <Toggle
                   label="Edit Inventory"
                   icon="📦"
@@ -192,6 +206,55 @@ export default function ManagerPermissions() {
                   loading={saving === m.email}
                   onClick={() => toggle(m, "canExport")}
                 />
+              </div>
+
+              {/* ─────────── Income ─────────── */}
+              <p className="text-xs font-bold text-slate-400 uppercase tracking-wide mb-2">
+                💰 Income
+              </p>
+              <div className="grid grid-cols-2 sm:grid-cols-3 gap-2 mb-3">
+                <Toggle
+                  label="Add Income"
+                  icon="➕"
+                  enabled={m.permissions.canAddIncome}
+                  loading={saving === m.email}
+                  onClick={() => toggle(m, "canAddIncome")}
+                />
+                <Toggle
+                  label="Edit Income"
+                  icon="✏️"
+                  enabled={m.permissions.canEditIncome}
+                  loading={saving === m.email}
+                  onClick={() => toggle(m, "canEditIncome")}
+                />
+                <Toggle
+                  label="Delete Income"
+                  icon="🗑"
+                  enabled={m.permissions.canDeleteIncome}
+                  loading={saving === m.email}
+                  onClick={() => toggle(m, "canDeleteIncome")}
+                />
+                <Toggle
+                  label="Export Income"
+                  icon="📤"
+                  enabled={m.permissions.canExportIncome}
+                  loading={saving === m.email}
+                  onClick={() => toggle(m, "canExportIncome")}
+                />
+                <Toggle
+                  label="Print Income"
+                  icon="🖨"
+                  enabled={m.permissions.canPrintIncome}
+                  loading={saving === m.email}
+                  onClick={() => toggle(m, "canPrintIncome")}
+                />
+              </div>
+
+              {/* ─────────── Staff / Activity / Reports ─────────── */}
+              <p className="text-xs font-bold text-slate-400 uppercase tracking-wide mb-2">
+                👥 Staff & Reports
+              </p>
+              <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
                 <Toggle
                   label="View Activity Log"
                   icon="📝"
@@ -226,20 +289,6 @@ export default function ManagerPermissions() {
                   enabled={m.permissions.canPrintSuppliers}
                   loading={saving === m.email}
                   onClick={() => toggle(m, "canPrintSuppliers")}
-                />
-                <Toggle
-                  label="Edit Income"
-                  icon="✏️"
-                  enabled={m.permissions.canEditIncome}
-                  loading={saving === m.email}
-                  onClick={() => toggle(m, "canEditIncome")}
-                />
-                <Toggle
-                  label="Delete Income"
-                  icon="🗑"
-                  enabled={m.permissions.canDeleteIncome}
-                  loading={saving === m.email}
-                  onClick={() => toggle(m, "canDeleteIncome")}
                 />
               </div>
             </div>
