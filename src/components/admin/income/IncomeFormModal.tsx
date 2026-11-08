@@ -55,6 +55,44 @@ function parseMaterials(json?: string | null): IncomeMaterial[] {
   }
 }
 
+/**
+ * ✅ Resolve the correct category VALUE for a record.
+ * The sheet stores the LABEL (e.g. "Printer Repair"),
+ * but the <select> expects the VALUE (e.g. "epson-printer").
+ */
+function resolveCategoryValue(
+  sourceValue: string,
+  categoryLabelOrValue: string | undefined
+): string {
+  const cats = getCategoriesForSource(sourceValue);
+  if (!cats.length) return "";
+  if (!categoryLabelOrValue) return cats[0].value;
+
+  const target = categoryLabelOrValue.toLowerCase().trim();
+  const match = cats.find(
+    (c) =>
+      c.value.toLowerCase() === target ||
+      c.label.toLowerCase() === target
+  );
+  return match?.value || cats[0].value;
+}
+
+/**
+ * ✅ Resolve the correct source VALUE from a record.
+ * The sheet stores the LABEL (e.g. "Printer Maintainance"),
+ * but the <select> expects the VALUE (e.g. "maintain").
+ */
+function resolveSourceValue(sourceLabelOrValue: string | undefined): string {
+  if (!sourceLabelOrValue) return "maintain";
+  const target = sourceLabelOrValue.toLowerCase().trim();
+  const src = INCOME_SOURCES.find(
+    (s) =>
+      s.value.toLowerCase() === target ||
+      s.label.toLowerCase() === target
+  );
+  return src?.value || "maintain";
+}
+
 interface Props {
   record?: IncomeRecord | null; // ← edit ሲደረግ ይላካል
   onClose: () => void;
@@ -64,16 +102,27 @@ interface Props {
 export default function IncomeFormModal({ record, onClose, onSaved }: Props) {
   const isEdit = !!record;
 
+  // ─── Initial source resolution (label → value) ───
+  const initialSourceValue = useMemo(
+    () => resolveSourceValue(record?.incomeSource),
+    [record]
+  );
+
+  // ─── Initial category resolution (label → value) ───
+  const initialCategoryValue = useMemo(
+    () =>
+      resolveCategoryValue(initialSourceValue, record?.incomeCategory),
+    [initialSourceValue, record]
+  );
+
   // ─── State initialization (from record if edit) ───
   const [date, setDate] = useState(
-    record?.date ? String(record.date).slice(0, 10) : new Date().toISOString().slice(0, 10)
+    record?.date
+      ? String(record.date).slice(0, 10)
+      : new Date().toISOString().slice(0, 10)
   );
-  const [incomeSource, setIncomeSource] = useState(
-    record?.incomeSource || "maintain"
-  );
-  const [incomeCategory, setIncomeCategory] = useState(
-    record?.incomeCategory || "epson-printer"
-  );
+  const [incomeSource, setIncomeSource] = useState(initialSourceValue);
+  const [incomeCategory, setIncomeCategory] = useState(initialCategoryValue);
   const [price, setPrice] = useState(Number(record?.price) || 0);
   const [quantity, setQuantity] = useState(Number(record?.quantity) || 1);
   const [description, setDescription] = useState(record?.description || "");
@@ -94,14 +143,19 @@ export default function IncomeFormModal({ record, onClose, onSaved }: Props) {
   );
 
   const totalPrice = price * quantity;
-  const totalMaterialCost = materials.reduce((s, m) => s + m.materialCost, 0);
+  const totalMaterialCost = materials.reduce(
+    (s, m) => s + m.materialCost,
+    0
+  );
   const netIncome = calculateNetIncome(totalPrice, totalMaterialCost);
 
   // ─── Load inventory ───
   useEffect(() => {
     async function load() {
       try {
-        const res = await fetch("/api/inventory/refresh", { cache: "no-store" });
+        const res = await fetch("/api/inventory/refresh", {
+          cache: "no-store",
+        });
         const data = await res.json();
         if (Array.isArray(data.items)) setInventory(data.items);
       } catch (e) {
@@ -170,7 +224,9 @@ export default function IncomeFormModal({ record, onClose, onSaved }: Props) {
 
   function updateMaterialCostDirect(index: number, value: number) {
     setMaterials(
-      materials.map((m, i) => (i === index ? { ...m, materialCost: value } : m))
+      materials.map((m, i) =>
+        i === index ? { ...m, materialCost: value } : m
+      )
     );
   }
 
@@ -376,7 +432,9 @@ export default function IncomeFormModal({ record, onClose, onSaved }: Props) {
                   <p className="text-xs text-slate-500">
                     {materials.length === 0
                       ? "No materials — tap to add"
-                      : `${materials.length} material${materials.length > 1 ? "s" : ""}`}
+                      : `${materials.length} material${
+                          materials.length > 1 ? "s" : ""
+                        }`}
                   </p>
                 </div>
               </div>
@@ -398,7 +456,8 @@ export default function IncomeFormModal({ record, onClose, onSaved }: Props) {
                         alt={m.itemName}
                         className="w-9 h-9 rounded object-cover bg-slate-100 flex-shrink-0"
                         onError={(e) =>
-                          ((e.target as HTMLImageElement).src = "/placeholder.svg")
+                          ((e.target as HTMLImageElement).src =
+                            "/placeholder.svg")
                         }
                       />
                       <div className="flex-1 min-w-0">
@@ -622,7 +681,9 @@ export default function IncomeFormModal({ record, onClose, onSaved }: Props) {
                 </p>
               ) : (
                 filteredMaterials.slice(0, 30).map((item) => {
-                  const alreadyAdded = materials.some((m) => m.itemId === item.id);
+                  const alreadyAdded = materials.some(
+                    (m) => m.itemId === item.id
+                  );
                   return (
                     <button
                       key={item.id}
@@ -636,7 +697,8 @@ export default function IncomeFormModal({ record, onClose, onSaved }: Props) {
                         alt={item.name}
                         className="w-10 h-10 rounded object-cover bg-slate-100 flex-shrink-0"
                         onError={(e) =>
-                          ((e.target as HTMLImageElement).src = "/placeholder.svg")
+                          ((e.target as HTMLImageElement).src =
+                            "/placeholder.svg")
                         }
                       />
                       <div className="flex-1 min-w-0">
