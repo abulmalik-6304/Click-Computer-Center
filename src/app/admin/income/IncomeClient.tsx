@@ -12,6 +12,7 @@ import {
 } from "@/lib/income-categories";
 import { IncomeRecord } from "@/lib/income-types";
 import IncomeFormModal from "@/components/admin/income/IncomeFormModal";
+import IncomeDetailModal from "@/components/admin/income/IncomeDetailModal";
 
 type ModalMode = "add" | null;
 
@@ -23,9 +24,13 @@ function fmt(n: any): string {
 export default function IncomeClient({
   initialIncome,
   userRole,
+  canEditIncome,
+  canDeleteIncome,
 }: {
   initialIncome: IncomeRecord[];
   userRole: string;
+  canEditIncome?: boolean;
+  canDeleteIncome?: boolean;
 }) {
   const [items, setItems] = useState(initialIncome);
   const [q, setQ] = useState("");
@@ -36,9 +41,15 @@ export default function IncomeClient({
   const [modal, setModal] = useState<ModalMode>(null);
   const [loading, setLoading] = useState(false);
   const [expanded, setExpanded] = useState<string | null>(null);
+  const [selected, setSelected] = useState<IncomeRecord | null>(null); // ✅ አዲስ
 
-  const canEdit = ["owner", "manager"].includes(userRole);
-  const canAdd = ["owner", "manager", "employee", "staff"].includes(userRole);
+  // ✅ Role-based defaults, overridable by props
+  const roleCanEdit = ["owner", "manager"].includes(userRole);
+  const roleCanAdd = ["owner", "manager", "employee", "staff"].includes(userRole);
+
+  const canEdit = canEditIncome ?? roleCanEdit;
+  const canDelete = canDeleteIncome ?? roleCanEdit;
+  const canAdd = canEditIncome ?? roleCanAdd;
 
   const filtered = useMemo(() => {
     let out = items;
@@ -109,7 +120,7 @@ export default function IncomeClient({
   async function refresh() {
     setLoading(true);
     try {
-      const res = await fetch("/api/income");
+      const res = await fetch("/api/income", { cache: "no-store" });
       const data = await res.json();
       if (Array.isArray(data.income)) setItems(data.income);
     } catch (e) {
@@ -332,6 +343,14 @@ export default function IncomeClient({
                         </td>
                         <td className="px-3 py-3 text-right">
                           <div className="flex justify-end gap-1">
+                            {/* ✅ View button */}
+                            <button
+                              onClick={() => setSelected(i)}
+                              className="px-2 py-1 text-xs bg-slate-100 text-slate-700 rounded hover:bg-slate-200"
+                              title="View Detail"
+                            >
+                              👁
+                            </button>
                             {hasMaterials && (
                               <button
                                 onClick={() =>
@@ -343,7 +362,7 @@ export default function IncomeClient({
                                 {isExpanded ? "▲" : "📦"}
                               </button>
                             )}
-                            {canEdit && (
+                            {canDelete && (
                               <button
                                 onClick={async () => {
                                   if (!confirm("Delete this income record?")) return;
@@ -406,7 +425,7 @@ export default function IncomeClient({
         </div>
       </div>
 
-      {/* Modal */}
+      {/* Add Income Modal */}
       {modal === "add" && (
         <IncomeFormModal
           onClose={() => setModal(null)}
@@ -414,6 +433,32 @@ export default function IncomeClient({
             setModal(null);
             refresh();
           }}
+        />
+      )}
+
+      {/* ✅ Detail Modal */}
+      {selected && (
+        <IncomeDetailModal
+          record={selected}
+          allRecords={items}
+          canEdit={canEdit}
+          canDelete={canDelete}
+          onEdit={() => {
+            // TODO: edit flow — modal ወይም /edit page
+            setSelected(null);
+            setModal("add"); // ለጊዜው add modal እንደ edit አይጠቀም — ልዩ edit modal ፍጠር
+          }}
+          onDelete={async () => {
+            if (!confirm("Delete this income record?")) return;
+            await fetch("/api/income", {
+              method: "DELETE",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({ id: selected.id }),
+            });
+            setSelected(null);
+            refresh();
+          }}
+          onClose={() => setSelected(null)}
         />
       )}
     </div>
