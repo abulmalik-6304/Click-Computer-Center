@@ -54,6 +54,7 @@ interface Employee {
   salary: number;
   allowance: number;
   hireDate: string;
+  department?: string;
 
   // Personal
   gender: string;
