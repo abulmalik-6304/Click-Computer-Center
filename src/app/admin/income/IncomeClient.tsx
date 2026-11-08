@@ -29,14 +29,16 @@ export default function IncomeClient({
   canEditIncome,
   canDeleteIncome,
   canAddIncome,
-  canViewReports,
+  canExportIncome,
+  canPrintIncome,
 }: {
   initialIncome: IncomeRecord[];
   userRole: string;
   canEditIncome?: boolean;
   canDeleteIncome?: boolean;
   canAddIncome?: boolean;
-  canViewReports?: boolean;
+  canExportIncome?: boolean;
+  canPrintIncome?: boolean;
 }) {
   const [items, setItems] = useState(initialIncome);
   const [q, setQ] = useState("");
@@ -54,17 +56,15 @@ export default function IncomeClient({
   const [editRecord, setEditRecord] = useState<IncomeRecord | null>(null);
   const [showActivityLog, setShowActivityLog] = useState(false);
 
-  // ✅ Permissions
-  const canEdit = canEditIncome ?? ["owner", "manager"].includes(userRole);
-  const canDelete = canDeleteIncome ?? ["owner"].includes(userRole);
-  const canAdd =
-    canAddIncome ??
-    ["owner", "manager", "employee", "staff"].includes(userRole);
-  const canViewReportsFlag =
-    canViewReports ?? ["owner", "manager"].includes(userRole);
-  // ✅ Activity Log ለ owner / manager ብቻ
+  // ✅ Permissions (server-only, no fallback)
+  const canEdit = canEditIncome === true;
+  const canDelete = canDeleteIncome === true;
+  const canAdd = canAddIncome === true;
+  const canExport = canExportIncome === true;
+  const canPrint = canPrintIncome === true;
+
+  // ✅ Activity Log — owner/manager ብቻ (role-based)
   const canViewActivityLog = ["owner", "manager"].includes(userRole);
-  // ✅ Activity log delete ለ owner ብቻ
   const canDeleteActivityLog = userRole === "owner";
 
   const filtered = useMemo(() => {
@@ -113,10 +113,7 @@ export default function IncomeClient({
 
   // ✅ Build breakdown — ፐርሰንታይል ከ breakdown ራሱ ድምር ይሰላል
   const breakdown = useMemo(() => {
-    const sourceMap = new Map<
-      string,
-      { total: number; count: number }
-    >();
+    const sourceMap = new Map<string, { total: number; count: number }>();
     for (const i of filtered) {
       const key = i.incomeSource.toLowerCase();
       const ex = sourceMap.get(key) || { total: 0, count: 0 };
@@ -323,7 +320,7 @@ export default function IncomeClient({
           </p>
         </div>
         <div className="flex flex-wrap gap-2">
-          {canViewReportsFlag && (
+          {canPrint && (
             <button
               onClick={printAllIncome}
               className="inline-flex items-center gap-2 px-3 py-2 bg-slate-900 hover:bg-slate-800 text-white font-semibold rounded-lg shadow-sm text-sm"
@@ -659,7 +656,7 @@ export default function IncomeClient({
   );
 }
 
-// ✅ Row component — hooks ለ React
+// ✅ Row component
 function FragmentRow({
   record,
   isExpanded,
