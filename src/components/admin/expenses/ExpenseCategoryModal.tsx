@@ -238,4 +238,82 @@ export default function ExpenseCategoryModal({
                         {r.jobRole || "—"}
                       </td>
                       <td className="px-2 py-1.5 hidden md:table-cell">
-                        {formatPaymentMonth(r.p
+                        {formatPaymentMonth(r.paymentMonth)}
+                      </td>
+                      <td className="px-2 py-1.5 text-right font-semibold text-red-600">
+                        {fmt(r.amount)}
+                      </td>
+                      <td className="px-2 py-1.5 text-right">
+                        <button
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            setDetail(r);
+                          }}
+                          className="text-xs px-2 py-0.5 bg-slate-100 hover:bg-slate-200 rounded"
+                        >
+                          👁
+                        </button>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+                <tfoot className="bg-red-50 sticky bottom-0">
+                  <tr className="font-bold">
+                    <td colSpan={4} className="px-2 py-2">
+                      TOTAL ({records.length})
+                    </td>
+                    <td className="px-2 py-2 text-right">
+                      {fmt(totals.total)}
+                    </td>
+                    <td />
+                  </tr>
+                </tfoot>
+              </table>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      {detail && (
+        <ExpenseDetailModal
+          record={detail}
+          allRecords={records}
+          canEdit={canEdit}
+          canDelete={canDelete}
+          onEdit={() => {
+            onEditRecord?.(detail);
+            setDetail(null);
+          }}
+          onDelete={() => {
+            onDeleteRecord?.(detail);
+            setDetail(null);
+          }}
+          onClose={() => setDetail(null)}
+        />
+      )}
+    </>
+  );
+}
+
+function Kpi({
+  label,
+  value,
+  color,
+}: {
+  label: string;
+  value: string;
+  color: "slate" | "red";
+}) {
+  const cls = {
+    slate: "bg-slate-50 border-slate-200 text-slate-900",
+    red: "bg-red-50 border-red-200 text-red-700",
+  }[color];
+  return (
+    <div className={`p-2.5 rounded-lg border ${cls} text-center`}>
+      <p className="text-[10px] uppercase tracking-wide opacity-70 font-semibold">
+        {label}
+      </p>
+      <p className="text-sm font-bold mt-0.5">{value}</p>
+    </div>
+  );
+}
