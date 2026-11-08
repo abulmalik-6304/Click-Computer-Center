@@ -8,6 +8,7 @@ import {
 } from "@/lib/income-categories";
 import {
   IncomeMaterial,
+  IncomeRecord,
   calculateMaterialCost,
   calculateNetIncome,
 } from "@/lib/income-types";
@@ -34,21 +35,52 @@ function fmt(n: any): string {
       });
 }
 
-export default function IncomeFormModal({
-  onClose,
-  onSaved,
-}: {
+/** Parse materials from an existing record safely */
+function parseMaterials(json?: string | null): IncomeMaterial[] {
+  if (!json) return [];
+  try {
+    const arr = JSON.parse(json);
+    if (!Array.isArray(arr)) return [];
+    return arr.map((m: any) => ({
+      itemId: m.itemId || "",
+      itemName: m.itemName || "",
+      itemImage: m.itemImage || "",
+      costPrice: Number(m.costPrice) || 0,
+      packSize: Number(m.packSize) || 1,
+      usedQty: Number(m.usedQty) || 0,
+      materialCost: Number(m.materialCost) || 0,
+    }));
+  } catch {
+    return [];
+  }
+}
+
+interface Props {
+  record?: IncomeRecord | null; // ← edit ሲደረግ ይላካል
   onClose: () => void;
   onSaved: () => void;
-}) {
-  const [date, setDate] = useState(new Date().toISOString().slice(0, 10));
-  const [incomeSource, setIncomeSource] = useState("maintain");
-  const [incomeCategory, setIncomeCategory] = useState("epson-printer");
-  const [price, setPrice] = useState(0);
-  const [quantity, setQuantity] = useState(1);
-  const [description, setDescription] = useState("");
+}
 
-  const [materials, setMaterials] = useState<IncomeMaterial[]>([]);
+export default function IncomeFormModal({ record, onClose, onSaved }: Props) {
+  const isEdit = !!record;
+
+  // ─── State initialization (from record if edit) ───
+  const [date, setDate] = useState(
+    record?.date ? String(record.date).slice(0, 10) : new Date().toISOString().slice(0, 10)
+  );
+  const [incomeSource, setIncomeSource] = useState(
+    record?.incomeSource || "maintain"
+  );
+  const [incomeCategory, setIncomeCategory] = useState(
+    record?.incomeCategory || "epson-printer"
+  );
+  const [price, setPrice] = useState(Number(record?.price) || 0);
+  const [quantity, setQuantity] = useState(Number(record?.quantity) || 1);
+  const [description, setDescription] = useState(record?.description || "");
+
+  const [materials, setMaterials] = useState<IncomeMaterial[]>(
+    parseMaterials(record?.materialsJson)
+  );
   const [showMaterialPicker, setShowMaterialPicker] = useState(false);
   const [inventory, setInventory] = useState<InventoryItem[]>([]);
   const [materialSearch, setMaterialSearch] = useState("");
@@ -65,7 +97,7 @@ export default function IncomeFormModal({
   const totalMaterialCost = materials.reduce((s, m) => s + m.materialCost, 0);
   const netIncome = calculateNetIncome(totalPrice, totalMaterialCost);
 
-  // Load inventory
+  // ─── Load inventory ───
   useEffect(() => {
     async function load() {
       try {
@@ -155,18 +187,21 @@ export default function IncomeFormModal({
     }
     setSaving(true);
     try {
+      const payload = {
+        ...(isEdit ? { id: record!.id } : {}),
+        date,
+        incomeSource,
+        incomeCategory,
+        price,
+        quantity,
+        description,
+        materials,
+      };
+
       const res = await fetch("/api/income", {
-        method: "POST",
+        method: isEdit ? "PUT" : "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          date,
-          incomeSource,
-          incomeCategory,
-          price,
-          quantity,
-          description,
-          materials,
-        }),
+        body: JSON.stringify(payload),
       });
       const data = await res.json();
       if (!res.ok) {
@@ -186,18 +221,31 @@ export default function IncomeFormModal({
       {/* ═══════ PORTRAIT MODAL ═══════ */}
       <div className="bg-slate-50 rounded-2xl shadow-2xl w-full max-w-md max-h-[95vh] flex flex-col">
         {/* HEADER */}
-        <div className="bg-gradient-to-r from-emerald-600 to-emerald-700 text-white px-5 py-4 rounded-t-2xl flex-shrink-0">
+        <div
+          className={`text-white px-5 py-4 rounded-t-2xl flex-shrink-0 bg-gradient-to-r ${
+            isEdit
+              ? "from-blue-600 to-blue-700"
+              : "from-emerald-600 to-emerald-700"
+          }`}
+        >
           <div className="flex items-center justify-between">
             <div>
-              <h2 className="text-lg font-bold">💰 Add Income</h2>
+              <h2 className="text-lg font-bold">
+                {isEdit ? "✏️ Edit Income" : "💰 Add Income"}
+              </h2>
               <p className="text-xs text-emerald-100 mt-0.5">
                 {new Date(date).toLocaleDateString()}
+                {isEdit && (
+                  <span className="ml-2 opacity-75">
+                    · ID: {record!.id.slice(0, 8)}
+                  </span>
+                )}
               </p>
             </div>
             <button
               type="button"
               onClick={onClose}
-              className="text-emerald-100 hover:text-white text-xl p-1 rounded-lg hover:bg-white/10 transition"
+              className="text-white/80 hover:text-white text-xl p-1 rounded-lg hover:bg-white/10 transition"
             >
               ✕
             </button>
@@ -314,7 +362,6 @@ export default function IncomeFormModal({
 
           {/* ═══════ SECTION 3: MATERIALS (Expandable) ═══════ */}
           <section className="bg-white rounded-xl border border-slate-200 overflow-hidden">
-            {/* Header */}
             <button
               type="button"
               onClick={() => setShowMaterialPicker(true)}
@@ -338,7 +385,6 @@ export default function IncomeFormModal({
               </span>
             </button>
 
-            {/* Materials List */}
             {materials.length > 0 && (
               <div className="border-t border-slate-100 p-2 space-y-2 bg-slate-50">
                 {materials.map((m, idx) => (
@@ -346,7 +392,6 @@ export default function IncomeFormModal({
                     key={idx}
                     className="bg-white rounded-lg border border-slate-200 p-2"
                   >
-                    {/* Item header */}
                     <div className="flex items-center gap-2 mb-2">
                       <img
                         src={formatDriveUrl(m.itemImage)}
@@ -370,9 +415,7 @@ export default function IncomeFormModal({
                       </button>
                     </div>
 
-                    {/* Fields grid */}
                     <div className="grid grid-cols-2 gap-1.5">
-                      {/* Cost Price */}
                       <div>
                         <label className="text-xs text-slate-500">
                           Cost Price
@@ -393,7 +436,6 @@ export default function IncomeFormModal({
                         />
                       </div>
 
-                      {/* Pack Size */}
                       <div>
                         <label className="text-xs text-slate-500">
                           Pack Size
@@ -413,7 +455,6 @@ export default function IncomeFormModal({
                         />
                       </div>
 
-                      {/* Used Qty */}
                       <div>
                         <label className="text-xs text-slate-500">
                           Used Qty
@@ -434,7 +475,6 @@ export default function IncomeFormModal({
                         />
                       </div>
 
-                      {/* Material Cost */}
                       <div>
                         <label className="text-xs text-slate-500">
                           Material Cost
@@ -457,7 +497,6 @@ export default function IncomeFormModal({
                   </div>
                 ))}
 
-                {/* Total Material Cost */}
                 <div className="bg-red-50 border border-red-200 rounded-lg p-2 flex items-center justify-between">
                   <span className="text-xs font-semibold text-red-800">
                     Total Material Cost
@@ -532,9 +571,17 @@ export default function IncomeFormModal({
             type="button"
             onClick={submit as any}
             disabled={saving}
-            className="flex-1 py-2.5 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white font-semibold text-sm disabled:opacity-50"
+            className={`flex-1 py-2.5 rounded-lg text-white font-semibold text-sm disabled:opacity-50 ${
+              isEdit
+                ? "bg-blue-600 hover:bg-blue-700"
+                : "bg-emerald-600 hover:bg-emerald-700"
+            }`}
           >
-            {saving ? "Saving…" : `Save · ${fmt(netIncome)} ETB`}
+            {saving
+              ? "Saving…"
+              : isEdit
+              ? `Update · ${fmt(netIncome)} ETB`
+              : `Save · ${fmt(netIncome)} ETB`}
           </button>
         </div>
       </div>
