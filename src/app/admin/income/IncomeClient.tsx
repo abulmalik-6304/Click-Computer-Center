@@ -59,10 +59,8 @@ export default function IncomeClient({
   const [copiedAll, setCopiedAll] = useState(false);
 
   // ✅ Permissions (prop overrides role-based defaults)
-  const canEdit =
-    canEditIncome ?? ["owner", "manager"].includes(userRole);
-  const canDelete =
-    canDeleteIncome ?? ["owner"].includes(userRole);
+  const canEdit = canEditIncome ?? ["owner", "manager"].includes(userRole);
+  const canDelete = canDeleteIncome ?? ["owner"].includes(userRole);
   const canAdd =
     canAddIncome ??
     ["owner", "manager", "employee", "staff"].includes(userRole);
@@ -73,16 +71,16 @@ export default function IncomeClient({
 
   const filtered = useMemo(() => {
     let out = items;
-   if (q) {
-  const lq = q.toLowerCase();
-  out = out.filter(
-    (i) =>
-      (i.description || "").toLowerCase().includes(lq) ||
-      (i.recordedBy || "").toLowerCase().includes(lq) ||
-      i.incomeCategory.toLowerCase().includes(lq) ||
-      i.incomeSource.toLowerCase().includes(lq)
-  );
-}
+    if (q) {
+      const lq = q.toLowerCase();
+      out = out.filter(
+        (i) =>
+          (i.description || "").toLowerCase().includes(lq) ||
+          (i.recordedBy || "").toLowerCase().includes(lq) ||
+          i.incomeCategory.toLowerCase().includes(lq) ||
+          i.incomeSource.toLowerCase().includes(lq)
+      );
+    }
     if (from) {
       const fd = new Date(from);
       out = out.filter((i) => new Date(i.date) >= fd);
@@ -150,61 +148,144 @@ export default function IncomeClient({
     }
   }
 
-  // ✅ Print all filtered records
+  // ✅ Print all filtered records (with materials row-per-material)
   function printAllIncome() {
-    const rows = filtered
-      .map(
-        (r) => `
-        <tr>
-          <td>${escapeHtml(r.date.slice(0, 10))}</td>
-          <td>${escapeHtml(r.incomeSource)}</td>
-          <td>${escapeHtml(r.incomeCategory)}</td>
-          <td>${escapeHtml(r.description || "—")}</td>
-          <td>${escapeHtml(r.recordedBy || "—")}</td>
-          <td style="text-align:right">${fmt(r.totalPrice)}</td>
-          <td style="text-align:right">${fmt(r.materialCost)}</td>
-          <td style="text-align:right">${fmt(r.netIncome)}</td>
-        </tr>`
-      )
-      .join("");
+    // ─── Build rows (one row per material; parent info repeated) ───
+    const rows: string[] = [];
+
+    filtered.forEach((r) => {
+      let mats: any[] = [];
+      try {
+        const parsed = JSON.parse(r.materialsJson || "[]");
+        if (Array.isArray(parsed) && parsed.length > 0) mats = parsed;
+      } catch {}
+
+      const baseCols = `
+        <td style="font-family:monospace;font-size:10px">${escapeHtml(
+          r.id.slice(0, 8)
+        )}</td>
+        <td>${escapeHtml(r.date.slice(0, 10))}</td>
+        <td>${escapeHtml(getSourceLabel(r.incomeSource))}</td>
+        <td style="text-align:right">${fmt(r.price)}</td>
+        <td style="text-align:right">${r.quantity}</td>
+        <td style="text-align:right;font-weight:600">${fmt(r.totalPrice)}</td>
+        <td>${escapeHtml(r.incomeCategory || "—")}</td>
+      `;
+
+      const endCols = `
+        <td style="text-align:right;font-weight:600">${fmt(r.netIncome)}</td>
+        <td>${escapeHtml(r.description || "—")}</td>
+        <td>${escapeHtml(r.recordedBy || "—")}</td>
+      `;
+
+      if (mats.length === 0) {
+        rows.push(`
+          <tr>
+            ${baseCols}
+            <td style="text-align:center;color:#94a3b8">—</td>
+            <td style="text-align:right">—</td>
+            <td style="text-align:right">—</td>
+            <td style="text-align:right">—</td>
+            <td style="text-align:right">${fmt(r.materialCost)}</td>
+            ${endCols}
+          </tr>
+        `);
+      } else {
+        mats.forEach((m, idx) => {
+          rows.push(`
+            <tr>
+              ${
+                idx === 0
+                  ? baseCols
+                  : `<td colspan="7" style="background:#f8fafc;border:none"></td>`
+              }
+              <td>${escapeHtml(m.itemName || "—")}</td>
+              <td style="text-align:right">${fmt(m.costPrice)}</td>
+              <td style="text-align:right">${fmt(m.packSize)}</td>
+              <td style="text-align:right">${fmt(m.usedQty)}</td>
+              <td style="text-align:right">${fmt(m.materialCost)}</td>
+              ${
+                idx === 0
+                  ? endCols
+                  : `<td colspan="3" style="background:#f8fafc;border:none"></td>`
+              }
+            </tr>
+          `);
+        });
+      }
+    });
+
+    // ─── Who printed it ───
+    const printedBy =
+      typeof window !== "undefined"
+        ? localStorage.getItem("userName") ||
+          localStorage.getItem("userEmail") ||
+          userRole
+        : userRole;
 
     printHTML({
       title: "Income Report — All Records",
       bodyHtml: `
         <h2>Summary</h2>
         <div class="kpi">
-          <div><div class="label">Records</div><div class="value">${filtered.length}</div></div>
-          <div><div class="label">Gross</div><div class="value">${fmt(totals.gross)}</div></div>
-          <div><div class="label">Material</div><div class="value">${fmt(totals.material)}</div></div>
-          <div><div class="label">Net</div><div class="value">${fmt(totals.net)}</div></div>
+          <div><div class="label">Records</div><div class="value">${
+            filtered.length
+          }</div></div>
+          <div><div class="label">Gross</div><div class="value">${fmt(
+            totals.gross
+          )}</div></div>
+          <div><div class="label">Material</div><div class="value">${fmt(
+            totals.material
+          )}</div></div>
+          <div><div class="label">Net</div><div class="value">${fmt(
+            totals.net
+          )}</div></div>
         </div>
 
         <h2>All Income Records</h2>
-        <table>
+        <table style="font-size:10px">
           <thead>
             <tr>
-              <th>Date</th><th>Source</th><th>Category</th>
-              <th>Description</th><th>Recorded By</th>
-              <th style="text-align:right">Gross</th>
-              <th style="text-align:right">Material</th>
-              <th style="text-align:right">Net</th>
+              <th>Income_ID</th>
+              <th>Date</th>
+              <th>Income_Source</th>
+              <th style="text-align:right">Price</th>
+              <th style="text-align:right">Quantity</th>
+              <th style="text-align:right">Total_Price</th>
+              <th>Income_Category</th>
+              <th>Used_Material</th>
+              <th style="text-align:right">Cost_Price_Main</th>
+              <th style="text-align:right">Pack_Size</th>
+              <th style="text-align:right">Used_Qty</th>
+              <th style="text-align:right">Material_Cost</th>
+              <th style="text-align:right">Net_Income</th>
+              <th>Description</th>
+              <th>Recorded_By</th>
             </tr>
           </thead>
-          <tbody>${rows}</tbody>
+          <tbody>${rows.join("")}</tbody>
           <tfoot>
             <tr>
-              <td colspan="5">TOTAL (${filtered.length})</td>
+              <td colspan="5">TOTAL (${filtered.length} records)</td>
               <td style="text-align:right">${fmt(totals.gross)}</td>
+              <td colspan="5"></td>
               <td style="text-align:right">${fmt(totals.material)}</td>
               <td style="text-align:right">${fmt(totals.net)}</td>
+              <td colspan="2"></td>
             </tr>
           </tfoot>
         </table>
 
         <div class="signature">
-          <div>Prepared By</div>
-          <div>Approved By</div>
+          <div>Prepared By: <strong>${escapeHtml(printedBy)}</strong></div>
+          <div>Approved By: __________________</div>
         </div>
+
+        <p style="margin-top:24px;font-size:11px;color:#475569">
+          🖨 Report printed by <strong>${escapeHtml(
+            printedBy
+          )}</strong> on ${new Date().toLocaleString()}
+        </p>
       `,
     });
   }
@@ -274,7 +355,9 @@ export default function IncomeClient({
       {/* Header */}
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
         <div>
-          <h1 className="text-2xl sm:text-3xl font-bold text-slate-900">💰 Income</h1>
+          <h1 className="text-2xl sm:text-3xl font-bold text-slate-900">
+            💰 Income
+          </h1>
           <p className="text-sm text-slate-500 mt-1">
             {items.length} total · {filtered.length} filtered
           </p>
