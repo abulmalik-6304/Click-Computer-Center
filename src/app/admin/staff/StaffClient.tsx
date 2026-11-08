@@ -12,9 +12,10 @@ import {
   ROLE_COLORS,
 } from "@/lib/staff-control";
 import { StaffDisplay, AwardedBadgeDisplay } from "./page";
+import ResetPasswordModal from "@/components/admin/ResetPasswordModal";
 
 type AwardedBadge = AwardedBadgeDisplay;
-type ModalMode = "profile" | "badge" | "edit" | null;
+type ModalMode = "profile" | "badge" | "edit" | "password" | null;
 
 export default function StaffClient({
   initialStaff,
@@ -257,6 +258,17 @@ export default function StaffClient({
                     ✏️ Edit {isOwner ? "& Role" : "Profile"}
                   </button>
                 )}
+
+                {/* 🆕 Password Reset button — Owner + Manager */}
+                {(isOwner || userRole === "manager") && (
+                  <button
+                    onClick={() => { setActive(s); setModal("password"); }}
+                    className="w-full py-2 text-xs bg-red-100 hover:bg-red-200 text-red-700 font-semibold rounded"
+                    title="Reset this user's password"
+                  >
+                    🔑 Reset Password
+                  </button>
+                )}
               </div>
             </div>
           );
@@ -297,6 +309,19 @@ export default function StaffClient({
           canEditStatus={isOwner || !["owner", "manager"].includes(active.role)}
           onClose={() => { setModal(null); setActive(null); }}
           onSaved={() => { setModal(null); setActive(null); refresh(); }}
+        />
+      )}
+
+      {/* 🆕 Password Reset Modal */}
+      {modal === "password" && active && (
+        <ResetPasswordModal
+          targetEmail={active.email}
+          targetName={active.fullName}
+          onClose={() => { setModal(null); setActive(null); }}
+          onSuccess={() => {
+            // Optional: refresh staff list
+            refresh();
+          }}
         />
       )}
     </div>
@@ -541,7 +566,7 @@ function ProfileModal({
                   <div key={i} className={`flex items-start gap-3 p-3 rounded-lg ${def.color}`}>
                     <span className="text-2xl">{def.emoji}</span>
                     <div className="flex-1 min-w-0">
-                                            <p className={`font-semibold text-sm ${def.textColor}`}>{def.label}</p>
+                      <p className={`font-semibold text-sm ${def.textColor}`}>{def.label}</p>
                       {b.note && (
                         <p className="text-xs text-slate-600 mt-0.5 italic">"{b.note}"</p>
                       )}
