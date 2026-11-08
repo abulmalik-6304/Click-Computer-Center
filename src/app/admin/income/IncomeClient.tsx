@@ -14,7 +14,7 @@ import { IncomeRecord } from "@/lib/income-types";
 import IncomeFormModal from "@/components/admin/income/IncomeFormModal";
 import IncomeDetailModal from "@/components/admin/income/IncomeDetailModal";
 import IncomeSourceModal from "@/components/admin/income/IncomeSourceModal";
-import ActivityLogModal from "@/components/admin/ActivityLogModal";
+import ActivityLogModal from "@/components/admin/income/ActivityLogModal";
 import { logActivity } from "@/lib/activity-log";
 import {
   fmt,
