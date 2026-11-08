@@ -73,16 +73,16 @@ export default function IncomeClient({
 
   const filtered = useMemo(() => {
     let out = items;
-    if (q) {
-      const lq = q.toLowerCase();
-      out = out.filter(
-        (i) =>
-          i.description.toLowerCase().includes(lq) ||
-          i.recordedBy.toLowerCase().includes(lq) ||
-          i.incomeCategory.toLowerCase().includes(lq) ||
-          i.incomeSource.toLowerCase().includes(lq)
-      );
-    }
+   if (q) {
+  const lq = q.toLowerCase();
+  out = out.filter(
+    (i) =>
+      (i.description || "").toLowerCase().includes(lq) ||
+      (i.recordedBy || "").toLowerCase().includes(lq) ||
+      i.incomeCategory.toLowerCase().includes(lq) ||
+      i.incomeSource.toLowerCase().includes(lq)
+  );
+}
     if (from) {
       const fd = new Date(from);
       out = out.filter((i) => new Date(i.date) >= fd);
