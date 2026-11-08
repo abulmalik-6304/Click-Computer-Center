@@ -20,8 +20,10 @@ export const PERMISSION_HEADERS = [
   "Can_View_Activity",
   "Can_Manage_Staff",
   "Can_View_Profit",
-  "Can_Print_Customers", // ✅ አዲስ
-  "Can_Print_Suppliers", // ✅ አዲስ
+  "Can_Print_Customers",
+  "Can_Print_Suppliers",
+  "Can_Edit_Income", // ✅ አዲስ
+  "Can_Delete_Income", // ✅ አዲስ
   "Updated_By",
   "Updated_At",
 ];
@@ -36,8 +38,10 @@ export interface ManagerPermissions {
   canViewActivity: boolean;
   canManageStaff: boolean;
   canViewProfit: boolean;
-  canPrintCustomers: boolean; // ✅ አዲስ
-  canPrintSuppliers: boolean; // ✅ አዲስ
+  canPrintCustomers: boolean;
+  canPrintSuppliers: boolean;
+  canEditIncome: boolean; // ✅ አዲስ
+  canDeleteIncome: boolean; // ✅ አዲስ
 }
 
 export const DEFAULT_PERMISSIONS: Omit<ManagerPermissions, "email"> = {
@@ -49,8 +53,10 @@ export const DEFAULT_PERMISSIONS: Omit<ManagerPermissions, "email"> = {
   canViewActivity: false,
   canManageStaff: false,
   canViewProfit: false,
-  canPrintCustomers: false, // ✅ አዲስ
-  canPrintSuppliers: false, // ✅ አዲስ
+  canPrintCustomers: false,
+  canPrintSuppliers: false,
+  canEditIncome: false, // ✅ አዲስ
+  canDeleteIncome: false, // ✅ አዲስ
 };
 
 export type PermissionKey =
@@ -62,8 +68,10 @@ export type PermissionKey =
   | "canViewActivity"
   | "canManageStaff"
   | "canViewProfit"
-  | "canPrintCustomers" // ✅ አዲስ
-  | "canPrintSuppliers"; // ✅ አዲስ
+  | "canPrintCustomers"
+  | "canPrintSuppliers"
+  | "canEditIncome" // ✅ አዲስ
+  | "canDeleteIncome"; // ✅ አዲስ
 
 // ═══════════════════════════════════════════════════════════════
 // GET: Load permissions for a manager
@@ -101,8 +109,10 @@ export async function getManagerPermissions(
       canViewActivity: getBool(["Can_View_Activity", "CanViewActivity", "canViewActivity"]),
       canManageStaff: getBool(["Can_Manage_Staff", "CanManageStaff", "canManageStaff"]),
       canViewProfit: getBool(["Can_View_Profit", "CanViewProfit", "canViewProfit"]),
-      canPrintCustomers: getBool(["Can_Print_Customers", "CanPrintCustomers", "canPrintCustomers"]), // ✅
-      canPrintSuppliers: getBool(["Can_Print_Suppliers", "CanPrintSuppliers", "canPrintSuppliers"]), // ✅
+      canPrintCustomers: getBool(["Can_Print_Customers", "CanPrintCustomers", "canPrintCustomers"]),
+      canPrintSuppliers: getBool(["Can_Print_Suppliers", "CanPrintSuppliers", "canPrintSuppliers"]),
+      canEditIncome: getBool(["Can_Edit_Income", "CanEditIncome", "canEditIncome"]), // ✅
+      canDeleteIncome: getBool(["Can_Delete_Income", "CanDeleteIncome", "canDeleteIncome"]), // ✅
     };
   } catch (e: any) {
     if (String(e.message).includes("not found")) return null;
@@ -146,8 +156,10 @@ export async function setManagerPermissions(
       Can_View_Activity: permissions.canViewActivity ? "TRUE" : "FALSE",
       Can_Manage_Staff: permissions.canManageStaff ? "TRUE" : "FALSE",
       Can_View_Profit: permissions.canViewProfit ? "TRUE" : "FALSE",
-      Can_Print_Customers: permissions.canPrintCustomers ? "TRUE" : "FALSE", // ✅
-      Can_Print_Suppliers: permissions.canPrintSuppliers ? "TRUE" : "FALSE", // ✅
+      Can_Print_Customers: permissions.canPrintCustomers ? "TRUE" : "FALSE",
+      Can_Print_Suppliers: permissions.canPrintSuppliers ? "TRUE" : "FALSE",
+      Can_Edit_Income: permissions.canEditIncome ? "TRUE" : "FALSE", // ✅
+      Can_Delete_Income: permissions.canDeleteIncome ? "TRUE" : "FALSE", // ✅
     };
 
     if (existing) {
