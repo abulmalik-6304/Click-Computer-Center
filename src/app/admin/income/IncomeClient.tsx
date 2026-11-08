@@ -31,6 +31,7 @@ export default function IncomeClient({
   canAddIncome,
   canExportIncome,
   canPrintIncome,
+  canViewActivityLog, // 🆕
 }: {
   initialIncome: IncomeRecord[];
   userRole: string;
@@ -39,6 +40,7 @@ export default function IncomeClient({
   canAddIncome?: boolean;
   canExportIncome?: boolean;
   canPrintIncome?: boolean;
+  canViewActivityLog?: boolean; // 🆕
 }) {
   const [items, setItems] = useState(initialIncome);
   const [q, setQ] = useState("");
@@ -63,8 +65,10 @@ export default function IncomeClient({
   const canExport = canExportIncome === true;
   const canPrint = canPrintIncome === true;
 
-  // ✅ Activity Log — owner/manager ብቻ (role-based)
-  const canViewActivityLog = ["owner", "manager"].includes(userRole);
+  // ✅ Activity Log — permission ብቻ (owner ሁልጊዜ true ከ hasPermission)
+  const canSeeActivityLog = canViewActivityLog === true;
+
+  // ✅ Activity Log delete — owner ብቻ
   const canDeleteActivityLog = userRole === "owner";
 
   const filtered = useMemo(() => {
@@ -329,8 +333,8 @@ export default function IncomeClient({
               🖨 Print All
             </button>
           )}
-          {/* ✅ Activity Log — owner / manager ብቻ */}
-          {canViewActivityLog && (
+          {/* ✅ Activity Log — permission ብቻ */}
+          {canSeeActivityLog && (
             <button
               onClick={() => setShowActivityLog(true)}
               className="inline-flex items-center gap-2 px-3 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 font-semibold rounded-lg shadow-sm text-sm"
@@ -644,11 +648,11 @@ export default function IncomeClient({
         />
       )}
 
-      {/* ✅ Activity Log Modal — permissions ጋር */}
-      {showActivityLog && canViewActivityLog && (
+      {/* ✅ Activity Log Modal — permission ብቻ */}
+      {showActivityLog && canSeeActivityLog && (
         <ActivityLogModal
           userRole={userRole}
-          canDelete={canDeleteActivityLog}
+          canDelete={canDeleteActivityLog} // ✅ owner ብቻ
           onClose={() => setShowActivityLog(false)}
         />
       )}
