@@ -11,27 +11,78 @@ import { ActivityLogEntry } from "@/lib/activity-log-types";
 
 interface Props {
   onClose: () => void;
-  onChanged?: () => void; // refresh callback
+  onChanged?: () => void;
+  userRole?: string;        // ✅ አክል
+  canDelete?: boolean;      // ✅ አክል
 }
 
-const ACTION_META: Record<string, { label: string; color: string; icon: string }> = {
-  "income:create": { label: "Income Added", color: "bg-emerald-50 text-emerald-700 border-emerald-200", icon: "➕" },
-  "income:update": { label: "Income Updated", color: "bg-blue-50 text-blue-700 border-blue-200", icon: "✏️" },
-  "income:delete": { label: "Income Deleted", color: "bg-red-50 text-red-700 border-red-200", icon: "🗑" },
-  "income:print": { label: "Income Printed", color: "bg-slate-50 text-slate-700 border-slate-200", icon: "🖨" },
-  "income:export": { label: "Income Exported", color: "bg-orange-50 text-orange-700 border-orange-200", icon: "📥" },
-  "expense:create": { label: "Expense Added", color: "bg-red-50 text-red-700 border-red-200", icon: "➕" },
-  "expense:update": { label: "Expense Updated", color: "bg-blue-50 text-blue-700 border-blue-200", icon: "✏️" },
-  "expense:delete": { label: "Expense Deleted", color: "bg-red-50 text-red-700 border-red-200", icon: "🗑" },
-  login: { label: "Login", color: "bg-slate-50 text-slate-700 border-slate-200", icon: "🔐" },
-  logout: { label: "Logout", color: "bg-slate-50 text-slate-700 border-slate-200", icon: "🚪" },
+const ACTION_META: Record<
+  string,
+  { label: string; color: string; icon: string }
+> = {
+  "income:create": {
+    label: "Income Added",
+    color: "bg-emerald-50 text-emerald-700 border-emerald-200",
+    icon: "➕",
+  },
+  "income:update": {
+    label: "Income Updated",
+    color: "bg-blue-50 text-blue-700 border-blue-200",
+    icon: "✏️",
+  },
+  "income:delete": {
+    label: "Income Deleted",
+    color: "bg-red-50 text-red-700 border-red-200",
+    icon: "🗑",
+  },
+  "income:print": {
+    label: "Income Printed",
+    color: "bg-slate-50 text-slate-700 border-slate-200",
+    icon: "🖨",
+  },
+  "income:export": {
+    label: "Income Exported",
+    color: "bg-orange-50 text-orange-700 border-orange-200",
+    icon: "📥",
+  },
+  "expense:create": {
+    label: "Expense Added",
+    color: "bg-red-50 text-red-700 border-red-200",
+    icon: "➕",
+  },
+  "expense:update": {
+    label: "Expense Updated",
+    color: "bg-blue-50 text-blue-700 border-blue-200",
+    icon: "✏️",
+  },
+  "expense:delete": {
+    label: "Expense Deleted",
+    color: "bg-red-50 text-red-700 border-red-200",
+    icon: "🗑",
+  },
+  login: {
+    label: "Login",
+    color: "bg-slate-50 text-slate-700 border-slate-200",
+    icon: "🔐",
+  },
+  logout: {
+    label: "Logout",
+    color: "bg-slate-50 text-slate-700 border-slate-200",
+    icon: "🚪",
+  },
 };
 
-export default function ActivityLogModal({ onClose, onChanged }: Props) {
-  const [entries, setEntries] = useState<ActivityLogEntry[]>(() => getActivityLog());
+export default function ActivityLogModal({
+  onClose,
+  onChanged,
+  userRole = "unknown",
+  canDelete = false,
+}: Props) {
+  const [entries, setEntries] = useState<ActivityLogEntry[]>(() =>
+    getActivityLog()
+  );
   const [search, setSearch] = useState("");
   const [moduleFilter, setModuleFilter] = useState<string>("all");
-  const [confirmClear, setConfirmClear] = useState(false);
 
   const filtered = useMemo(() => {
     const q = search.trim().toLowerCase();
@@ -42,12 +93,14 @@ export default function ActivityLogModal({ onClose, onChanged }: Props) {
         e.targetLabel?.toLowerCase().includes(q) ||
         e.details?.toLowerCase().includes(q) ||
         e.action.toLowerCase().includes(q);
-      const matchModule = moduleFilter === "all" || e.module === moduleFilter;
+      const matchModule =
+        moduleFilter === "all" || e.module === moduleFilter;
       return matchQ && matchModule;
     });
   }, [entries, search, moduleFilter]);
 
   function handleDelete(id: string) {
+    if (!canDelete) return;
     if (!confirm("Delete this log entry?")) return;
     deleteActivityLogEntry(id);
     setEntries(getActivityLog());
@@ -55,10 +108,15 @@ export default function ActivityLogModal({ onClose, onChanged }: Props) {
   }
 
   function handleClearAll() {
-    if (!confirm(`Delete ALL ${entries.length} log entries? This cannot be undone.`)) return;
+    if (!canDelete) return;
+    if (
+      !confirm(
+        `Delete ALL ${entries.length} log entries? This cannot be undone.`
+      )
+    )
+      return;
     clearActivityLog();
     setEntries([]);
-    setConfirmClear(false);
     onChanged?.();
   }
 
@@ -68,13 +126,21 @@ export default function ActivityLogModal({ onClose, onChanged }: Props) {
         {/* Header */}
         <div className="sticky top-0 bg-white border-b border-slate-200 px-5 py-3 flex items-center justify-between z-10 rounded-t-2xl">
           <div>
-            <h2 className="text-lg font-bold text-slate-900">📝 Activity Log</h2>
+            <h2 className="text-lg font-bold text-slate-900">
+              📝 Activity Log
+            </h2>
             <p className="text-xs text-slate-500">
               {entries.length} total · {filtered.length} shown
+              {!canDelete && (
+                <span className="ml-2 text-orange-600">
+                  (read-only · {userRole})
+                </span>
+              )}
             </p>
           </div>
           <div className="flex gap-1">
-            {entries.length > 0 && (
+            {/* ✅ Clear All — canDelete ብቻ */}
+            {canDelete && entries.length > 0 && (
               <button
                 onClick={handleClearAll}
                 className="px-3 py-1.5 text-xs bg-red-100 hover:bg-red-200 text-red-700 font-semibold rounded-lg"
@@ -167,13 +233,16 @@ export default function ActivityLogModal({ onClose, onChanged }: Props) {
                           </p>
                         )}
                       </div>
-                      <button
-                        onClick={() => handleDelete(e.id)}
-                        className="text-xs px-2 py-1 bg-red-100 hover:bg-red-200 text-red-700 rounded flex-shrink-0"
-                        title="Delete entry"
-                      >
-                        🗑
-                      </button>
+                      {/* ✅ Delete button — canDelete ብቻ */}
+                      {canDelete && (
+                        <button
+                          onClick={() => handleDelete(e.id)}
+                          className="text-xs px-2 py-1 bg-red-100 hover:bg-red-200 text-red-700 rounded flex-shrink-0"
+                          title="Delete entry"
+                        >
+                          🗑
+                        </button>
+                      )}
                     </div>
                   </li>
                 );
@@ -181,6 +250,13 @@ export default function ActivityLogModal({ onClose, onChanged }: Props) {
             </ul>
           )}
         </div>
+
+        {/* Footer note */}
+        {!canDelete && (
+          <div className="border-t border-slate-200 p-3 text-center text-xs text-slate-500">
+            🔒 Read-only — only owners can delete activity log entries.
+          </div>
+        )}
       </div>
     </div>
   );
