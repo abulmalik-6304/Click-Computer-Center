@@ -24,9 +24,15 @@ export const PERMISSION_HEADERS = [
   "Can_Print_Suppliers",
   "Can_Edit_Income",
   "Can_Delete_Income",
-  "Can_Add_Income", // 🆕
-  "Can_Export_Income", // 🆕
-  "Can_Print_Income", // 🆕
+  "Can_Add_Income",
+  "Can_Export_Income",
+  "Can_Print_Income",
+  // 🆕 Expenses
+  "Can_Add_Expense",
+  "Can_Edit_Expense",
+  "Can_Delete_Expense",
+  "Can_Export_Expense",
+  "Can_Print_Expense",
   "Updated_By",
   "Updated_At",
 ];
@@ -45,9 +51,15 @@ export interface ManagerPermissions {
   canPrintSuppliers: boolean;
   canEditIncome: boolean;
   canDeleteIncome: boolean;
-  canAddIncome: boolean; // 🆕
-  canExportIncome: boolean; // 🆕
-  canPrintIncome: boolean; // 🆕
+  canAddIncome: boolean;
+  canExportIncome: boolean;
+  canPrintIncome: boolean;
+  // 🆕 Expenses
+  canAddExpense: boolean;
+  canEditExpense: boolean;
+  canDeleteExpense: boolean;
+  canExportExpense: boolean;
+  canPrintExpense: boolean;
 }
 
 export const DEFAULT_PERMISSIONS: Omit<ManagerPermissions, "email"> = {
@@ -63,9 +75,15 @@ export const DEFAULT_PERMISSIONS: Omit<ManagerPermissions, "email"> = {
   canPrintSuppliers: false,
   canEditIncome: false,
   canDeleteIncome: false,
-  canAddIncome: false, // 🆕
-  canExportIncome: false, // 🆕
-  canPrintIncome: false, // 🆕
+  canAddIncome: false,
+  canExportIncome: false,
+  canPrintIncome: false,
+  // 🆕 Expenses
+  canAddExpense: false,
+  canEditExpense: false,
+  canDeleteExpense: false,
+  canExportExpense: false,
+  canPrintExpense: false,
 };
 
 export type PermissionKey =
@@ -81,9 +99,15 @@ export type PermissionKey =
   | "canPrintSuppliers"
   | "canEditIncome"
   | "canDeleteIncome"
-  | "canAddIncome" // 🆕
-  | "canExportIncome" // 🆕
-  | "canPrintIncome"; // 🆕
+  | "canAddIncome"
+  | "canExportIncome"
+  | "canPrintIncome"
+  // 🆕 Expenses
+  | "canAddExpense"
+  | "canEditExpense"
+  | "canDeleteExpense"
+  | "canExportExpense"
+  | "canPrintExpense";
 
 // ═══════════════════════════════════════════════════════════════
 // GET: Load permissions for a manager
@@ -161,17 +185,43 @@ export async function getManagerPermissions(
         "Can_Add_Income",
         "CanAddIncome",
         "canAddIncome",
-      ]), // 🆕
+      ]),
       canExportIncome: getBool([
         "Can_Export_Income",
         "CanExportIncome",
         "canExportIncome",
-      ]), // 🆕
+      ]),
       canPrintIncome: getBool([
         "Can_Print_Income",
         "CanPrintIncome",
         "canPrintIncome",
-      ]), // 🆕
+      ]),
+      // 🆕 Expenses
+      canAddExpense: getBool([
+        "Can_Add_Expense",
+        "CanAddExpense",
+        "canAddExpense",
+      ]),
+      canEditExpense: getBool([
+        "Can_Edit_Expense",
+        "CanEditExpense",
+        "canEditExpense",
+      ]),
+      canDeleteExpense: getBool([
+        "Can_Delete_Expense",
+        "CanDeleteExpense",
+        "canDeleteExpense",
+      ]),
+      canExportExpense: getBool([
+        "Can_Export_Expense",
+        "CanExportExpense",
+        "canExportExpense",
+      ]),
+      canPrintExpense: getBool([
+        "Can_Print_Expense",
+        "CanPrintExpense",
+        "canPrintExpense",
+      ]),
     };
   } catch (e: any) {
     if (String(e.message).includes("not found")) return null;
@@ -219,9 +269,15 @@ export async function setManagerPermissions(
       Can_Print_Suppliers: permissions.canPrintSuppliers ? "TRUE" : "FALSE",
       Can_Edit_Income: permissions.canEditIncome ? "TRUE" : "FALSE",
       Can_Delete_Income: permissions.canDeleteIncome ? "TRUE" : "FALSE",
-      Can_Add_Income: permissions.canAddIncome ? "TRUE" : "FALSE", // 🆕
-      Can_Export_Income: permissions.canExportIncome ? "TRUE" : "FALSE", // 🆕
-      Can_Print_Income: permissions.canPrintIncome ? "TRUE" : "FALSE", // 🆕
+      Can_Add_Income: permissions.canAddIncome ? "TRUE" : "FALSE",
+      Can_Export_Income: permissions.canExportIncome ? "TRUE" : "FALSE",
+      Can_Print_Income: permissions.canPrintIncome ? "TRUE" : "FALSE",
+      // 🆕 Expenses
+      Can_Add_Expense: permissions.canAddExpense ? "TRUE" : "FALSE",
+      Can_Edit_Expense: permissions.canEditExpense ? "TRUE" : "FALSE",
+      Can_Delete_Expense: permissions.canDeleteExpense ? "TRUE" : "FALSE",
+      Can_Export_Expense: permissions.canExportExpense ? "TRUE" : "FALSE",
+      Can_Print_Expense: permissions.canPrintExpense ? "TRUE" : "FALSE",
     };
 
     if (existing) {
