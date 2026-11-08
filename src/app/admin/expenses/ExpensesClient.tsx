@@ -1,86 +1,210 @@
-// src/app/admin/expenses/ExpensesClient.tsx
+// src/app/admin/expenses/ExpenseClient.tsx
 "use client";
 
 import { useMemo, useState } from "react";
 import {
   EXPENSE_CATEGORIES,
-  getCategoryLabel,
   getCategoryIcon,
-  EXPENSE_COLORS,
-} from "@/lib/expense-categories";
-import { ExpenseItem } from "./page";
+  getCategoryLabel,
+  getCategoryColor,
+  formatPaymentMonth,
+} from "@/lib/expense-types";
+import { ExpenseRecord } from "@/lib/expense-types";
+import ExpenseFormModal from "@/components/admin/expenses/ExpenseFormModal";
+import ExpenseDetailModal from "@/components/admin/expenses/ExpenseDetailModal";
+import ExpenseCategoryModal from "@/components/admin/expenses/ExpenseCategoryModal";
+import ActivityLogModal from "@/components/admin/income/ActivityLogModal";
+import { logActivity } from "@/lib/activity-log";
+import { fmt, printHTML, escapeHtml } from "@/lib/print-utils";
 
-type ModalMode = "add" | null;
+interface Props {
+  initialExpenses: ExpenseRecord[];
+  userRole: string;
+  canAddExpense?: boolean;
+  canEditExpense?: boolean;
+  canDeleteExpense?: boolean;
+  canExportExpense?: boolean;
+  canPrintExpense?: boolean;
+  canViewActivityLog?: boolean;
+}
 
-export default function ExpensesClient({
+export default function ExpenseClient({
   initialExpenses,
   userRole,
-}: {
-  initialExpenses: ExpenseItem[];
-  userRole: string;
-}) {
+  canAddExpense,
+  canEditExpense,
+  canDeleteExpense,
+  canExportExpense,
+  canPrintExpense,
+  canViewActivityLog,
+}: Props) {
   const [items, setItems] = useState(initialExpenses);
   const [q, setQ] = useState("");
   const [from, setFrom] = useState("");
   const [to, setTo] = useState("");
   const [categoryFilter, setCategoryFilter] = useState("all");
-  const [modal, setModal] = useState<ModalMode>(null);
-  const [loading, setLoading] = useState(false);
 
-  const canEdit = ["owner", "manager"].includes(userRole);
+  const [showAdd, setShowAdd] = useState(false);
+  const [editRecord, setEditRecord] = useState<ExpenseRecord | null>(null);
+  const [detailRecord, setDetailRecord] = useState<ExpenseRecord | null>(null);
+  const [categoryModal, setCategoryModal] = useState<string | null>(null);
+  const [showActivityLog, setShowActivityLog] = useState(false);
+
+  // ✅ Permissions
+  const canAdd = canAddExpense === true;
+  const canEdit = canEditExpense === true;
+  const canDelete = canDeleteExpense === true;
+  const canExport = canExportExpense === true;
+  const canPrint = canPrintExpense === true;
+  const canSeeActivityLog = canViewActivityLog === true;
+  const canDeleteActivityLog = userRole === "owner";
 
   const filtered = useMemo(() => {
     let out = items;
     if (q) {
       const lq = q.toLowerCase();
       out = out.filter(
-        (e) =>
-          e.description.toLowerCase().includes(lq) ||
-          e.recordedBy.toLowerCase().includes(lq) ||
-          e.category.toLowerCase().includes(lq)
+        (i) =>
+          (i.description || "").toLowerCase().includes(lq) ||
+          (i.recordedBy || "").toLowerCase().includes(lq) ||
+          (i.employeeName || "").toLowerCase().includes(lq) ||
+          (i.jobRole || "").toLowerCase().includes(lq) ||
+          i.category.toLowerCase().includes(lq)
       );
     }
     if (from) {
       const fd = new Date(from);
-      out = out.filter((e) => new Date(e.date) >= fd);
+      out = out.filter((i) => new Date(i.date) >= fd);
     }
     if (to) {
       const td = new Date(to);
       td.setHours(23, 59, 59, 999);
-      out = out.filter((e) => new Date(e.date) <= td);
+      out = out.filter((i) => new Date(i.date) <= td);
     }
     if (categoryFilter !== "all") {
       out = out.filter(
-        (e) => e.category.toLowerCase() === categoryFilter.toLowerCase()
+        (i) => i.category.toLowerCase() === categoryFilter.toLowerCase()
       );
     }
     return out;
   }, [items, q, from, to, categoryFilter]);
 
-  const total = filtered.reduce((s, e) => s + e.amount, 0);
+  const totals = useMemo(
+    () => ({
+      total: filtered.reduce((s, i) => s + (Number(i.amount) || 0), 0),
+      count: filtered.length,
+    }),
+    [filtered]
+  );
 
-  // By-category breakdown
   const byCategory = useMemo(() => {
-    const map: Record<string, { total: number; count: number }> = {};
-    for (const e of filtered) {
-      if (!map[e.category]) map[e.category] = { total: 0, count: 0 };
-      map[e.category].total += e.amount;
-      map[e.category].count++;
+    const map = new Map<string, { total: number; count: number }>();
+    for (const i of filtered) {
+      const key = i.category.toLowerCase();
+      const ex = map.get(key) || { total: 0, count: 0 };
+      ex.total += Number(i.amount) || 0;
+      ex.count += 1;
+      map.set(key, ex);
     }
-    return map;
+    const grand = Array.from(map.values()).reduce((s, x) => s + x.total, 0);
+    return Array.from(map.entries()).map(([cat, d]) => ({
+      category: cat,
+      label: getCategoryLabel(cat),
+      icon: getCategoryIcon(cat),
+      color: getCategoryColor(cat),
+      total: d.total,
+      count: d.count,
+      pct: grand > 0 ? (d.total / grand) * 100 : 0,
+    }));
   }, [filtered]);
 
   async function refresh() {
-    setLoading(true);
     try {
-      const res = await fetch("/api/expenses");
+      const res = await fetch("/api/expenses", { cache: "no-store" });
       const data = await res.json();
-      if (Array.isArray(data.expenses)) setItems(data.expenses);
+      const list = data.expenses || data.items || [];
+      if (Array.isArray(list)) setItems(list);
     } catch (e) {
       console.error(e);
-    } finally {
-      setLoading(false);
     }
+  }
+
+  function printAll() {
+    logActivity("expense:print", "expense", {
+      targetLabel: "All Expenses",
+      details: `Printed ${filtered.length} records`,
+      userRole,
+    });
+
+    const rows = filtered
+      .map(
+        (r) => `
+        <tr>
+          <td style="font-family:monospace;font-size:10px">${escapeHtml(
+            r.id.slice(0, 8)
+          )}</td>
+          <td>${escapeHtml(r.date.slice(0, 10))}</td>
+          <td>${escapeHtml(getCategoryLabel(r.category))}</td>
+          <td>${escapeHtml(r.employeeName || "—")}</td>
+          <td>${escapeHtml(r.jobRole || "—")}</td>
+          <td>${escapeHtml(formatPaymentMonth(r.paymentMonth))}</td>
+          <td>${escapeHtml(r.description || "—")}</td>
+          <td style="text-align:right;font-weight:600">${fmt(r.amount)}</td>
+          <td>${escapeHtml(r.recordedBy || "—")}</td>
+        </tr>`
+      )
+      .join("");
+
+    const printedBy =
+      typeof window !== "undefined"
+        ? localStorage.getItem("userName") ||
+          localStorage.getItem("userEmail") ||
+          userRole
+        : userRole;
+
+    printHTML({
+      title: "Expense Report — All Records",
+      bodyHtml: `
+        <h2>Summary</h2>
+        <div class="kpi">
+          <div><div class="label">Records</div><div class="value">${
+            filtered.length
+          }</div></div>
+          <div><div class="label">Total</div><div class="value">${fmt(
+            totals.total
+          )}</div></div>
+        </div>
+        <h2>All Expense Records</h2>
+        <table>
+          <thead>
+            <tr>
+              <th>Expense_ID</th><th>Date</th><th>Category</th>
+              <th>Employee</th><th>Job Role</th><th>Payment_Month</th>
+              <th>Description</th>
+              <th style="text-align:right">Amount</th>
+              <th>Recorded_By</th>
+            </tr>
+          </thead>
+          <tbody>${rows}</tbody>
+          <tfoot>
+            <tr>
+              <td colspan="7">TOTAL (${filtered.length} records)</td>
+              <td style="text-align:right">${fmt(totals.total)}</td>
+              <td></td>
+            </tr>
+          </tfoot>
+        </table>
+        <div class="signature">
+          <div>Prepared By: <strong>${escapeHtml(printedBy)}</strong></div>
+          <div>Approved By: __________________</div>
+        </div>
+        <p style="margin-top:24px;font-size:11px;color:#475569">
+          🖨 Report printed by <strong>${escapeHtml(
+            printedBy
+          )}</strong> on ${new Date().toLocaleString()}
+        </p>
+      `,
+    });
   }
 
   return (
@@ -95,85 +219,126 @@ export default function ExpensesClient({
             {items.length} total · {filtered.length} filtered
           </p>
         </div>
-        {canEdit && (
-          <button
-            onClick={() => setModal("add")}
-            className="inline-flex items-center gap-2 px-4 py-2.5 bg-orange-500 hover:bg-orange-600 text-white font-semibold rounded-lg shadow-sm transition"
-          >
-            + Add Expense
-          </button>
-        )}
+        <div className="flex flex-wrap gap-2">
+          {canPrint && (
+            <button
+              onClick={printAll}
+              className="inline-flex items-center gap-2 px-3 py-2 bg-slate-900 hover:bg-slate-800 text-white font-semibold rounded-lg shadow-sm text-sm"
+            >
+              🖨 Print All
+            </button>
+          )}
+          {canSeeActivityLog && (
+            <button
+              onClick={() => setShowActivityLog(true)}
+              className="inline-flex items-center gap-2 px-3 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 font-semibold rounded-lg shadow-sm text-sm"
+            >
+              📝 Activity Log
+            </button>
+          )}
+          {canAdd && (
+            <button
+              onClick={() => setShowAdd(true)}
+              className="inline-flex items-center gap-2 px-4 py-2 bg-red-600 hover:bg-red-700 text-white font-semibold rounded-lg shadow-sm text-sm"
+            >
+              + Add Expense
+            </button>
+          )}
+        </div>
       </div>
 
-      {/* Stats */}
+      {/* KPI Cards */}
       <div className="grid sm:grid-cols-2 lg:grid-cols-4 gap-4">
-        <StatCard label="Filtered Total" value={`${total.toLocaleString()} ETB`} color="orange" />
-        <StatCard label="This Month" value={`${thisMonthTotal(items).toLocaleString()} ETB`} color="slate" />
-        <StatCard label="Transactions" value={filtered.length} color="emerald" />
-        <StatCard label="Categories" value={Object.keys(byCategory).length} color="slate" />
+        <StatCard
+          label="Total Expenses"
+          value={`${fmt(totals.total)} ETB`}
+          color="red"
+          icon="💸"
+        />
+        <StatCard
+          label="Transactions"
+          value={totals.count}
+          color="slate"
+          icon="🧾"
+        />
+        <StatCard
+          label="Categories"
+          value={byCategory.length}
+          color="orange"
+          icon="📊"
+        />
+        <StatCard
+          label="Avg / Transaction"
+          value={`${fmt(
+            totals.count > 0 ? totals.total / totals.count : 0
+          )} ETB`}
+          color="slate"
+          icon="📈"
+        />
       </div>
 
-      {/* By-Category Breakdown */}
-      {Object.keys(byCategory).length > 0 && (
+      {/* By Category — Clickable */}
+      {byCategory.length > 0 && (
         <div className="bg-white rounded-2xl border border-slate-200 p-5">
           <h2 className="font-bold text-slate-900 mb-3">💼 By Category</h2>
-          <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-3">
-            {Object.entries(byCategory).map(([cat, stats]) => {
-              const label = getCategoryLabel(cat);
-              const icon = getCategoryIcon(cat);
-              const pct = total > 0 ? (stats.total / total) * 100 : 0;
-              return (
-                <div key={cat} className="p-3 rounded-lg bg-slate-50 border border-slate-200">
-                  <div className="flex items-center justify-between">
-                    <span className="text-sm font-medium text-slate-700">
-                      {icon} {label}
-                    </span>
-                    <span className="text-xs text-slate-500">{pct.toFixed(0)}%</span>
-                  </div>
-                  <div className="mt-2 h-1.5 bg-slate-200 rounded-full overflow-hidden">
-                    <div
-                      className="h-full bg-orange-500"
-                      style={{ width: `${pct}%` }}
-                    />
-                  </div>
-                  <p className="mt-2 text-sm font-bold text-slate-900">
-                    {stats.total.toLocaleString()} ETB
-                  </p>
-                  <p className="text-xs text-slate-500">
-                    {stats.count} transactions
-                  </p>
+          <div className="grid sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-3">
+            {byCategory.map((b) => (
+              <button
+                key={b.category}
+                onClick={() => setCategoryModal(b.category)}
+                className="p-3 rounded-lg bg-slate-50 hover:bg-red-50 border border-slate-200 hover:border-red-300 text-left transition"
+              >
+                <div className="flex items-center justify-between">
+                  <span className="text-sm font-medium text-slate-700">
+                    {b.icon} {b.label}
+                  </span>
+                  <span className="text-xs text-slate-500">
+                    {b.pct.toFixed(1)}%
+                  </span>
                 </div>
-              );
-            })}
+                <div className="mt-2 h-1.5 bg-slate-200 rounded-full overflow-hidden">
+                  <div
+                    className="h-full bg-red-500"
+                    style={{ width: `${Math.min(b.pct, 100)}%` }}
+                  />
+                </div>
+                <p className="mt-2 text-sm font-bold text-slate-900">
+                  {fmt(b.total)} ETB
+                </p>
+                <p className="text-xs text-slate-500">
+                  {b.count} transactions · Click to view →
+                </p>
+              </button>
+            ))}
           </div>
         </div>
       )}
 
       {/* Filters */}
-      <div className="bg-white p-4 rounded-2xl border border-slate-200 space-y-3">
+      <div className="bg-white p-4 rounded-2xl border border-slate-200">
         <div className="grid sm:grid-cols-2 lg:grid-cols-4 gap-3">
           <input
             value={q}
             onChange={(e) => setQ(e.target.value)}
-            placeholder="🔍 Search description…"
-            className="rounded-lg border border-slate-300 px-3 py-2.5 text-slate-900 text-sm"
+            placeholder="🔍 Search employee, description…"
+            className="rounded-lg border border-slate-300 px-3 py-2.5 text-sm text-slate-900"
           />
           <input
             type="date"
             value={from}
             onChange={(e) => setFrom(e.target.value)}
-            className="rounded-lg border border-slate-300 px-3 py-2.5 text-slate-900 text-sm"
+            className="rounded-lg border border-slate-300 px-3 py-2.5 text-sm text-slate-900"
           />
           <input
             type="date"
             value={to}
             onChange={(e) => setTo(e.target.value)}
-            className="rounded-lg border border-slate-300 px-3 py-2.5 text-slate-900 text-sm"
+            className="rounded-lg border border-slate-300 px-3 py-2.5 text-sm text-slate-900"
           />
           <select
             value={categoryFilter}
             onChange={(e) => setCategoryFilter(e.target.value)}
-            className="rounded-lg border border-slate-300 px-3 py-2.5 text-slate-900 text-sm"
+            className="rounded-lg border border-slate-300 px-3 py-2.5 text-sm text-slate-900"
           >
             <option value="all">All Categories</option>
             {EXPENSE_CATEGORIES.map((c) => (
@@ -193,59 +358,108 @@ export default function ExpensesClient({
               <tr>
                 <th className="text-left px-3 py-3 font-semibold">Date</th>
                 <th className="text-left px-3 py-3 font-semibold">Category</th>
-                <th className="text-left px-3 py-3 font-semibold hidden md:table-cell">Description</th>
-                <th className="text-left px-3 py-3 font-semibold hidden lg:table-cell">Recorded By</th>
+                <th className="text-left px-3 py-3 font-semibold hidden md:table-cell">
+                  Employee
+                </th>
+                <th className="text-left px-3 py-3 font-semibold hidden lg:table-cell">
+                  Job Role
+                </th>
+                <th className="text-left px-3 py-3 font-semibold hidden lg:table-cell">
+                  Payment Month
+                </th>
+                <th className="text-left px-3 py-3 font-semibold hidden xl:table-cell">
+                  Description
+                </th>
                 <th className="text-right px-3 py-3 font-semibold">Amount</th>
-                {canEdit && <th className="text-right px-3 py-3 font-semibold">Actions</th>}
+                <th className="text-right px-3 py-3 font-semibold">Actions</th>
               </tr>
             </thead>
             <tbody>
               {filtered.length === 0 ? (
                 <tr>
-                  <td colSpan={canEdit ? 6 : 5} className="text-center py-10 text-slate-500">
-                    No expenses found
+                  <td colSpan={8} className="text-center py-10 text-slate-500">
+                    No expense records found
                   </td>
                 </tr>
               ) : (
-                filtered.map((e) => (
-                  <tr key={e.id} className="border-t border-slate-100 hover:bg-slate-50">
-                    <td className="px-3 py-3 text-slate-600">{e.date}</td>
+                filtered.map((i) => (
+                  <tr
+                    key={i.id}
+                    className="border-t border-slate-100 hover:bg-slate-50"
+                  >
+                    <td className="px-3 py-3 text-slate-600">
+                      {i.date.slice(0, 10)}
+                    </td>
                     <td className="px-3 py-3">
                       <span
-                        className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium ${
-                          EXPENSE_COLORS[e.category.toLowerCase()] ?? "bg-gray-100 text-gray-700"
-                        }`}
+                        className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium ${getCategoryColor(
+                          i.category
+                        )}`}
                       >
-                        {getCategoryIcon(e.category)} {getCategoryLabel(e.category)}
+                        {getCategoryIcon(i.category)}{" "}
+                        {getCategoryLabel(i.category)}
                       </span>
                     </td>
                     <td className="px-3 py-3 text-slate-700 hidden md:table-cell">
-                      {e.description || "—"}
+                      {i.employeeName || "—"}
                     </td>
                     <td className="px-3 py-3 text-slate-600 hidden lg:table-cell">
-                      {e.recordedBy || "—"}
+                      {i.jobRole || "—"}
                     </td>
-                    <td className="px-3 py-3 text-right font-semibold text-red-600">
-                      -{e.amount.toLocaleString()} ETB
+                    <td className="px-3 py-3 text-slate-600 hidden lg:table-cell">
+                      {formatPaymentMonth(i.paymentMonth)}
                     </td>
-                    {canEdit && (
-                      <td className="px-3 py-3 text-right">
+                    <td className="px-3 py-3 text-slate-600 hidden xl:table-cell truncate max-w-xs">
+                      {i.description || "—"}
+                    </td>
+                    <td className="px-3 py-3 text-right font-bold text-red-600">
+                      −{fmt(i.amount)}
+                    </td>
+                    <td className="px-3 py-3 text-right">
+                      <div className="flex justify-end gap-1">
                         <button
-                          onClick={async () => {
-                            if (!confirm(`Delete this expense?`)) return;
-                            await fetch("/api/expenses", {
-                              method: "DELETE",
-                              headers: { "Content-Type": "application/json" },
-                              body: JSON.stringify({ id: e.id }),
-                            });
-                            refresh();
-                          }}
-                          className="px-2 py-1 text-xs bg-red-100 text-red-700 rounded hover:bg-red-200"
+                          onClick={() => setDetailRecord(i)}
+                          className="px-2 py-1 text-xs bg-slate-100 text-slate-700 rounded hover:bg-slate-200"
+                          title="View"
                         >
-                          🗑
+                          👁
                         </button>
-                      </td>
-                    )}
+                        {canEdit && (
+                          <button
+                            onClick={() => setEditRecord(i)}
+                            className="px-2 py-1 text-xs bg-blue-100 text-blue-700 rounded hover:bg-blue-200"
+                            title="Edit"
+                          >
+                            ✏️
+                          </button>
+                        )}
+                        {canDelete && (
+                          <button
+                            onClick={async () => {
+                              if (!confirm("Delete this expense?")) return;
+                              await fetch("/api/expenses", {
+                                method: "DELETE",
+                                headers: {
+                                  "Content-Type": "application/json",
+                                },
+                                body: JSON.stringify({ id: i.id }),
+                              });
+                              logActivity("expense:delete", "expense", {
+                                targetId: i.id,
+                                targetLabel: getCategoryLabel(i.category),
+                                details: "Expense record deleted",
+                                userRole,
+                              });
+                              refresh();
+                            }}
+                            className="px-2 py-1 text-xs bg-red-100 text-red-700 rounded hover:bg-red-200"
+                            title="Delete"
+                          >
+                            🗑
+                          </button>
+                        )}
+                      </div>
+                    </td>
                   </tr>
                 ))
               )}
@@ -254,196 +468,138 @@ export default function ExpensesClient({
         </div>
       </div>
 
-      {modal === "add" && (
-        <ExpenseForm
-          onClose={() => setModal(null)}
-          onSaved={() => { setModal(null); refresh(); }}
+      {/* Modals */}
+      {showAdd && (
+        <ExpenseFormModal
+          onClose={() => setShowAdd(false)}
+          onSaved={() => {
+            logActivity("expense:create", "expense", {
+              targetLabel: "New expense",
+              details: "Expense record added",
+              userRole,
+            });
+            setShowAdd(false);
+            refresh();
+          }}
+        />
+      )}
+
+      {editRecord && (
+        <ExpenseFormModal
+          record={editRecord}
+          onClose={() => setEditRecord(null)}
+          onSaved={() => {
+            logActivity("expense:update", "expense", {
+              targetId: editRecord.id,
+              targetLabel: getCategoryLabel(editRecord.category),
+              details: "Expense record updated",
+              userRole,
+            });
+            setEditRecord(null);
+            refresh();
+          }}
+        />
+      )}
+
+      {detailRecord && (
+        <ExpenseDetailModal
+          record={detailRecord}
+          allRecords={items}
+          canEdit={canEdit}
+          canDelete={canDelete}
+          onEdit={() => {
+            setEditRecord(detailRecord);
+            setDetailRecord(null);
+          }}
+          onDelete={async () => {
+            if (!confirm("Delete this expense?")) return;
+            await fetch("/api/expenses", {
+              method: "DELETE",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({ id: detailRecord.id }),
+            });
+            logActivity("expense:delete", "expense", {
+              targetId: detailRecord.id,
+              targetLabel: getCategoryLabel(detailRecord.category),
+              details: "Expense record deleted",
+              userRole,
+            });
+            setDetailRecord(null);
+            refresh();
+          }}
+          onClose={() => setDetailRecord(null)}
+        />
+      )}
+
+      {categoryModal && (
+        <ExpenseCategoryModal
+          category={categoryModal}
+          records={items.filter(
+            (r) => r.category.toLowerCase() === categoryModal.toLowerCase()
+          )}
+          canEdit={canEdit}
+          canDelete={canDelete}
+          onClose={() => setCategoryModal(null)}
+          onEditRecord={(r) => {
+            setCategoryModal(null);
+            setEditRecord(r);
+          }}
+          onDeleteRecord={async (r) => {
+            if (!confirm(`Delete expense ${r.id}?`)) return;
+            await fetch("/api/expenses", {
+              method: "DELETE",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({ id: r.id }),
+            });
+            logActivity("expense:delete", "expense", {
+              targetId: r.id,
+              targetLabel: getCategoryLabel(r.category),
+              details: "Expense record deleted",
+              userRole,
+            });
+            setCategoryModal(null);
+            refresh();
+          }}
+        />
+      )}
+
+      {showActivityLog && canSeeActivityLog && (
+        <ActivityLogModal
+          userRole={userRole}
+          canDelete={canDeleteActivityLog}
+          onClose={() => setShowActivityLog(false)}
         />
       )}
     </div>
   );
 }
 
-// ─── Components ───
+function StatCard({
+  label,
+  value,
+  color,
+  icon,
+}: {
+  label: string;
+  value: any;
+  color: string;
+  icon: string;
+}) {
+  const cls =
+    {
+      red: "text-red-700 bg-red-50 border-red-200",
+      slate: "text-slate-700 bg-slate-50 border-slate-200",
+      orange: "text-orange-700 bg-orange-50 border-orange-200",
+      emerald: "text-emerald-700 bg-emerald-50 border-emerald-200",
+    }[color] ?? "text-slate-700 bg-slate-50 border-slate-200";
 
-function StatCard({ label, value, color }: { label: string; value: any; color: string }) {
-  const cls = {
-    orange: "text-orange-700 bg-orange-50",
-    slate: "text-slate-700 bg-slate-50",
-    emerald: "text-emerald-700 bg-emerald-50",
-  }[color] ?? "text-slate-700 bg-slate-50";
   return (
-    <div className={`${cls} p-4 rounded-2xl border border-slate-200`}>
-      <p className="text-xs font-medium opacity-75">{label}</p>
+    <div className={`${cls} p-4 rounded-2xl border`}>
+      <div className="flex items-start justify-between">
+        <p className="text-xs font-medium opacity-75">{label}</p>
+        <span className="text-lg">{icon}</span>
+      </div>
       <p className="mt-1 text-xl font-bold">{value}</p>
     </div>
   );
-}
-
-function ExpenseForm({
-  onClose,
-  onSaved,
-}: {
-  onClose: () => void;
-  onSaved: () => void;
-}) {
-  const [form, setForm] = useState({
-    category: "transport",
-    amount: 0,
-    description: "",
-    date: new Date().toISOString().slice(0, 10),
-    paymentMonth: "",
-  });
-  const [saving, setSaving] = useState(false);
-  const [error, setError] = useState("");
-
-  async function submit(e: React.FormEvent) {
-    e.preventDefault();
-    setError("");
-    if (form.amount <= 0) {
-      setError("Amount must be greater than 0");
-      return;
-    }
-    setSaving(true);
-    try {
-      const res = await fetch("/api/expenses", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(form),
-      });
-      const data = await res.json();
-      if (!res.ok) {
-        setError(data.error || "Failed");
-        setSaving(false);
-        return;
-      }
-      onSaved();
-    } catch (e: any) {
-      setError(e.message);
-      setSaving(false);
-    }
-  }
-
-  return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60">
-      <form
-        onSubmit={submit}
-        className="bg-white rounded-2xl shadow-2xl w-full max-w-md max-h-[90vh] overflow-y-auto p-6 space-y-4"
-      >
-        <div className="flex items-center justify-between">
-          <h2 className="text-xl font-bold text-slate-900">➕ Add Expense</h2>
-          <button
-            type="button"
-            onClick={onClose}
-            className="text-slate-400 hover:text-slate-900 text-xl"
-          >
-            ✕
-          </button>
-        </div>
-
-        <div>
-          <label className="block text-sm font-semibold text-slate-900 mb-1">
-            Category *
-          </label>
-          <select
-            value={form.category}
-            onChange={(e) => setForm({ ...form, category: e.target.value })}
-            required
-            className="w-full rounded-lg border border-slate-300 px-3 py-2.5 text-slate-900"
-          >
-            {EXPENSE_CATEGORIES.map((c) => (
-              <option key={c.value} value={c.value}>
-                {c.icon} {c.label}
-              </option>
-            ))}
-          </select>
-        </div>
-
-        <div>
-          <label className="block text-sm font-semibold text-slate-900 mb-1">
-            Amount (ETB) *
-          </label>
-          <input
-            type="number"
-            value={form.amount || ""}
-            onChange={(e) => setForm({ ...form, amount: Number(e.target.value) })}
-            required
-            min={0}
-            step={0.01}
-            className="w-full rounded-lg border border-slate-300 px-3 py-2.5 text-slate-900"
-          />
-        </div>
-
-        <div>
-          <label className="block text-sm font-semibold text-slate-900 mb-1">
-            Date
-          </label>
-          <input
-            type="date"
-            value={form.date}
-            onChange={(e) => setForm({ ...form, date: e.target.value })}
-            className="w-full rounded-lg border border-slate-300 px-3 py-2.5 text-slate-900"
-          />
-        </div>
-
-        <div>
-          <label className="block text-sm font-semibold text-slate-900 mb-1">
-            Description
-          </label>
-          <textarea
-            value={form.description}
-            onChange={(e) => setForm({ ...form, description: e.target.value })}
-            placeholder="What was this expense for?"
-            rows={3}
-            className="w-full rounded-lg border border-slate-300 px-3 py-2.5 text-slate-900"
-          />
-        </div>
-
-        {form.category === "salary" && (
-          <div>
-            <label className="block text-sm font-semibold text-slate-900 mb-1">
-              Payment Month
-            </label>
-            <input
-              type="month"
-              value={form.paymentMonth}
-              onChange={(e) => setForm({ ...form, paymentMonth: e.target.value })}
-              className="w-full rounded-lg border border-slate-300 px-3 py-2.5 text-slate-900"
-            />
-          </div>
-        )}
-
-        {error && (
-          <div className="p-3 bg-red-50 border border-red-200 rounded-lg">
-            <p className="text-sm text-red-700">❌ {error}</p>
-          </div>
-        )}
-
-        <div className="flex gap-2">
-          <button
-            type="button"
-            onClick={onClose}
-            className="flex-1 py-2.5 rounded-lg border border-slate-300 text-slate-700 font-medium"
-          >
-            Cancel
-          </button>
-          <button
-            type="submit"
-            disabled={saving}
-            className="flex-1 py-2.5 rounded-lg bg-orange-500 hover:bg-orange-600 text-white font-semibold disabled:opacity-50"
-          >
-            {saving ? "Saving…" : "Add Expense"}
-          </button>
-        </div>
-      </form>
-    </div>
-  );
-}
-
-function thisMonthTotal(items: ExpenseItem[]): number {
-  const now = new Date();
-  const start = new Date(now.getFullYear(), now.getMonth(), 1);
-  return items
-    .filter((e) => new Date(e.date) >= start)
-    .reduce((s, e) => s + e.amount, 0);
 }
