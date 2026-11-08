@@ -37,12 +37,22 @@ export default async function IncomePage() {
   const role = normalizeRole((session.user as any).role);
   const email = String(session.user?.email || "");
 
-  // ✅ ሁሉንም permissions አንብብ
-  const canEditIncome = await hasPermission(email, role, "canEditIncome");
-  const canDeleteIncome = await hasPermission(email, role, "canDeleteIncome");
-  const canAddIncome = await hasPermission(email, role, "canAddIncome");       // 🆕
-  const canExportIncome = await hasPermission(email, role, "canExportIncome"); // 🆕
-  const canPrintIncome = await hasPermission(email, role, "canPrintIncome");   // 🆕
+  // ✅ Income permissions
+  const [
+    canEditIncome,
+    canDeleteIncome,
+    canAddIncome,
+    canExportIncome,
+    canPrintIncome,
+    canViewActivity,
+  ] = await Promise.all([
+    hasPermission(email, role, "canEditIncome"),
+    hasPermission(email, role, "canDeleteIncome"),
+    hasPermission(email, role, "canAddIncome"),
+    hasPermission(email, role, "canExportIncome"),
+    hasPermission(email, role, "canPrintIncome"),
+    hasPermission(email, role, "canViewActivity"), // 🆕
+  ]);
 
   // ✅ Debug log (ለማረጋገጥ)
   console.log("🔍 [Income page] role:", role, "email:", email);
@@ -52,6 +62,7 @@ export default async function IncomePage() {
     canAddIncome,
     canExportIncome,
     canPrintIncome,
+    canViewActivity,
   });
 
   let income: IncomeItem[] = [];
@@ -84,7 +95,8 @@ export default async function IncomePage() {
       .sort(
         (a, b) => new Date(b.date).getTime() - new Date(a.date).getTime()
       );
-  } catch {
+  } catch (e) {
+    console.error("Income load error:", e);
     income = [];
   }
 
@@ -94,9 +106,10 @@ export default async function IncomePage() {
       userRole={role}
       canEditIncome={canEditIncome}
       canDeleteIncome={canDeleteIncome}
-      canAddIncome={canAddIncome}           // 🆕
-      canExportIncome={canExportIncome}     // 🆕
-      canPrintIncome={canPrintIncome}       // 🆕
+      canAddIncome={canAddIncome}
+      canExportIncome={canExportIncome}
+      canPrintIncome={canPrintIncome}
+      canViewActivityLog={canViewActivity} // 🆕
     />
   );
 }
