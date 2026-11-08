@@ -8,8 +8,8 @@ import {
   getCategoryLabel,
   getCategoryColor,
   formatPaymentMonth,
+  ExpenseRecord,
 } from "@/lib/expense-types";
-import { ExpenseRecord } from "@/lib/expense-types";
 import ExpenseFormModal from "@/components/admin/expenses/ExpenseFormModal";
 import ExpenseDetailModal from "@/components/admin/expenses/ExpenseDetailModal";
 import ExpenseCategoryModal from "@/components/admin/expenses/ExpenseCategoryModal";
@@ -38,7 +38,7 @@ export default function ExpenseClient({
   canPrintExpense,
   canViewActivityLog,
 }: Props) {
-  const [items, setItems] = useState(initialExpenses);
+  const [items, setItems] = useState<ExpenseRecord[]>(initialExpenses);
   const [q, setQ] = useState("");
   const [from, setFrom] = useState("");
   const [to, setTo] = useState("");
@@ -50,7 +50,7 @@ export default function ExpenseClient({
   const [categoryModal, setCategoryModal] = useState<string | null>(null);
   const [showActivityLog, setShowActivityLog] = useState(false);
 
-  // ✅ Permissions
+  // ✅ Permissions (no fallback)
   const canAdd = canAddExpense === true;
   const canEdit = canEditExpense === true;
   const canDelete = canDeleteExpense === true;
@@ -59,6 +59,7 @@ export default function ExpenseClient({
   const canSeeActivityLog = canViewActivityLog === true;
   const canDeleteActivityLog = userRole === "owner";
 
+  // ─── Filtered ───
   const filtered = useMemo(() => {
     let out = items;
     if (q) {
@@ -89,6 +90,7 @@ export default function ExpenseClient({
     return out;
   }, [items, q, from, to, categoryFilter]);
 
+  // ─── Totals ───
   const totals = useMemo(
     () => ({
       total: filtered.reduce((s, i) => s + (Number(i.amount) || 0), 0),
@@ -97,6 +99,7 @@ export default function ExpenseClient({
     [filtered]
   );
 
+  // ─── By Category ───
   const byCategory = useMemo(() => {
     const map = new Map<string, { total: number; count: number }>();
     for (const i of filtered) {
@@ -118,6 +121,7 @@ export default function ExpenseClient({
     }));
   }, [filtered]);
 
+  // ─── Refresh ───
   async function refresh() {
     try {
       const res = await fetch("/api/expenses", { cache: "no-store" });
@@ -125,10 +129,11 @@ export default function ExpenseClient({
       const list = data.expenses || data.items || [];
       if (Array.isArray(list)) setItems(list);
     } catch (e) {
-      console.error(e);
+      console.error("Refresh failed:", e);
     }
   }
 
+  // ─── Print All ───
   function printAll() {
     logActivity("expense:print", "expense", {
       targetLabel: "All Expenses",
@@ -141,7 +146,7 @@ export default function ExpenseClient({
         (r) => `
         <tr>
           <td style="font-family:monospace;font-size:10px">${escapeHtml(
-            r.id.slice(0, 8)
+            r.id.slice(0, 10)
           )}</td>
           <td>${escapeHtml(r.date.slice(0, 10))}</td>
           <td>${escapeHtml(getCategoryLabel(r.category))}</td>
@@ -175,7 +180,7 @@ export default function ExpenseClient({
           )}</div></div>
         </div>
         <h2>All Expense Records</h2>
-        <table>
+        <table style="font-size:10px">
           <thead>
             <tr>
               <th>Expense_ID</th><th>Date</th><th>Category</th>
@@ -207,9 +212,32 @@ export default function ExpenseClient({
     });
   }
 
+  // ─── Delete ───
+  async function handleDelete(record: ExpenseRecord, fromModal = false) {
+    if (!confirm(`Delete expense "${record.id}"?`)) return;
+    try {
+      await fetch("/api/expenses", {
+        method: "DELETE",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ id: record.id }),
+      });
+      logActivity("expense:delete", "expense", {
+        targetId: record.id,
+        targetLabel: getCategoryLabel(record.category),
+        details: "Expense record deleted",
+        userRole,
+      });
+      if (fromModal) setDetailRecord(null);
+      if (fromModal) setCategoryModal(null);
+      await refresh();
+    } catch (e: any) {
+      alert("Delete failed: " + e.message);
+    }
+  }
+
   return (
     <div className="p-4 sm:p-6 lg:p-10 space-y-6">
-      {/* Header */}
+      {/* ─── Header ─── */}
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
         <div>
           <h1 className="text-2xl sm:text-3xl font-bold text-slate-900">
@@ -247,7 +275,7 @@ export default function ExpenseClient({
         </div>
       </div>
 
-      {/* KPI Cards */}
+      {/* ─── KPI Cards ─── */}
       <div className="grid sm:grid-cols-2 lg:grid-cols-4 gap-4">
         <StatCard
           label="Total Expenses"
@@ -277,7 +305,7 @@ export default function ExpenseClient({
         />
       </div>
 
-      {/* By Category — Clickable */}
+      {/* ─── By Category — Clickable ─── */}
       {byCategory.length > 0 && (
         <div className="bg-white rounded-2xl border border-slate-200 p-5">
           <h2 className="font-bold text-slate-900 mb-3">💼 By Category</h2>
@@ -314,7 +342,7 @@ export default function ExpenseClient({
         </div>
       )}
 
-      {/* Filters */}
+      {/* ─── Filters ─── */}
       <div className="bg-white p-4 rounded-2xl border border-slate-200">
         <div className="grid sm:grid-cols-2 lg:grid-cols-4 gap-3">
           <input
@@ -350,7 +378,7 @@ export default function ExpenseClient({
         </div>
       </div>
 
-      {/* Table */}
+      {/* ─── Table ─── */}
       <div className="bg-white rounded-2xl border border-slate-200 overflow-hidden">
         <div className="overflow-x-auto">
           <table className="w-full text-sm">
@@ -435,23 +463,7 @@ export default function ExpenseClient({
                         )}
                         {canDelete && (
                           <button
-                            onClick={async () => {
-                              if (!confirm("Delete this expense?")) return;
-                              await fetch("/api/expenses", {
-                                method: "DELETE",
-                                headers: {
-                                  "Content-Type": "application/json",
-                                },
-                                body: JSON.stringify({ id: i.id }),
-                              });
-                              logActivity("expense:delete", "expense", {
-                                targetId: i.id,
-                                targetLabel: getCategoryLabel(i.category),
-                                details: "Expense record deleted",
-                                userRole,
-                              });
-                              refresh();
-                            }}
+                            onClick={() => handleDelete(i)}
                             className="px-2 py-1 text-xs bg-red-100 text-red-700 rounded hover:bg-red-200"
                             title="Delete"
                           >
@@ -468,7 +480,7 @@ export default function ExpenseClient({
         </div>
       </div>
 
-      {/* Modals */}
+      {/* ─── Add Modal ─── */}
       {showAdd && (
         <ExpenseFormModal
           onClose={() => setShowAdd(false)}
@@ -484,6 +496,7 @@ export default function ExpenseClient({
         />
       )}
 
+      {/* ─── Edit Modal ─── */}
       {editRecord && (
         <ExpenseFormModal
           record={editRecord}
@@ -501,6 +514,7 @@ export default function ExpenseClient({
         />
       )}
 
+      {/* ─── Detail Modal ─── */}
       {detailRecord && (
         <ExpenseDetailModal
           record={detailRecord}
@@ -511,26 +525,12 @@ export default function ExpenseClient({
             setEditRecord(detailRecord);
             setDetailRecord(null);
           }}
-          onDelete={async () => {
-            if (!confirm("Delete this expense?")) return;
-            await fetch("/api/expenses", {
-              method: "DELETE",
-              headers: { "Content-Type": "application/json" },
-              body: JSON.stringify({ id: detailRecord.id }),
-            });
-            logActivity("expense:delete", "expense", {
-              targetId: detailRecord.id,
-              targetLabel: getCategoryLabel(detailRecord.category),
-              details: "Expense record deleted",
-              userRole,
-            });
-            setDetailRecord(null);
-            refresh();
-          }}
+          onDelete={() => handleDelete(detailRecord, true)}
           onClose={() => setDetailRecord(null)}
         />
       )}
 
+      {/* ─── Category Modal ─── */}
       {categoryModal && (
         <ExpenseCategoryModal
           category={categoryModal}
@@ -544,25 +544,11 @@ export default function ExpenseClient({
             setCategoryModal(null);
             setEditRecord(r);
           }}
-          onDeleteRecord={async (r) => {
-            if (!confirm(`Delete expense ${r.id}?`)) return;
-            await fetch("/api/expenses", {
-              method: "DELETE",
-              headers: { "Content-Type": "application/json" },
-              body: JSON.stringify({ id: r.id }),
-            });
-            logActivity("expense:delete", "expense", {
-              targetId: r.id,
-              targetLabel: getCategoryLabel(r.category),
-              details: "Expense record deleted",
-              userRole,
-            });
-            setCategoryModal(null);
-            refresh();
-          }}
+          onDeleteRecord={(r) => handleDelete(r, true)}
         />
       )}
 
+      {/* ─── Activity Log ─── */}
       {showActivityLog && canSeeActivityLog && (
         <ActivityLogModal
           userRole={userRole}
@@ -574,6 +560,7 @@ export default function ExpenseClient({
   );
 }
 
+// ─── StatCard ───
 function StatCard({
   label,
   value,
