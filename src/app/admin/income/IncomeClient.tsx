@@ -8,7 +8,6 @@ import {
   getSourceLabel,
   getCategoriesForSource,
   SOURCE_COLORS,
-  buildSourceBreakdown,
 } from "@/lib/income-categories";
 import { IncomeRecord } from "@/lib/income-types";
 import IncomeFormModal from "@/components/admin/income/IncomeFormModal";
@@ -19,9 +18,6 @@ import { logActivity } from "@/lib/activity-log";
 import {
   fmt,
   printHTML,
-  copyToClipboard,
-  shareText,
-  downloadCSV,
   escapeHtml,
 } from "@/lib/print-utils";
 
@@ -33,7 +29,6 @@ export default function IncomeClient({
   canEditIncome,
   canDeleteIncome,
   canAddIncome,
-  canExportIncome,
   canViewReports,
 }: {
   initialIncome: IncomeRecord[];
@@ -41,7 +36,6 @@ export default function IncomeClient({
   canEditIncome?: boolean;
   canDeleteIncome?: boolean;
   canAddIncome?: boolean;
-  canExportIncome?: boolean;
   canViewReports?: boolean;
 }) {
   const [items, setItems] = useState(initialIncome);
@@ -54,12 +48,11 @@ export default function IncomeClient({
   const [loading, setLoading] = useState(false);
   const [expanded, setExpanded] = useState<string | null>(null);
 
-  // ✅ Modal / state
+  // ✅ Modals
   const [detailRecord, setDetailRecord] = useState<IncomeRecord | null>(null);
   const [sourceModal, setSourceModal] = useState<string | null>(null);
   const [editRecord, setEditRecord] = useState<IncomeRecord | null>(null);
-  const [copiedAll, setCopiedAll] = useState(false);
-  const [showActivityLog, setShowActivityLog] = useState(false); // ✅ አዲስ
+  const [showActivityLog, setShowActivityLog] = useState(false);
 
   // ✅ Permissions
   const canEdit = canEditIncome ?? ["owner", "manager"].includes(userRole);
@@ -67,10 +60,12 @@ export default function IncomeClient({
   const canAdd =
     canAddIncome ??
     ["owner", "manager", "employee", "staff"].includes(userRole);
-  const canExport =
-    canExportIncome ?? ["owner", "manager"].includes(userRole);
   const canViewReportsFlag =
     canViewReports ?? ["owner", "manager"].includes(userRole);
+  // ✅ Activity Log ለ owner / manager ብቻ
+  const canViewActivityLog = ["owner", "manager"].includes(userRole);
+  // ✅ Activity log delete ለ owner ብቻ
+  const canDeleteActivityLog = userRole === "owner";
 
   const filtered = useMemo(() => {
     let out = items;
@@ -108,24 +103,40 @@ export default function IncomeClient({
 
   const totals = useMemo(
     () => ({
-      gross: filtered.reduce((s, i) => s + i.grossIncome, 0),
-      material: filtered.reduce((s, i) => s + i.materialCost, 0),
-      net: filtered.reduce((s, i) => s + i.netIncome, 0),
+      gross: filtered.reduce((s, i) => s + (Number(i.grossIncome) || 0), 0),
+      material: filtered.reduce((s, i) => s + (Number(i.materialCost) || 0), 0),
+      net: filtered.reduce((s, i) => s + (Number(i.netIncome) || 0), 0),
       transactions: filtered.length,
     }),
     [filtered]
   );
 
-  const breakdown = useMemo(
-    () =>
-      buildSourceBreakdown(
-        filtered.map((i) => ({
-          incomeSource: i.incomeSource,
-          totalPrice: i.totalPrice,
-        }))
-      ),
-    [filtered]
-  );
+  // ✅ Build breakdown — ፐርሰንታይል ከ breakdown ራሱ ድምር ይሰላል
+  const breakdown = useMemo(() => {
+    const sourceMap = new Map<
+      string,
+      { total: number; count: number }
+    >();
+    for (const i of filtered) {
+      const key = i.incomeSource.toLowerCase();
+      const ex = sourceMap.get(key) || { total: 0, count: 0 };
+      ex.total += Number(i.totalPrice) || 0;
+      ex.count += 1;
+      sourceMap.set(key, ex);
+    }
+    const grandTotal = Array.from(sourceMap.values()).reduce(
+      (s, x) => s + x.total,
+      0
+    );
+    return Array.from(sourceMap.entries()).map(([source, data]) => ({
+      source,
+      sourceLabel: getSourceLabel(source),
+      icon: getSourceIcon(source),
+      total: data.total,
+      count: data.count,
+      pct: grandTotal > 0 ? (data.total / grandTotal) * 100 : 0,
+    }));
+  }, [filtered]);
 
   const filterCategories = useMemo(() => {
     if (sourceFilter === "all") {
@@ -138,14 +149,16 @@ export default function IncomeClient({
     return getCategoriesForSource(sourceFilter).map((c) => c.label);
   }, [sourceFilter]);
 
+  // ✅ Refresh — ሁልጊዜ ሙሉ ዳታ ያመጣል
   async function refresh() {
     setLoading(true);
     try {
       const res = await fetch("/api/income", { cache: "no-store" });
       const data = await res.json();
-      if (Array.isArray(data.income)) setItems(data.income);
+      const list = data.income || data.items || data.records || [];
+      if (Array.isArray(list)) setItems(list);
     } catch (e) {
-      console.error(e);
+      console.error("Refresh failed:", e);
     } finally {
       setLoading(false);
     }
@@ -153,7 +166,6 @@ export default function IncomeClient({
 
   // ✅ Print all filtered records + log activity
   function printAllIncome() {
-    // ─── Log activity ───
     logActivity("income:print", "income", {
       targetLabel: "All Income",
       details: `Printed ${filtered.length} records`,
@@ -298,69 +310,9 @@ export default function IncomeClient({
     });
   }
 
-  // ✅ Copy all filtered to clipboard
-  async function copyAllText() {
-    const lines = [
-      "🧾 *CLICK COMPUTER CENTER*",
-      "Income Report — All Records",
-      `📅 ${new Date().toLocaleDateString()}`,
-      "───────────────────────",
-      `Records: ${filtered.length}`,
-      `Gross: ${fmt(totals.gross)} ETB`,
-      `Material: ${fmt(totals.material)} ETB`,
-      `Net: ${fmt(totals.net)} ETB`,
-      "───────────────────────",
-      ...filtered
-        .slice(0, 20)
-        .map(
-          (r, i) =>
-            `${i + 1}. ${r.date.slice(0, 10)} · ${r.incomeSource} · ${fmt(
-              r.netIncome
-            )} ETB`
-        ),
-      filtered.length > 20 ? `… and ${filtered.length - 20} more` : "",
-    ].filter(Boolean);
-    const ok = await copyToClipboard(lines.join("\n"));
-    if (ok) {
-      setCopiedAll(true);
-      setTimeout(() => setCopiedAll(false), 2500);
-    }
-  }
-
-  // ✅ Export all filtered to CSV
-  function exportAllCSV() {
-    downloadCSV(
-      `income-${new Date().toISOString().slice(0, 10)}.csv`,
-      [
-        "Date",
-        "Source",
-        "Category",
-        "Description",
-        "Recorded By",
-        "Price",
-        "Qty",
-        "Gross",
-        "Material",
-        "Net",
-      ],
-      filtered.map((r) => [
-        r.date.slice(0, 10),
-        r.incomeSource,
-        r.incomeCategory,
-        r.description || "",
-        r.recordedBy || "",
-        r.price,
-        r.quantity,
-        r.totalPrice,
-        r.materialCost,
-        r.netIncome,
-      ])
-    );
-  }
-
   return (
     <div className="p-4 sm:p-6 lg:p-10 space-y-6">
-      {/* Header — ✅ Simplified buttons */}
+      {/* Header */}
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
         <div>
           <h1 className="text-2xl sm:text-3xl font-bold text-slate-900">
@@ -380,13 +332,16 @@ export default function IncomeClient({
               🖨 Print All
             </button>
           )}
-          <button
-            onClick={() => setShowActivityLog(true)}
-            className="inline-flex items-center gap-2 px-3 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 font-semibold rounded-lg shadow-sm text-sm"
-            title="View Activity Log"
-          >
-            📝 Activity Log
-          </button>
+          {/* ✅ Activity Log — owner / manager ብቻ */}
+          {canViewActivityLog && (
+            <button
+              onClick={() => setShowActivityLog(true)}
+              className="inline-flex items-center gap-2 px-3 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 font-semibold rounded-lg shadow-sm text-sm"
+              title="View Activity Log"
+            >
+              📝 Activity Log
+            </button>
+          )}
           {canAdd && (
             <button
               onClick={() => setModal("add")}
@@ -431,38 +386,35 @@ export default function IncomeClient({
         <div className="bg-white rounded-2xl border border-slate-200 p-5">
           <h2 className="font-bold text-slate-900 mb-3">📊 By Source</h2>
           <div className="grid sm:grid-cols-2 lg:grid-cols-4 gap-3">
-            {breakdown.map((b) => {
-              const pct = totals.gross > 0 ? (b.total / totals.gross) * 100 : 0;
-              return (
-                <button
-                  key={b.source}
-                  onClick={() => setSourceModal(b.source)}
-                  className="p-3 rounded-lg bg-slate-50 hover:bg-emerald-50 border border-slate-200 hover:border-emerald-300 text-left transition cursor-pointer"
-                  title={`View ${b.sourceLabel} records`}
-                >
-                  <div className="flex items-center justify-between">
-                    <span className="text-sm font-medium text-slate-700">
-                      {b.icon} {b.sourceLabel}
-                    </span>
-                    <span className="text-xs text-slate-500">
-                      {pct.toFixed(0)}%
-                    </span>
-                  </div>
-                  <div className="mt-2 h-1.5 bg-slate-200 rounded-full overflow-hidden">
-                    <div
-                      className="h-full bg-emerald-500"
-                      style={{ width: `${pct}%` }}
-                    />
-                  </div>
-                  <p className="mt-2 text-sm font-bold text-slate-900">
-                    {fmt(b.total)} ETB
-                  </p>
-                  <p className="text-xs text-slate-500">
-                    {b.count} transactions · Click to view →
-                  </p>
-                </button>
-              );
-            })}
+            {breakdown.map((b) => (
+              <button
+                key={b.source}
+                onClick={() => setSourceModal(b.source)}
+                className="p-3 rounded-lg bg-slate-50 hover:bg-emerald-50 border border-slate-200 hover:border-emerald-300 text-left transition cursor-pointer"
+                title={`View ${b.sourceLabel} records`}
+              >
+                <div className="flex items-center justify-between">
+                  <span className="text-sm font-medium text-slate-700">
+                    {b.icon} {b.sourceLabel}
+                  </span>
+                  <span className="text-xs text-slate-500">
+                    {b.pct.toFixed(1)}%
+                  </span>
+                </div>
+                <div className="mt-2 h-1.5 bg-slate-200 rounded-full overflow-hidden">
+                  <div
+                    className="h-full bg-emerald-500"
+                    style={{ width: `${Math.min(b.pct, 100)}%` }}
+                  />
+                </div>
+                <p className="mt-2 text-sm font-bold text-slate-900">
+                  {fmt(b.total)} ETB
+                </p>
+                <p className="text-xs text-slate-500">
+                  {b.count} transactions · Click to view →
+                </p>
+              </button>
+            ))}
           </div>
         </div>
       )}
@@ -559,153 +511,34 @@ export default function IncomeClient({
                     i.materialsJson && i.materialsJson.length > 2;
 
                   return (
-                    <>
-                      <tr
-                        key={i.id}
-                        className="border-t border-slate-100 hover:bg-slate-50"
-                      >
-                        <td className="px-3 py-3 text-slate-600">
-                          {i.date.slice(0, 10)}
-                        </td>
-                        <td className="px-3 py-3">
-                          <span
-                            className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium ${
-                              SOURCE_COLORS[i.incomeSource.toLowerCase()] ??
-                              "bg-gray-100 text-gray-700"
-                            }`}
-                          >
-                            {getSourceIcon(i.incomeSource)}{" "}
-                            {getSourceLabel(i.incomeSource)}
-                          </span>
-                        </td>
-                        <td className="px-3 py-3 text-slate-700 hidden md:table-cell">
-                          {i.incomeCategory || "—"}
-                        </td>
-                        <td className="px-3 py-3 text-slate-600 hidden lg:table-cell truncate max-w-xs">
-                          {i.description || "—"}
-                        </td>
-                        <td className="px-3 py-3 text-right font-medium text-emerald-600">
-                          +{fmt(i.grossIncome)}
-                        </td>
-                        {canEdit && (
-                          <td className="px-3 py-3 text-right text-slate-600 hidden md:table-cell">
-                            {i.materialCost > 0
-                              ? `-${fmt(i.materialCost)}`
-                              : "—"}
-                          </td>
-                        )}
-                        <td
-                          className={`px-3 py-3 text-right font-bold ${
-                            i.netIncome >= 0
-                              ? "text-emerald-600"
-                              : "text-red-600"
-                          }`}
-                        >
-                          {fmt(i.netIncome)}
-                        </td>
-                        <td className="px-3 py-3 text-right">
-                          <div className="flex justify-end gap-1">
-                            <button
-                              onClick={() => setDetailRecord(i)}
-                              className="px-2 py-1 text-xs bg-slate-100 text-slate-700 rounded hover:bg-slate-200"
-                              title="View Detail"
-                            >
-                              👁
-                            </button>
-                            {hasMaterials && (
-                              <button
-                                onClick={() =>
-                                  setExpanded(isExpanded ? null : i.id)
-                                }
-                                className="px-2 py-1 text-xs bg-blue-100 text-blue-700 rounded hover:bg-blue-200"
-                                title="View Materials"
-                              >
-                                {isExpanded ? "▲" : "📦"}
-                              </button>
-                            )}
-                            {canEdit && (
-                              <button
-                                onClick={() => setEditRecord(i)}
-                                className="px-2 py-1 text-xs bg-blue-100 text-blue-700 rounded hover:bg-blue-200"
-                                title="Edit"
-                              >
-                                ✏️
-                              </button>
-                            )}
-                            {canDelete && (
-                              <button
-                                onClick={async () => {
-                                  if (
-                                    !confirm("Delete this income record?")
-                                  )
-                                    return;
-                                  await fetch("/api/income", {
-                                    method: "DELETE",
-                                    headers: {
-                                      "Content-Type": "application/json",
-                                    },
-                                    body: JSON.stringify({ id: i.id }),
-                                  });
-                                  // ✅ Log delete
-                                  logActivity("income:delete", "income", {
-                                    targetId: i.id,
-                                    targetLabel: i.incomeSource,
-                                    details: "Income record deleted",
-                                    userRole,
-                                  });
-                                  refresh();
-                                }}
-                                className="px-2 py-1 text-xs bg-red-100 text-red-700 rounded hover:bg-red-200"
-                                title="Delete"
-                              >
-                                🗑
-                              </button>
-                            )}
-                          </div>
-                        </td>
-                      </tr>
-
-                      {isExpanded && hasMaterials && (
-                        <tr className="bg-slate-50">
-                          <td
-                            colSpan={canEdit ? 8 : 6}
-                            className="px-6 py-3"
-                          >
-                            <div className="text-xs">
-                              <p className="font-semibold text-slate-700 mb-2">
-                                📦 Materials Used:
-                              </p>
-                              <div className="space-y-1">
-                                {(() => {
-                                  try {
-                                    const mats = JSON.parse(
-                                      i.materialsJson || "[]"
-                                    );
-                                    return mats.map(
-                                      (m: any, idx: number) => (
-                                        <div
-                                          key={idx}
-                                          className="flex justify-between items-center py-1 border-b border-slate-200"
-                                        >
-                                          <span className="text-slate-700">
-                                            {m.itemName} · {m.usedQty} used
-                                          </span>
-                                          <span className="font-semibold text-red-600">
-                                            − {fmt(m.materialCost)} ETB
-                                          </span>
-                                        </div>
-                                      )
-                                    );
-                                  } catch {
-                                    return <p>Unable to parse materials</p>;
-                                  }
-                                })()}
-                              </div>
-                            </div>
-                          </td>
-                        </tr>
-                      )}
-                    </>
+                    <FragmentRow
+                      key={i.id}
+                      record={i}
+                      isExpanded={isExpanded}
+                      hasMaterials={!!hasMaterials}
+                      canEdit={canEdit}
+                      canDelete={canDelete}
+                      onToggleExpand={() =>
+                        setExpanded(isExpanded ? null : i.id)
+                      }
+                      onView={() => setDetailRecord(i)}
+                      onEdit={() => setEditRecord(i)}
+                      onDelete={async () => {
+                        if (!confirm("Delete this income record?")) return;
+                        await fetch("/api/income", {
+                          method: "DELETE",
+                          headers: { "Content-Type": "application/json" },
+                          body: JSON.stringify({ id: i.id }),
+                        });
+                        logActivity("income:delete", "income", {
+                          targetId: i.id,
+                          targetLabel: i.incomeSource,
+                          details: "Income record deleted",
+                          userRole,
+                        });
+                        refresh();
+                      }}
+                    />
                   );
                 })
               )}
@@ -714,7 +547,7 @@ export default function IncomeClient({
         </div>
       </div>
 
-      {/* Add Income Modal — ✅ with log */}
+      {/* Add Income Modal */}
       {modal === "add" && (
         <IncomeFormModal
           onClose={() => setModal(null)}
@@ -795,12 +628,12 @@ export default function IncomeClient({
         />
       )}
 
-      {/* Edit Income Modal — ✅ with log */}
+      {/* Edit Income Modal */}
       {editRecord && (
         <IncomeFormModal
           record={editRecord}
           onClose={() => setEditRecord(null)}
-          onSaved={() => {
+          onSaved={async () => {
             logActivity("income:update", "income", {
               targetId: editRecord.id,
               targetLabel: editRecord.incomeSource,
@@ -808,16 +641,160 @@ export default function IncomeClient({
               userRole,
             });
             setEditRecord(null);
-            refresh();
+            // ✅ ሙሉ ዳታ እንዲመጣ — refresh ከ server
+            await refresh();
           }}
         />
       )}
 
-      {/* ✅ Activity Log Modal */}
-      {showActivityLog && (
-        <ActivityLogModal onClose={() => setShowActivityLog(false)} />
+      {/* ✅ Activity Log Modal — permissions ጋር */}
+      {showActivityLog && canViewActivityLog && (
+        <ActivityLogModal
+          userRole={userRole}
+          canDelete={canDeleteActivityLog}
+          onClose={() => setShowActivityLog(false)}
+        />
       )}
     </div>
+  );
+}
+
+// ✅ Row component — hooks ለ React
+function FragmentRow({
+  record,
+  isExpanded,
+  hasMaterials,
+  canEdit,
+  canDelete,
+  onToggleExpand,
+  onView,
+  onEdit,
+  onDelete,
+}: {
+  record: IncomeRecord;
+  isExpanded: boolean;
+  hasMaterials: boolean;
+  canEdit: boolean;
+  canDelete: boolean;
+  onToggleExpand: () => void;
+  onView: () => void;
+  onEdit: () => void;
+  onDelete: () => void;
+}) {
+  return (
+    <>
+      <tr className="border-t border-slate-100 hover:bg-slate-50">
+        <td className="px-3 py-3 text-slate-600">
+          {record.date.slice(0, 10)}
+        </td>
+        <td className="px-3 py-3">
+          <span
+            className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium ${
+              SOURCE_COLORS[record.incomeSource.toLowerCase()] ??
+              "bg-gray-100 text-gray-700"
+            }`}
+          >
+            {getSourceIcon(record.incomeSource)}{" "}
+            {getSourceLabel(record.incomeSource)}
+          </span>
+        </td>
+        <td className="px-3 py-3 text-slate-700 hidden md:table-cell">
+          {record.incomeCategory || "—"}
+        </td>
+        <td className="px-3 py-3 text-slate-600 hidden lg:table-cell truncate max-w-xs">
+          {record.description || "—"}
+        </td>
+        <td className="px-3 py-3 text-right font-medium text-emerald-600">
+          +{fmt(record.grossIncome)}
+        </td>
+        {canEdit && (
+          <td className="px-3 py-3 text-right text-slate-600 hidden md:table-cell">
+            {record.materialCost > 0
+              ? `-${fmt(record.materialCost)}`
+              : "—"}
+          </td>
+        )}
+        <td
+          className={`px-3 py-3 text-right font-bold ${
+            record.netIncome >= 0 ? "text-emerald-600" : "text-red-600"
+          }`}
+        >
+          {fmt(record.netIncome)}
+        </td>
+        <td className="px-3 py-3 text-right">
+          <div className="flex justify-end gap-1">
+            <button
+              onClick={onView}
+              className="px-2 py-1 text-xs bg-slate-100 text-slate-700 rounded hover:bg-slate-200"
+              title="View Detail"
+            >
+              👁
+            </button>
+            {hasMaterials && (
+              <button
+                onClick={onToggleExpand}
+                className="px-2 py-1 text-xs bg-blue-100 text-blue-700 rounded hover:bg-blue-200"
+                title="View Materials"
+              >
+                {isExpanded ? "▲" : "📦"}
+              </button>
+            )}
+            {canEdit && (
+              <button
+                onClick={onEdit}
+                className="px-2 py-1 text-xs bg-blue-100 text-blue-700 rounded hover:bg-blue-200"
+                title="Edit"
+              >
+                ✏️
+              </button>
+            )}
+            {canDelete && (
+              <button
+                onClick={onDelete}
+                className="px-2 py-1 text-xs bg-red-100 text-red-700 rounded hover:bg-red-200"
+                title="Delete"
+              >
+                🗑
+              </button>
+            )}
+          </div>
+        </td>
+      </tr>
+
+      {isExpanded && hasMaterials && (
+        <tr className="bg-slate-50">
+          <td colSpan={canEdit ? 8 : 6} className="px-6 py-3">
+            <div className="text-xs">
+              <p className="font-semibold text-slate-700 mb-2">
+                📦 Materials Used:
+              </p>
+              <div className="space-y-1">
+                {(() => {
+                  try {
+                    const mats = JSON.parse(record.materialsJson || "[]");
+                    return mats.map((m: any, idx: number) => (
+                      <div
+                        key={idx}
+                        className="flex justify-between items-center py-1 border-b border-slate-200"
+                      >
+                        <span className="text-slate-700">
+                          {m.itemName} · {m.usedQty} used
+                        </span>
+                        <span className="font-semibold text-red-600">
+                          − {fmt(m.materialCost)} ETB
+                        </span>
+                      </div>
+                    ));
+                  } catch {
+                    return <p>Unable to parse materials</p>;
+                  }
+                })()}
+              </div>
+            </div>
+          </td>
+        </tr>
+      )}
+    </>
   );
 }
 
