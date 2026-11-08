@@ -7,9 +7,9 @@ export interface IncomeMaterial {
   itemId: string;
   itemName: string;
   itemImage: string;
-  costPrice: number;   // total pack price
-  packSize: number;    // qty in pack
-  usedQty: number;     // how many we used
+  costPrice: number; // total pack price
+  packSize: number; // qty in pack
+  usedQty: number; // how many we used
   materialCost: number; // (costPrice / packSize) × usedQty
 }
 
@@ -27,21 +27,26 @@ export interface IncomeRecord {
   id: string;
   date: string;
   incomeSource: string;
+  incomeCategory: string;
   price: number;
   quantity: number;
   totalPrice: number;
-  recordedBy: string;
-  incomeCategory: string;
-  description: string;
-  grossIncome: number;
+  grossIncome: number; // ← table ይጠቀመዋል
+  materialCost: number;
+  netIncome: number;
+
+  // Legacy single-material columns (still written by API for backward compatibility)
   usedMaterial: string;
   costPriceMain: number;
   packSize: number;
   usedQty: number;
-  materialCost: number;
-  netIncome: number;
-  // ✅ Multi-material support (JSON)
-  materialsJson?: string;
+
+  // Optional metadata
+  description?: string;
+  recordedBy?: string;
+  materialsJson?: string; // ← parseMaterials ይጠቀመዋል
+  createdAt?: string;
+  updatedAt?: string;
 }
 
 export function calculateMaterialCost(
