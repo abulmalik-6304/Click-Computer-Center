@@ -1,11 +1,25 @@
 // src/app/admin/reports/page.tsx
+import { getServerSession } from "next-auth";
+import { authOptions } from "@/lib/auth";
+import { redirect } from "next/navigation";
 import { getSheet, SHEETS } from "@/lib/google-sheets";
 import { buildEnrichedSales, mapExpenseRow } from "@/lib/data-mappers";
+import { normalizeRole } from "@/lib/roles";
 import ReportsClient from "./ReportsClient";
 
 export const revalidate = 0;
+export const dynamic = "force-dynamic";
 
 export default async function ReportsPage() {
+  const session = await getServerSession(authOptions);
+  if (!session) redirect("/login");
+
+  // ✅ Block employee/staff from reports
+  const role = normalizeRole((session.user as any)?.role);
+  if (role === "employee" || role === "staff") {
+    redirect("/admin/dashboard");
+  }
+
   let sales: any[] = [];
   let expenses: any[] = [];
 
