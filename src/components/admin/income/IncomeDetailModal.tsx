@@ -359,3 +359,98 @@ export default function IncomeDetailModal({
                     <tr key={r.id} className="border-t border-slate-100 hover:bg-slate-50">
                       <td className="px-2 py-1.5">{r.date.slice(0, 10)}</td>
                       <td
+                        className={`px-2 py-1.5 ${
+                          r.id === record.id ? "font-bold text-emerald-600" : ""
+                        }`}
+                      >
+                        {r.incomeCategory}
+                      </td>
+                      <td className="px-2 py-1.5 text-right">{fmt(r.totalPrice)}</td>
+                      <td
+                        className={`px-2 py-1.5 text-right font-semibold ${
+                          r.netIncome >= 0 ? "text-emerald-600" : "text-red-600"
+                        }`}
+                      >
+                        {fmt(r.netIncome)}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+                <tfoot className="bg-emerald-50 sticky bottom-0">
+                  <tr className="font-bold border-t-2 border-emerald-200">
+                    <td colSpan={2} className="px-2 py-2">
+                      TOTAL ({sameSource.length})
+                    </td>
+                    <td className="px-2 py-2 text-right">{fmt(sourceTotal)}</td>
+                    <td className="px-2 py-2 text-right">{fmt(sourceNet)}</td>
+                  </tr>
+                </tfoot>
+              </table>
+            </div>
+          </div>
+
+          {/* Meta */}
+          <div className="p-3 bg-slate-50 rounded-lg border border-slate-200 grid grid-cols-2 gap-2 text-xs">
+            <div>
+              <span className="text-slate-500">Recorded By:</span>{" "}
+              <span className="font-semibold text-slate-900">
+                {record.recordedBy || "—"}
+              </span>
+            </div>
+            <div>
+              <span className="text-slate-500">Record ID:</span>{" "}
+              <span className="font-mono text-slate-700">{record.id.slice(0, 8)}</span>
+            </div>
+          </div>
+
+          {/* Actions */}
+          {(canEdit || canDelete) && (
+            <div className="flex gap-2 pt-2 border-t border-slate-200">
+              {canEdit && (
+                <button
+                  onClick={onEdit}
+                  className="flex-1 px-4 py-2.5 text-sm font-semibold bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg transition"
+                >
+                  ✏️ Edit Record
+                </button>
+              )}
+              {canDelete && (
+                <button
+                  onClick={onDelete}
+                  className="flex-1 px-4 py-2.5 text-sm font-semibold bg-red-600 hover:bg-red-700 text-white rounded-lg transition"
+                >
+                  🗑️ Delete Record
+                </button>
+              )}
+            </div>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function Kpi({
+  label,
+  value,
+  color,
+}: {
+  label: string;
+  value: string;
+  color: "slate" | "emerald" | "red";
+}) {
+  const colorMap = {
+    slate: "bg-slate-50 border-slate-200 text-slate-900",
+    emerald: "bg-emerald-50 border-emerald-200 text-emerald-700",
+    red: "bg-red-50 border-red-200 text-red-700",
+  };
+
+  return (
+    <div className={`p-2.5 rounded-lg border ${colorMap[color]} text-center`}>
+      <p className="text-[10px] uppercase tracking-wide opacity-70 font-semibold">
+        {label}
+      </p>
+      <p className="text-sm font-bold mt-0.5">{value}</p>
+    </div>
+  );
+}
