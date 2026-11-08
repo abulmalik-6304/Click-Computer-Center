@@ -3,9 +3,12 @@ import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { redirect } from "next/navigation";
 import { getSheet } from "@/lib/google-sheets";
+import { hasPermission } from "@/lib/permissions";
+import { normalizeRole } from "@/lib/roles";
 import IncomeClient from "./IncomeClient";
 
 export const revalidate = 0;
+export const dynamic = "force-dynamic";
 
 export interface IncomeItem {
   id: string;
@@ -24,13 +27,19 @@ export interface IncomeItem {
   usedQty: number;
   materialCost: number;
   netIncome: number;
+  materialsJson?: string;
 }
 
 export default async function IncomePage() {
   const session = await getServerSession(authOptions);
   if (!session) redirect("/login");
 
-  const role = String((session.user as any).role || "staff").toLowerCase();
+  const role = normalizeRole((session.user as any).role);
+  const email = String(session.user?.email || "");
+
+  // ✅ Check permissions
+  const canEditIncome = await hasPermission(email, role, "canEditIncome");
+  const canDeleteIncome = await hasPermission(email, role, "canDeleteIncome");
 
   let income: IncomeItem[] = [];
   try {
@@ -56,6 +65,7 @@ export default async function IncomePage() {
           usedQty: Number(obj.Used_Qty || 0),
           materialCost: Number(obj.Material_Cost || 0),
           netIncome: Number(obj.Net_Income || 0),
+          materialsJson: String(obj.Materials_Json || ""),
         };
       })
       .sort(
@@ -65,5 +75,12 @@ export default async function IncomePage() {
     income = [];
   }
 
-  return <IncomeClient initialIncome={income} userRole={role} />;
+  return (
+    <IncomeClient
+      initialIncome={income}
+      userRole={role}
+      canEditIncome={canEditIncome}
+      canDeleteIncome={canDeleteIncome}
+    />
+  );
 }
