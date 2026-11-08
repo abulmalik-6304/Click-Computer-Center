@@ -5,7 +5,7 @@ import { redirect } from "next/navigation";
 import { getSheet } from "@/lib/google-sheets";
 import { hasPermission } from "@/lib/permissions";
 import { normalizeRole } from "@/lib/roles";
-import ExpenseClient from "./ExpenseClient";
+import ExpensClient from "./ExpenseClient";
 
 export const revalidate = 0;
 export const dynamic = "force-dynamic";
