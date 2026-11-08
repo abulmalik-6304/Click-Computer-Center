@@ -2,10 +2,13 @@
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { redirect } from "next/navigation";
-import { getSheet, SHEETS } from "@/lib/google-sheets";
-import ExpensesClient from "./ExpensesClient";
+import { getSheet } from "@/lib/google-sheets";
+import { hasPermission } from "@/lib/permissions";
+import { normalizeRole } from "@/lib/roles";
+import ExpenseClient from "./ExpenseClient";
 
 export const revalidate = 0;
+export const dynamic = "force-dynamic";
 
 export interface ExpenseItem {
   id: string;
@@ -23,26 +26,35 @@ export default async function ExpensesPage() {
   const session = await getServerSession(authOptions);
   if (!session) redirect("/login");
 
-  const role = String((session.user as any).role || "staff").toLowerCase();
-  if (!["owner", "manager"].includes(role)) redirect("/admin/dashboard");
+  const role = normalizeRole((session.user as any).role);
+  const email = String(session.user?.email || "");
 
+  // ✅ Permissions
+  const canAddExpense = await hasPermission(email, role, "canAddExpense");
+  const canEditExpense = await hasPermission(email, role, "canEditExpense");
+  const canDeleteExpense = await hasPermission(email, role, "canDeleteExpense");
+  const canExportExpense = await hasPermission(email, role, "canExportExpense");
+  const canPrintExpense = await hasPermission(email, role, "canPrintExpense");
+  const canViewActivity = await hasPermission(email, role, "canViewActivity");
+
+  // ✅ Load expenses
   let expenses: ExpenseItem[] = [];
   try {
-    const sheet = await getSheet(SHEETS.EXPENSES);
+    const sheet = await getSheet("Expense_TBL");
     const rows = await sheet.getRows();
     expenses = rows
       .map((r) => {
-        const obj = r.toObject() as any;
+        const o = r.toObject() as any;
         return {
-          id: String(obj.Expense_ID || ""),
-          date: String(obj.Date || ""),
-          category: String(obj.Category || ""),
-          amount: Number(obj.Amount || 0),
-          description: String(obj.Description || ""),
-          recordedBy: String(obj.Recorded_By || ""),
-          employeeName: String(obj.Employee_Name || ""),
-          jobRole: String(obj.Job_Role || ""),
-          paymentMonth: String(obj.Payment_Month || ""),
+          id: String(o.Expense_ID || ""),
+          date: String(o.Date || ""),
+          category: String(o.Category || ""),
+          amount: Number(o.Amount || 0),
+          description: String(o.Description || ""),
+          recordedBy: String(o.Recorded_By || ""),
+          employeeName: String(o.Employee_Name || ""),
+          jobRole: String(o.Job_Role || ""),
+          paymentMonth: String(o.Payment_Month || ""),
         };
       })
       .sort(
@@ -52,5 +64,16 @@ export default async function ExpensesPage() {
     expenses = [];
   }
 
-  return <ExpensesClient initialExpenses={expenses} userRole={role} />;
+  return (
+    <ExpenseClient
+      initialExpenses={expenses}
+      userRole={role}
+      canAddExpense={canAddExpense}
+      canEditExpense={canEditExpense}
+      canDeleteExpense={canDeleteExpense}
+      canExportExpense={canExportExpense}
+      canPrintExpense={canPrintExpense}
+      canViewActivityLog={canViewActivity}
+    />
+  );
 }
