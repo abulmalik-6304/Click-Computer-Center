@@ -24,6 +24,10 @@ export async function GET() {
         const calc = stockMap[itemId];
         const stock = calc?.currentStock ?? 0;
 
+        // ✅ Extract prices once (used for costPrice, sellingPrice, avgCost)
+        const costPrice = Number(obj.Cost_Price || 0);
+        const sellingPrice = Number(obj.Selling_Price || 0);
+
         return {
           id: itemId,
           name: String(obj.Item_Name || ""),
@@ -31,11 +35,11 @@ export async function GET() {
           category: String(obj.Category || obj.Unit_Type || "General"),
           image: String(obj.Item_Image || ""),
           stock,
-          costPrice,      // ✅ From inventory
+          costPrice, // ✅ From inventory
           sellingPrice,
           avgCost: costPrice,
           unitType: String(obj.Unit_Type || "pcs"),
-          packSize: Number(obj.Pack_Size || obj.PackSize || 1) || 1,  // ✅ አዲስ
+          packSize: Number(obj.Pack_Size || obj.PackSize || 1) || 1, // ✅ አዲስ
           reorderLevel: Number(obj.Reorder_Level || 10),
           status: String(obj.Status || "Active"),
           supplierId: String(obj.Supplier_ID || ""),
