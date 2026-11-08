@@ -93,6 +93,43 @@ function resolveSourceValue(sourceLabelOrValue: string | undefined): string {
   return src?.value || "maintain";
 }
 
+/**
+ * ✅ Normalize any date format → YYYY-MM-DD
+ * Handles:
+ *  - ISO strings ("2024-05-15T00:00:00.000Z")
+ *  - YYYY-MM-DD / YYYY/MM/DD
+ *  - DD/MM/YYYY / DD-MM-YYYY / DD.MM.YYYY
+ *  - Date objects
+ *  - Empty / invalid → today
+ */
+function normalizeDate(input?: string | Date | null): string {
+  if (!input) return new Date().toISOString().slice(0, 10);
+  try {
+    const d = new Date(input);
+    if (isNaN(d.getTime())) {
+      // try split if it's e.g. "15/05/2024" (DD/MM/YYYY)
+      const parts = String(input).split(/[\/\-\.]/);
+      if (parts.length === 3) {
+        const [a, b, c] = parts;
+        if (a.length === 4) {
+          // YYYY-MM-DD or YYYY/MM/DD
+          return `${a}-${b.padStart(2, "0")}-${c.padStart(2, "0")}`;
+        }
+        // assume DD/MM/YYYY
+        return `${c}-${b.padStart(2, "0")}-${a.padStart(2, "0")}`;
+      }
+      return new Date().toISOString().slice(0, 10);
+    }
+    // use local date (avoid TZ shift)
+    const yyyy = d.getFullYear();
+    const mm = String(d.getMonth() + 1).padStart(2, "0");
+    const dd = String(d.getDate()).padStart(2, "0");
+    return `${yyyy}-${mm}-${dd}`;
+  } catch {
+    return new Date().toISOString().slice(0, 10);
+  }
+}
+
 interface Props {
   record?: IncomeRecord | null; // ← edit ሲደረግ ይላካል
   onClose: () => void;
@@ -116,11 +153,7 @@ export default function IncomeFormModal({ record, onClose, onSaved }: Props) {
   );
 
   // ─── State initialization (from record if edit) ───
-  const [date, setDate] = useState(
-    record?.date
-      ? String(record.date).slice(0, 10)
-      : new Date().toISOString().slice(0, 10)
-  );
+  const [date, setDate] = useState(normalizeDate(record?.date)); // ✅ normalized
   const [incomeSource, setIncomeSource] = useState(initialSourceValue);
   const [incomeCategory, setIncomeCategory] = useState(initialCategoryValue);
   const [price, setPrice] = useState(Number(record?.price) || 0);
