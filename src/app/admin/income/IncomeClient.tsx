@@ -14,6 +14,8 @@ import { IncomeRecord } from "@/lib/income-types";
 import IncomeFormModal from "@/components/admin/income/IncomeFormModal";
 import IncomeDetailModal from "@/components/admin/income/IncomeDetailModal";
 import IncomeSourceModal from "@/components/admin/income/IncomeSourceModal";
+import ActivityLogModal from "@/components/admin/ActivityLogModal";
+import { logActivity } from "@/lib/activity-log";
 import {
   fmt,
   printHTML,
@@ -52,13 +54,14 @@ export default function IncomeClient({
   const [loading, setLoading] = useState(false);
   const [expanded, setExpanded] = useState<string | null>(null);
 
-  // ✅ Modal / state for new features
+  // ✅ Modal / state
   const [detailRecord, setDetailRecord] = useState<IncomeRecord | null>(null);
   const [sourceModal, setSourceModal] = useState<string | null>(null);
   const [editRecord, setEditRecord] = useState<IncomeRecord | null>(null);
   const [copiedAll, setCopiedAll] = useState(false);
+  const [showActivityLog, setShowActivityLog] = useState(false); // ✅ አዲስ
 
-  // ✅ Permissions (prop overrides role-based defaults)
+  // ✅ Permissions
   const canEdit = canEditIncome ?? ["owner", "manager"].includes(userRole);
   const canDelete = canDeleteIncome ?? ["owner"].includes(userRole);
   const canAdd =
@@ -148,9 +151,15 @@ export default function IncomeClient({
     }
   }
 
-  // ✅ Print all filtered records (with materials row-per-material)
+  // ✅ Print all filtered records + log activity
   function printAllIncome() {
-    // ─── Build rows (one row per material; parent info repeated) ───
+    // ─── Log activity ───
+    logActivity("income:print", "income", {
+      targetLabel: "All Income",
+      details: `Printed ${filtered.length} records`,
+      userRole,
+    });
+
     const rows: string[] = [];
 
     filtered.forEach((r) => {
@@ -215,7 +224,6 @@ export default function IncomeClient({
       }
     });
 
-    // ─── Who printed it ───
     const printedBy =
       typeof window !== "undefined"
         ? localStorage.getItem("userName") ||
@@ -352,7 +360,7 @@ export default function IncomeClient({
 
   return (
     <div className="p-4 sm:p-6 lg:p-10 space-y-6">
-      {/* Header */}
+      {/* Header — ✅ Simplified buttons */}
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
         <div>
           <h1 className="text-2xl sm:text-3xl font-bold text-slate-900">
@@ -364,36 +372,21 @@ export default function IncomeClient({
         </div>
         <div className="flex flex-wrap gap-2">
           {canViewReportsFlag && (
-            <>
-              <button
-                onClick={printAllIncome}
-                className="inline-flex items-center gap-2 px-3 py-2 bg-slate-900 hover:bg-slate-800 text-white font-semibold rounded-lg shadow-sm text-sm"
-                title="Print All Income"
-              >
-                🖨 Print All
-              </button>
-              <button
-                onClick={copyAllText}
-                className={`inline-flex items-center gap-2 px-3 py-2 font-semibold rounded-lg shadow-sm text-sm ${
-                  copiedAll
-                    ? "bg-emerald-600 text-white"
-                    : "bg-slate-100 hover:bg-slate-200 text-slate-700"
-                }`}
-                title="Copy All"
-              >
-                {copiedAll ? "✅ Copied" : "📋 Copy"}
-              </button>
-            </>
-          )}
-          {canExport && (
             <button
-              onClick={exportAllCSV}
-              className="inline-flex items-center gap-2 px-3 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 font-semibold rounded-lg shadow-sm text-sm"
-              title="Export CSV"
+              onClick={printAllIncome}
+              className="inline-flex items-center gap-2 px-3 py-2 bg-slate-900 hover:bg-slate-800 text-white font-semibold rounded-lg shadow-sm text-sm"
+              title="Print All Income"
             >
-              📥 Export
+              🖨 Print All
             </button>
           )}
+          <button
+            onClick={() => setShowActivityLog(true)}
+            className="inline-flex items-center gap-2 px-3 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 font-semibold rounded-lg shadow-sm text-sm"
+            title="View Activity Log"
+          >
+            📝 Activity Log
+          </button>
           {canAdd && (
             <button
               onClick={() => setModal("add")}
@@ -653,6 +646,13 @@ export default function IncomeClient({
                                     },
                                     body: JSON.stringify({ id: i.id }),
                                   });
+                                  // ✅ Log delete
+                                  logActivity("income:delete", "income", {
+                                    targetId: i.id,
+                                    targetLabel: i.incomeSource,
+                                    details: "Income record deleted",
+                                    userRole,
+                                  });
                                   refresh();
                                 }}
                                 className="px-2 py-1 text-xs bg-red-100 text-red-700 rounded hover:bg-red-200"
@@ -665,7 +665,6 @@ export default function IncomeClient({
                         </td>
                       </tr>
 
-                      {/* Expanded Materials Row */}
                       {isExpanded && hasMaterials && (
                         <tr className="bg-slate-50">
                           <td
@@ -715,18 +714,23 @@ export default function IncomeClient({
         </div>
       </div>
 
-      {/* Add Income Modal */}
+      {/* Add Income Modal — ✅ with log */}
       {modal === "add" && (
         <IncomeFormModal
           onClose={() => setModal(null)}
           onSaved={() => {
+            logActivity("income:create", "income", {
+              targetLabel: "New income",
+              details: "Income record added",
+              userRole,
+            });
             setModal(null);
             refresh();
           }}
         />
       )}
 
-      {/* Detail Modal (per-record view) */}
+      {/* Detail Modal */}
       {detailRecord && (
         <IncomeDetailModal
           record={detailRecord}
@@ -744,6 +748,12 @@ export default function IncomeClient({
               headers: { "Content-Type": "application/json" },
               body: JSON.stringify({ id: detailRecord.id }),
             });
+            logActivity("income:delete", "income", {
+              targetId: detailRecord.id,
+              targetLabel: detailRecord.incomeSource,
+              details: "Income record deleted",
+              userRole,
+            });
             setDetailRecord(null);
             refresh();
           }}
@@ -751,7 +761,7 @@ export default function IncomeClient({
         />
       )}
 
-      {/* Source Modal (all records by source) */}
+      {/* Source Modal */}
       {sourceModal && (
         <IncomeSourceModal
           source={sourceModal}
@@ -773,22 +783,39 @@ export default function IncomeClient({
               headers: { "Content-Type": "application/json" },
               body: JSON.stringify({ id: r.id }),
             });
+            logActivity("income:delete", "income", {
+              targetId: r.id,
+              targetLabel: r.incomeSource,
+              details: "Income record deleted",
+              userRole,
+            });
             setSourceModal(null);
             refresh();
           }}
         />
       )}
 
-      {/* Edit Income Modal (reuses add form for now) */}
+      {/* Edit Income Modal — ✅ with log */}
       {editRecord && (
         <IncomeFormModal
           record={editRecord}
           onClose={() => setEditRecord(null)}
           onSaved={() => {
+            logActivity("income:update", "income", {
+              targetId: editRecord.id,
+              targetLabel: editRecord.incomeSource,
+              details: "Income record updated",
+              userRole,
+            });
             setEditRecord(null);
             refresh();
           }}
         />
+      )}
+
+      {/* ✅ Activity Log Modal */}
+      {showActivityLog && (
+        <ActivityLogModal onClose={() => setShowActivityLog(false)} />
       )}
     </div>
   );
