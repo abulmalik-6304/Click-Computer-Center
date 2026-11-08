@@ -23,9 +23,15 @@ interface Manager {
     canPrintSuppliers: boolean;
     canEditIncome: boolean;
     canDeleteIncome: boolean;
-    canAddIncome: boolean;       // 🆕
-    canExportIncome: boolean;    // 🆕
-    canPrintIncome: boolean;     // 🆕
+    canAddIncome: boolean;
+    canExportIncome: boolean;
+    canPrintIncome: boolean;
+    // 🆕 Expenses
+    canAddExpense: boolean;
+    canEditExpense: boolean;
+    canDeleteExpense: boolean;
+    canExportExpense: boolean;
+    canPrintExpense: boolean;
   };
 }
 
@@ -247,6 +253,48 @@ export default function ManagerPermissions() {
                   enabled={m.permissions.canPrintIncome}
                   loading={saving === m.email}
                   onClick={() => toggle(m, "canPrintIncome")}
+                />
+              </div>
+
+              {/* ─────────── Expenses ─────────── */}
+              <p className="text-xs font-bold text-slate-400 uppercase tracking-wide mb-2">
+                📉 Expenses
+              </p>
+              <div className="grid grid-cols-2 sm:grid-cols-3 gap-2 mb-3">
+                <Toggle
+                  label="Add Expense"
+                  icon="➕"
+                  enabled={m.permissions.canAddExpense}
+                  loading={saving === m.email}
+                  onClick={() => toggle(m, "canAddExpense")}
+                />
+                <Toggle
+                  label="Edit Expense"
+                  icon="✏️"
+                  enabled={m.permissions.canEditExpense}
+                  loading={saving === m.email}
+                  onClick={() => toggle(m, "canEditExpense")}
+                />
+                <Toggle
+                  label="Delete Expense"
+                  icon="🗑"
+                  enabled={m.permissions.canDeleteExpense}
+                  loading={saving === m.email}
+                  onClick={() => toggle(m, "canDeleteExpense")}
+                />
+                <Toggle
+                  label="Export Expense"
+                  icon="📤"
+                  enabled={m.permissions.canExportExpense}
+                  loading={saving === m.email}
+                  onClick={() => toggle(m, "canExportExpense")}
+                />
+                <Toggle
+                  label="Print Expense"
+                  icon="🖨"
+                  enabled={m.permissions.canPrintExpense}
+                  loading={saving === m.email}
+                  onClick={() => toggle(m, "canPrintExpense")}
                 />
               </div>
 
