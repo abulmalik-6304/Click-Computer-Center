@@ -10,6 +10,15 @@ import EmployeeSidebar from "@/components/employee/EmployeeSidebar";
 export const revalidate = 0;
 export const dynamic = "force-dynamic";
 
+interface Announcement {
+  id: string;
+  date: string;
+  image: string;
+  title: string;
+  message: string;
+  priority: string;
+}
+
 export default async function EmployeeAnnouncementsPage() {
   const session = await getServerSession(authOptions);
   if (!session) redirect("/login");
@@ -22,7 +31,7 @@ export default async function EmployeeAnnouncementsPage() {
   const photo = session.user?.image || null;
 
   // ─── Load announcements ───
-  let announcements: any[] = [];
+  let announcements: Announcement[] = [];
   try {
     const sheet = await getSheet("Announcements_TBL");
     const rows = await sheet.getRows();
@@ -35,6 +44,7 @@ export default async function EmployeeAnnouncementsPage() {
           image: String(o.Image || ""),
           title: String(o.Title || ""),
           message: String(o.Message || ""),
+          priority: String(o.Priority || "normal"),
           targetRole: String(o.Target_Role || "all").toLowerCase(),
           status: String(o.Status || "Active").toLowerCase(),
         };
@@ -88,6 +98,9 @@ export default async function EmployeeAnnouncementsPage() {
             <div className="bg-white rounded-2xl border border-slate-200 p-12 text-center">
               <p className="text-4xl mb-3">📭</p>
               <p className="text-slate-500">No announcements yet</p>
+              <p className="text-xs text-slate-400 mt-2">
+                Check back later for updates from management
+              </p>
             </div>
           ) : (
             <div className="space-y-3">
@@ -114,20 +127,4 @@ export default async function EmployeeAnnouncementsPage() {
                   </div>
                   {a.image && (
                     <img
-                      src={a.image}
-                      alt={a.title}
-                      className="w-full max-h-64 object-cover rounded-lg mb-3"
-                    />
-                  )}
-                  <p className="text-sm text-slate-700 whitespace-pre-wrap">
-                    {a.message}
-                  </p>
-                </div>
-              ))}
-            </div>
-          )}
-        </div>
-      </main>
-    </div>
-  );
-}
+                      src={
