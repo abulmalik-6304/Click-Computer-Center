@@ -19,8 +19,7 @@ interface OnlineStaffMember {
 interface Props {
   initialOnline?: OnlineStaffMember[];
   initialOffline?: OnlineStaffMember[];
-  // ✅ Add role to prevent fetch for employees
-  currentUserRole?: string;
+  currentUserRole?: string; // ✅ አዲስ
 }
 
 export default function OnlineStaff({
@@ -32,20 +31,17 @@ export default function OnlineStaff({
   const [offline, setOffline] = useState(initialOffline);
   const [loading, setLoading] = useState(false);
   const [tab, setTab] = useState<"online" | "all">("online");
-  const [hasError, setHasError] = useState(false);
-
-  // ✅ Only owner/manager can fetch
-  const canFetch =
+  const [canFetch, setCanFetch] = useState(
     !currentUserRole ||
-    currentUserRole === "owner" ||
-    currentUserRole === "manager";
+      currentUserRole === "owner" ||
+      currentUserRole === "manager"
+  );
 
   async function refresh() {
     // ✅ Skip if employee/staff
     if (!canFetch) return;
 
     setLoading(true);
-    setHasError(false);
     try {
       const res = await fetch("/api/staff/online", { cache: "no-store" });
 
@@ -53,14 +49,11 @@ export default function OnlineStaff({
       if (res.status === 403) {
         setOnline([]);
         setOffline([]);
-        setHasError(false);
+        setCanFetch(false);
         return;
       }
 
-      if (!res.ok) {
-        setHasError(true);
-        return;
-      }
+      if (!res.ok) return;
 
       const data = await res.json();
       if (Array.isArray(data.online)) setOnline(data.online);
@@ -73,10 +66,9 @@ export default function OnlineStaff({
   }
 
   useEffect(() => {
-    // ✅ Skip fetch for employees
+    // ✅ Skip if employee/staff
     if (!canFetch) return;
 
-    // Initial fetch
     refresh();
 
     // Auto-refresh every 30 seconds
@@ -86,9 +78,7 @@ export default function OnlineStaff({
   }, [canFetch]);
 
   // ✅ Hide entirely if user can't see staff
-  if (!canFetch) {
-    return null;
-  }
+  if (!canFetch) return null;
 
   const displayList = tab === "online" ? online : [...online, ...offline];
 
@@ -172,7 +162,9 @@ export default function OnlineStaff({
                 </p>
                 <p className="text-xs text-slate-500 truncate">
                   {s.role} ·{" "}
-                  {s.isOnline ? "🟢 Online now" : `⚪ ${s.lastSeenLabel}`}
+                  {s.isOnline
+                    ? "🟢 Online now"
+                    : `⚪ ${s.lastSeenLabel}`}
                 </p>
               </div>
             </div>
