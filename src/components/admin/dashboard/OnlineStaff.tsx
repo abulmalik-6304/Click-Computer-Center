@@ -19,36 +19,76 @@ interface OnlineStaffMember {
 interface Props {
   initialOnline?: OnlineStaffMember[];
   initialOffline?: OnlineStaffMember[];
+  // ✅ Add role to prevent fetch for employees
+  currentUserRole?: string;
 }
 
 export default function OnlineStaff({
   initialOnline = [],
   initialOffline = [],
+  currentUserRole,
 }: Props) {
   const [online, setOnline] = useState(initialOnline);
   const [offline, setOffline] = useState(initialOffline);
   const [loading, setLoading] = useState(false);
   const [tab, setTab] = useState<"online" | "all">("online");
+  const [hasError, setHasError] = useState(false);
+
+  // ✅ Only owner/manager can fetch
+  const canFetch =
+    !currentUserRole ||
+    currentUserRole === "owner" ||
+    currentUserRole === "manager";
 
   async function refresh() {
+    // ✅ Skip if employee/staff
+    if (!canFetch) return;
+
     setLoading(true);
+    setHasError(false);
     try {
       const res = await fetch("/api/staff/online", { cache: "no-store" });
+
+      // ✅ 403 = no permission → silently ignore
+      if (res.status === 403) {
+        setOnline([]);
+        setOffline([]);
+        setHasError(false);
+        return;
+      }
+
+      if (!res.ok) {
+        setHasError(true);
+        return;
+      }
+
       const data = await res.json();
-      if (data.online) setOnline(data.online);
-      if (data.offline) setOffline(data.offline);
+      if (Array.isArray(data.online)) setOnline(data.online);
+      if (Array.isArray(data.offline)) setOffline(data.offline);
     } catch (e) {
-      console.error(e);
+      console.error("OnlineStaff fetch error:", e);
     } finally {
       setLoading(false);
     }
   }
 
   useEffect(() => {
+    // ✅ Skip fetch for employees
+    if (!canFetch) return;
+
+    // Initial fetch
+    refresh();
+
     // Auto-refresh every 30 seconds
     const t = setInterval(refresh, 30_000);
     return () => clearInterval(t);
-  }, []);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [canFetch]);
+
+  // ✅ Hide entirely if user can't see staff
+  if (!canFetch) {
+    return null;
+  }
 
   const displayList = tab === "online" ? online : [...online, ...offline];
 
@@ -99,7 +139,9 @@ export default function OnlineStaff({
         <div className="p-8 text-center">
           <p className="text-3xl mb-2">😴</p>
           <p className="text-sm text-slate-500">
-            {tab === "online" ? "No one is online right now" : "No staff members"}
+            {tab === "online"
+              ? "No one is online right now"
+              : "No staff members"}
           </p>
         </div>
       ) : (
@@ -129,7 +171,8 @@ export default function OnlineStaff({
                   {s.name || s.email}
                 </p>
                 <p className="text-xs text-slate-500 truncate">
-                  {s.role} · {s.isOnline ? "🟢 Online now" : `⚪ ${s.lastSeenLabel}`}
+                  {s.role} ·{" "}
+                  {s.isOnline ? "🟢 Online now" : `⚪ ${s.lastSeenLabel}`}
                 </p>
               </div>
             </div>
