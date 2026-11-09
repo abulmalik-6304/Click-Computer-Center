@@ -15,6 +15,9 @@ interface EmployeeUser {
     canRegisterIncome: boolean;
     canViewAnnouncements: boolean;
     canCreateAnnouncements: boolean;
+    canViewReports: boolean;
+    canPrint: boolean;
+    canViewBasicStats: boolean;
   };
 }
 
@@ -99,9 +102,7 @@ export default function EmployeePermissions({ canManage }: Props) {
     return (
       <div className="bg-white rounded-2xl border border-slate-200 p-8 text-center">
         <div className="inline-block w-8 h-8 border-4 border-slate-200 border-t-blue-500 rounded-full animate-spin" />
-        <p className="mt-3 text-sm text-slate-500">
-          Loading employees…
-        </p>
+        <p className="mt-3 text-sm text-slate-500">Loading employees…</p>
       </div>
     );
   }
@@ -113,7 +114,7 @@ export default function EmployeePermissions({ canManage }: Props) {
           👥 Employee / Staff Permissions
         </h3>
         <p className="text-sm text-slate-500 mt-1">
-          ሰራተኞች ምን ማድረግ እንደሚችሉ እዚህ ይወስኑ
+          ሰራተኞች ምን ማድረግ እንደሚችሉ እዚህ ይወስኑ — Reports & Print ሁልጊዜ የተከለከሉ ናቸው
         </p>
       </div>
 
@@ -131,37 +132,47 @@ export default function EmployeePermissions({ canManage }: Props) {
       {employees.length === 0 ? (
         <div className="p-8 text-center">
           <p className="text-4xl mb-2">👥</p>
-          <p className="text-sm text-slate-500">
-            No employees found.
+          <p className="text-sm text-slate-500">No employees found.</p>
+          <p className="text-xs text-slate-400 mt-1">
+            Add employees via User_Access_TBL first.
           </p>
         </div>
       ) : (
         <div className="divide-y divide-slate-100">
           {employees.map((e) => (
             <div key={e.email} className="p-4">
+              {/* Header */}
               <div className="flex items-center gap-3 mb-3">
                 {e.photo ? (
                   <img
                     src={e.photo}
                     alt={e.name}
-                    className="w-10 h-10 rounded-full object-cover"
+                    className="w-10 h-10 rounded-full object-cover bg-slate-100"
+                    onError={(ev) =>
+                      ((ev.target as HTMLImageElement).src =
+                        "/placeholder.svg")
+                    }
                   />
                 ) : (
                   <div className="w-10 h-10 rounded-full bg-blue-100 flex items-center justify-center text-blue-700 font-bold">
-                    {e.name.charAt(0)}
+                    {e.name.charAt(0).toUpperCase()}
                   </div>
                 )}
-                <div className="flex-1">
-                  <p className="font-semibold text-slate-900 text-sm">
+                <div className="flex-1 min-w-0">
+                  <p className="font-semibold text-slate-900 text-sm truncate">
                     {e.name || e.email}
                   </p>
-                  <p className="text-xs text-slate-500 capitalize">
-                    {e.email} · {e.role}
+                  <p className="text-xs text-slate-500 truncate">
+                    {e.email} · <span className="capitalize">{e.role}</span>
                   </p>
                 </div>
               </div>
 
-              <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
+              {/* 🆕 Dashboard & Basics */}
+              <p className="text-xs font-bold text-slate-400 uppercase tracking-wide mb-2">
+                🏠 Dashboard & Basics
+              </p>
+              <div className="grid grid-cols-2 sm:grid-cols-3 gap-2 mb-3">
                 <Toggle
                   label="Dashboard Access"
                   icon="🏠"
@@ -169,6 +180,20 @@ export default function EmployeePermissions({ canManage }: Props) {
                   loading={saving === e.email}
                   onClick={() => toggle(e, "canAccessEmployeeDashboard")}
                 />
+                <Toggle
+                  label="View Basic Stats"
+                  icon="📊"
+                  enabled={e.permissions.canViewBasicStats}
+                  loading={saving === e.email}
+                  onClick={() => toggle(e, "canViewBasicStats")}
+                />
+              </div>
+
+              {/* 🆕 Actions */}
+              <p className="text-xs font-bold text-slate-400 uppercase tracking-wide mb-2">
+                ⚡ Actions
+              </p>
+              <div className="grid grid-cols-2 sm:grid-cols-3 gap-2 mb-3">
                 <Toggle
                   label="Register Sale"
                   icon="🛒"
@@ -183,6 +208,13 @@ export default function EmployeePermissions({ canManage }: Props) {
                   loading={saving === e.email}
                   onClick={() => toggle(e, "canRegisterIncome")}
                 />
+              </div>
+
+              {/* 🆕 Announcements */}
+              <p className="text-xs font-bold text-slate-400 uppercase tracking-wide mb-2">
+                📢 Announcements
+              </p>
+              <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
                 <Toggle
                   label="View Announcements"
                   icon="📢"
@@ -199,9 +231,10 @@ export default function EmployeePermissions({ canManage }: Props) {
                 />
               </div>
 
-              {/* 🔒 Locked items */}
+              {/* 🔒 Locked notice */}
               <div className="mt-2 p-2 bg-slate-50 rounded border border-slate-200 text-xs text-slate-500">
-                🔒 Reports, Print, and Admin pages are <strong>always blocked</strong> for employees.
+                🔒 Reports, Print, and Admin pages are{" "}
+                <strong>always blocked</strong> for employees.
               </div>
             </div>
           ))}
@@ -234,12 +267,12 @@ function Toggle({
           : "bg-slate-50 border-slate-200 text-slate-500"
       }`}
     >
-      <div className="flex items-center justify-between">
-        <span className="text-xs font-medium">
+      <div className="flex items-center justify-between gap-1">
+        <span className="text-xs font-medium truncate">
           {icon} {label}
         </span>
         <span
-          className={`w-8 h-4 rounded-full relative transition ${
+          className={`w-8 h-4 rounded-full relative transition flex-shrink-0 ${
             enabled ? "bg-emerald-500" : "bg-slate-300"
           }`}
         >
