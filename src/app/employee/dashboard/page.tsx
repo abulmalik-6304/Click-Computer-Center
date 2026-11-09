@@ -28,51 +28,35 @@ export default async function EmployeeDashboardPage() {
   const photo = session.user?.image || null;
 
   // ═══════════════════════════════════════════════════════════════
-  // ✅ LOAD EMPLOYEE PERMISSIONS
+  // ✅ LOAD PERMISSIONS
   // ═══════════════════════════════════════════════════════════════
-  let permissions = parseEmployeePermissions(email, {}); // defaults
+  let permissions = parseEmployeePermissions(email, {});
 
   try {
     const permSheet = await getSheet(EMPLOYEE_PERMS_SHEET);
     const permRows = await permSheet.getRows();
-    
-    // ✅ Debug log
-    console.log(`🔍 [DASHBOARD] Email: "${email}"`);
-    console.log(`🔍 [DASHBOARD] Total rows: ${permRows.length}`);
-
-    // ✅ Case-insensitive match
     const myPerm = permRows.find((r) => {
       const o = r.toObject() as any;
-      const rowEmail = String(o.Employee_Email || "").toLowerCase().trim();
-      if (rowEmail) {
-        console.log(`🔍 [DASHBOARD] Comparing: "${rowEmail}" === "${email}" → ${rowEmail === email}`);
-      }
-      return rowEmail === email;
+      return (
+        String(o.Employee_Email || "").toLowerCase().trim() === email
+      );
     });
-
     if (myPerm) {
-      const obj = myPerm.toObject() as any;
-      console.log(`✅ [DASHBOARD] Permissions FOUND:`, {
-        Can_Register_Income: obj.Can_Register_Income,
-        Can_Register_Sale: obj.Can_Register_Sale,
-        Can_View_Announcements: obj.Can_View_Announcements,
-      });
-      permissions = parseEmployeePermissions(email, obj);
-    } else {
-      console.log(`❌ [DASHBOARD] NO permissions row for ${email}`);
+      permissions = parseEmployeePermissions(email, myPerm.toObject());
     }
-  } catch (e: any) {
-    console.error(`❌ [DASHBOARD] Failed to load permissions:`, e.message);
-  }
-
-  console.log(`🎯 [DASHBOARD] Final permissions:`, permissions);
+  } catch {}
 
   // ═══════════════════════════════════════════════════════════════
-  // ✅ LOAD STATS
+  // ✅ LOAD ALL STATS (today/week/month/all)
   // ═══════════════════════════════════════════════════════════════
   let todayCount = 0;
   let weekCount = 0;
   let monthCount = 0;
+  let allCount = 0;
+  let todayTotal = 0;
+  let weekTotal = 0;
+  let monthTotal = 0;
+  let allTotal = 0;
   let recentSales: any[] = [];
 
   try {
@@ -89,32 +73,41 @@ export default async function EmployeeDashboardPage() {
         return {
           id: String(o.Sales_ID || ""),
           date: String(o.Date || ""),
-          recordedBy: String(o.Recorded_By || ""),
+          recordedBy: String(o.Recorded_By || "").toLowerCase(),
           total: Number(o.Total_Amount || 0),
         };
       })
       .filter(
         (s) =>
-          s.recordedBy.toLowerCase() === email ||
-          s.recordedBy.toLowerCase() === name.toLowerCase()
+          s.recordedBy === email ||
+          s.recordedBy === name.toLowerCase()
       );
 
     for (const s of mySales) {
       const d = new Date(s.date);
-      if (d >= today) todayCount++;
-      if (d >= weekAgo) weekCount++;
-      if (d >= monthAgo) monthCount++;
+      if (d >= today) {
+        todayCount++;
+        todayTotal += s.total;
+      }
+      if (d >= weekAgo) {
+        weekCount++;
+        weekTotal += s.total;
+      }
+      if (d >= monthAgo) {
+        monthCount++;
+        monthTotal += s.total;
+      }
+      allCount++;
+      allTotal += s.total;
     }
 
     recentSales = mySales
       .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime())
       .slice(0, 5);
-  } catch {
-    // ignore
-  }
+  } catch {}
 
   // ═══════════════════════════════════════════════════════════════
-  // ✅ LOAD ANNOUNCEMENTS (filtered)
+  // ✅ LOAD ANNOUNCEMENTS
   // ═══════════════════════════════════════════════════════════════
   let announcements: any[] = [];
   let unreadCount = 0;
@@ -138,9 +131,7 @@ export default async function EmployeeDashboardPage() {
             })
             .map((r) => String(r.get("Announcement_ID") || ""))
         );
-      } catch {
-        // Reads sheet optional
-      }
+      } catch {}
 
       announcements = annRows
         .map((r) => {
@@ -159,11 +150,9 @@ export default async function EmployeeDashboardPage() {
         .filter((a) => {
           if (!a.title) return false;
           if (a.status !== "active") return false;
-
           if (a.targetEmail && a.targetEmail.length > 0) {
             return a.targetEmail === email;
           }
-
           if (a.targetRole === "all") return true;
           if (a.targetRole === role) return true;
           if (a.targetRole === "employee") return true;
@@ -180,10 +169,15 @@ export default async function EmployeeDashboardPage() {
         isRead: readIds.has(a.id),
       }));
       unreadCount = announcements.filter((a) => !a.isRead).length;
-    } catch {
-      // ignore
-    }
+    } catch {}
   }
+
+  // ═══════════════════════════════════════════════════════════════
+  // 🎨 COMPUTED STATS
+  // ═══════════════════════════════════════════════════════════════
+  const monthPct = allCount > 0 ? (monthCount / allCount) * 100 : 0;
+  const weekPct = monthCount > 0 ? (weekCount / monthCount) * 100 : 0;
+  const todayPct = weekCount > 0 ? (todayCount / weekCount) * 100 : 0;
 
   return (
     <div className="flex h-screen bg-slate-50">
@@ -192,12 +186,13 @@ export default async function EmployeeDashboardPage() {
         permissions={{
           canRegisterSale: permissions.canRegisterSale,
           canRegisterIncome: permissions.canRegisterIncome,
+          canRegisterInventory: permissions.canRegisterInventory,
           canViewAnnouncements: permissions.canViewAnnouncements,
           canCreateAnnouncements: permissions.canCreateAnnouncements,
         }}
       />
       <main className="flex-1 overflow-y-auto p-6">
-        <div className="max-w-4xl mx-auto space-y-6">
+        <div className="max-w-5xl mx-auto space-y-6">
           {/* Header */}
           <div>
             <h1 className="text-3xl font-bold text-slate-900">
@@ -213,37 +208,81 @@ export default async function EmployeeDashboardPage() {
             </p>
           </div>
 
-          {/* Stats */}
+          {/* ═══════════════════════════════════════════════════════════
+              🎨 STATS — Beautiful cards with percentages
+          ═══════════════════════════════════════════════════════════ */}
           {permissions.canViewBasicStats && (
-            <div className="grid grid-cols-3 gap-4">
-              <StatCard
-                label="Today's Sales"
-                value={todayCount}
-                icon="📅"
-                color="emerald"
-              />
-              <StatCard
-                label="This Week"
-                value={weekCount}
-                icon="📊"
-                color="blue"
-              />
-              <StatCard
-                label="This Month"
-                value={monthCount}
-                icon="📈"
-                color="purple"
-              />
-            </div>
+            <>
+              <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+                <StatCardEnhanced
+                  label="Today"
+                  count={todayCount}
+                  total={todayTotal}
+                  pct={todayPct}
+                  icon="📅"
+                  color="emerald"
+                />
+                <StatCardEnhanced
+                  label="This Week"
+                  count={weekCount}
+                  total={weekTotal}
+                  pct={weekPct}
+                  icon="📊"
+                  color="blue"
+                />
+                <StatCardEnhanced
+                  label="This Month"
+                  count={monthCount}
+                  total={monthTotal}
+                  pct={monthPct}
+                  icon="📈"
+                  color="purple"
+                />
+                <StatCardEnhanced
+                  label="All Time"
+                  count={allCount}
+                  total={allTotal}
+                  pct={100}
+                  icon="🏆"
+                  color="amber"
+                />
+              </div>
+
+              {/* Percentage Breakdown */}
+              <div className="bg-white rounded-2xl border border-slate-200 p-5">
+                <h2 className="font-bold text-slate-900 mb-3">
+                  📊 Your Progress (Last 30 Days)
+                </h2>
+                <div className="space-y-3">
+                  <ProgressBar
+                    label={`Today (${todayCount} sales)`}
+                    pct={todayPct}
+                    color="emerald"
+                  />
+                  <ProgressBar
+                    label={`This Week (${weekCount} sales)`}
+                    pct={weekPct}
+                    color="blue"
+                  />
+                  <ProgressBar
+                    label={`This Month (${monthCount} sales)`}
+                    pct={monthPct}
+                    color="purple"
+                  />
+                </div>
+              </div>
+            </>
           )}
 
-          {/* Quick Actions — Permission-based */}
-          {(permissions.canRegisterSale || permissions.canRegisterIncome) && (
+          {/* Quick Actions */}
+          {(permissions.canRegisterSale ||
+            permissions.canRegisterIncome ||
+            permissions.canRegisterInventory) && (
             <div className="bg-white rounded-2xl border border-slate-200 p-5">
               <h2 className="font-bold text-slate-900 mb-3">
                 ⚡ Quick Actions
               </h2>
-              <div className="grid grid-cols-2 gap-3">
+              <div className="grid grid-cols-2 lg:grid-cols-3 gap-3">
                 {permissions.canRegisterSale && (
                   <Link
                     href="/employee/sale/new"
@@ -263,6 +302,17 @@ export default async function EmployeeDashboardPage() {
                     <div className="text-3xl mb-2">💰</div>
                     <p className="font-semibold text-blue-700">
                       New Income
+                    </p>
+                  </Link>
+                )}
+                {permissions.canRegisterInventory && (
+                  <Link
+                    href="/employee/inventory/new"
+                    className="p-4 rounded-xl bg-purple-50 hover:bg-purple-100 border border-purple-200 text-center transition"
+                  >
+                    <div className="text-3xl mb-2">📦</div>
+                    <p className="font-semibold text-purple-700">
+                      New Inventory
                     </p>
                   </Link>
                 )}
@@ -348,31 +398,105 @@ export default async function EmployeeDashboardPage() {
   );
 }
 
-function StatCard({
+// ═══════════════════════════════════════════════════════════════
+// 🎨 ENHANCED STAT CARD
+// ═══════════════════════════════════════════════════════════════
+function StatCardEnhanced({
   label,
-  value,
+  count,
+  total,
+  pct,
   icon,
   color,
 }: {
   label: string;
-  value: number;
+  count: number;
+  total: number;
+  pct: number;
   icon: string;
   color: string;
 }) {
   const cls =
     {
-      emerald: "bg-emerald-50 border-emerald-200 text-emerald-700",
-      blue: "bg-blue-50 border-blue-200 text-blue-700",
-      purple: "bg-purple-50 border-purple-200 text-purple-700",
-    }[color] ?? "bg-slate-50 border-slate-200 text-slate-700";
+      emerald: {
+        card: "bg-emerald-50 border-emerald-200",
+        text: "text-emerald-700",
+        bar: "bg-emerald-500",
+      },
+      blue: {
+        card: "bg-blue-50 border-blue-200",
+        text: "text-blue-700",
+        bar: "bg-blue-500",
+      },
+      purple: {
+        card: "bg-purple-50 border-purple-200",
+        text: "text-purple-700",
+        bar: "bg-purple-500",
+      },
+      amber: {
+        card: "bg-amber-50 border-amber-200",
+        text: "text-amber-700",
+        bar: "bg-amber-500",
+      },
+    }[color] ?? {
+      card: "bg-slate-50 border-slate-200",
+      text: "text-slate-700",
+      bar: "bg-slate-500",
+    };
 
   return (
-    <div className={`p-4 rounded-2xl border ${cls}`}>
+    <div className={`p-4 rounded-2xl border ${cls.card}`}>
       <div className="flex items-center justify-between">
         <p className="text-xs font-medium opacity-75">{label}</p>
         <span className="text-lg">{icon}</span>
       </div>
-      <p className="text-2xl font-bold mt-1">{value}</p>
+      <p className={`text-2xl font-bold mt-1 ${cls.text}`}>{count}</p>
+      <p className="text-xs text-slate-500 mt-0.5">
+        {total.toLocaleString()} ETB
+      </p>
+      <div className="mt-2 h-1.5 bg-white/50 rounded-full overflow-hidden">
+        <div
+          className={`h-full ${cls.bar}`}
+          style={{ width: `${Math.min(pct, 100)}%` }}
+        />
+      </div>
+      <p className="text-[10px] text-slate-500 mt-1">
+        {pct.toFixed(0)}% of period
+      </p>
+    </div>
+  );
+}
+
+function ProgressBar({
+  label,
+  pct,
+  color,
+}: {
+  label: string;
+  pct: number;
+  color: string;
+}) {
+  const barCls =
+    {
+      emerald: "bg-emerald-500",
+      blue: "bg-blue-500",
+      purple: "bg-purple-500",
+    }[color] ?? "bg-slate-500";
+
+  return (
+    <div>
+      <div className="flex items-center justify-between mb-1">
+        <p className="text-xs font-medium text-slate-700">{label}</p>
+        <p className="text-xs font-bold text-slate-900">
+          {pct.toFixed(1)}%
+        </p>
+      </div>
+      <div className="h-2 bg-slate-100 rounded-full overflow-hidden">
+        <div
+          className={`h-full ${barCls} transition-all`}
+          style={{ width: `${Math.min(pct, 100)}%` }}
+        />
+      </div>
     </div>
   );
 }
