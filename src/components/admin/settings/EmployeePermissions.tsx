@@ -13,10 +13,11 @@ interface EmployeeUser {
     canAccessEmployeeDashboard: boolean;
     canRegisterSale: boolean;
     canRegisterIncome: boolean;
+    canRegisterInventory: boolean; // 🆕
     canViewAnnouncements: boolean;
     canCreateAnnouncements: boolean;
-    canViewReports: boolean;
-    canPrint: boolean;
+    canViewReports: boolean; // 🔒 blocked
+    canPrint: boolean; // 🔒 blocked
     canViewBasicStats: boolean;
   };
 }
@@ -168,7 +169,7 @@ export default function EmployeePermissions({ canManage }: Props) {
                 </div>
               </div>
 
-              {/* 🆕 Dashboard & Basics */}
+              {/* 🏠 Dashboard & Basics */}
               <p className="text-xs font-bold text-slate-400 uppercase tracking-wide mb-2">
                 🏠 Dashboard & Basics
               </p>
@@ -189,7 +190,7 @@ export default function EmployeePermissions({ canManage }: Props) {
                 />
               </div>
 
-              {/* 🆕 Actions */}
+              {/* ⚡ Actions */}
               <p className="text-xs font-bold text-slate-400 uppercase tracking-wide mb-2">
                 ⚡ Actions
               </p>
@@ -208,9 +209,16 @@ export default function EmployeePermissions({ canManage }: Props) {
                   loading={saving === e.email}
                   onClick={() => toggle(e, "canRegisterIncome")}
                 />
+                <Toggle
+                  label="Register Inventory"
+                  icon="📦"
+                  enabled={e.permissions.canRegisterInventory}
+                  loading={saving === e.email}
+                  onClick={() => toggle(e, "canRegisterInventory")}
+                />
               </div>
 
-              {/* 🆕 Announcements */}
+              {/* 📢 Announcements */}
               <p className="text-xs font-bold text-slate-400 uppercase tracking-wide mb-2">
                 📢 Announcements
               </p>
