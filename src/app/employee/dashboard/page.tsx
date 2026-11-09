@@ -31,21 +31,41 @@ export default async function EmployeeDashboardPage() {
   // ✅ LOAD EMPLOYEE PERMISSIONS
   // ═══════════════════════════════════════════════════════════════
   let permissions = parseEmployeePermissions(email, {}); // defaults
+
   try {
     const permSheet = await getSheet(EMPLOYEE_PERMS_SHEET);
     const permRows = await permSheet.getRows();
+    
+    // ✅ Debug log
+    console.log(`🔍 [DASHBOARD] Email: "${email}"`);
+    console.log(`🔍 [DASHBOARD] Total rows: ${permRows.length}`);
+
+    // ✅ Case-insensitive match
     const myPerm = permRows.find((r) => {
       const o = r.toObject() as any;
-      return (
-        String(o.Employee_Email || "").toLowerCase() === email
-      );
+      const rowEmail = String(o.Employee_Email || "").toLowerCase().trim();
+      if (rowEmail) {
+        console.log(`🔍 [DASHBOARD] Comparing: "${rowEmail}" === "${email}" → ${rowEmail === email}`);
+      }
+      return rowEmail === email;
     });
+
     if (myPerm) {
-      permissions = parseEmployeePermissions(email, myPerm.toObject());
+      const obj = myPerm.toObject() as any;
+      console.log(`✅ [DASHBOARD] Permissions FOUND:`, {
+        Can_Register_Income: obj.Can_Register_Income,
+        Can_Register_Sale: obj.Can_Register_Sale,
+        Can_View_Announcements: obj.Can_View_Announcements,
+      });
+      permissions = parseEmployeePermissions(email, obj);
+    } else {
+      console.log(`❌ [DASHBOARD] NO permissions row for ${email}`);
     }
-  } catch (e) {
-    console.warn("Employee permissions load failed:", e);
+  } catch (e: any) {
+    console.error(`❌ [DASHBOARD] Failed to load permissions:`, e.message);
   }
+
+  console.log(`🎯 [DASHBOARD] Final permissions:`, permissions);
 
   // ═══════════════════════════════════════════════════════════════
   // ✅ LOAD STATS
@@ -94,74 +114,75 @@ export default async function EmployeeDashboardPage() {
   }
 
   // ═══════════════════════════════════════════════════════════════
-  // ✅ LOAD ANNOUNCEMENTS (filtered for this user)
+  // ✅ LOAD ANNOUNCEMENTS (filtered)
   // ═══════════════════════════════════════════════════════════════
   let announcements: any[] = [];
   let unreadCount = 0;
-  try {
-    const annSheet = await getSheet(SHEETS.ANNOUNCEMENTS);
-    const annRows = await annSheet.getRows();
 
-    // Load read IDs
-    let readIds = new Set<string>();
+  if (permissions.canViewAnnouncements) {
     try {
-      const readsSheet = await getSheet("Announcement_Reads_TBL");
-      const readsRows = await readsSheet.getRows();
-      readIds = new Set(
-        readsRows
-          .filter((r) => {
-            const o = r.toObject() as any;
-            return String(o.Employee_Email || "").toLowerCase() === email;
-          })
-          .map((r) => String(r.get("Announcement_ID") || ""))
-      );
+      const annSheet = await getSheet(SHEETS.ANNOUNCEMENTS);
+      const annRows = await annSheet.getRows();
+
+      let readIds = new Set<string>();
+      try {
+        const readsSheet = await getSheet("Announcement_Reads_TBL");
+        const readsRows = await readsSheet.getRows();
+        readIds = new Set(
+          readsRows
+            .filter((r) => {
+              const o = r.toObject() as any;
+              return (
+                String(o.Employee_Email || "").toLowerCase().trim() === email
+              );
+            })
+            .map((r) => String(r.get("Announcement_ID") || ""))
+        );
+      } catch {
+        // Reads sheet optional
+      }
+
+      announcements = annRows
+        .map((r) => {
+          const o = r.toObject() as any;
+          return {
+            id: String(o.Announcement_ID || ""),
+            title: String(o.Title || ""),
+            message: String(o.Message || ""),
+            priority: String(o.Priority || "normal"),
+            createdAt: String(o.Date || ""),
+            targetRole: String(o.Target_Role || "all").toLowerCase(),
+            targetEmail: String(o.Target_Email || "").toLowerCase().trim(),
+            status: String(o.Status || "Active").toLowerCase(),
+          };
+        })
+        .filter((a) => {
+          if (!a.title) return false;
+          if (a.status !== "active") return false;
+
+          if (a.targetEmail && a.targetEmail.length > 0) {
+            return a.targetEmail === email;
+          }
+
+          if (a.targetRole === "all") return true;
+          if (a.targetRole === role) return true;
+          if (a.targetRole === "employee") return true;
+          if (a.targetRole === "staff") return true;
+          return false;
+        })
+        .sort(
+          (a, b) =>
+            new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
+        );
+
+      announcements = announcements.map((a) => ({
+        ...a,
+        isRead: readIds.has(a.id),
+      }));
+      unreadCount = announcements.filter((a) => !a.isRead).length;
     } catch {
-      // Reads sheet optional
+      // ignore
     }
-
-    announcements = annRows
-      .map((r) => {
-        const o = r.toObject() as any;
-        return {
-          id: String(o.Announcement_ID || ""),
-          title: String(o.Title || ""),
-          message: String(o.Message || ""),
-          priority: String(o.Priority || "normal"),
-          createdAt: String(o.Date || ""),
-          targetRole: String(o.Target_Role || "all").toLowerCase(),
-          targetEmail: String(o.Target_Email || "").toLowerCase().trim(),
-          status: String(o.Status || "Active").toLowerCase(),
-        };
-      })
-      .filter((a) => {
-        if (!a.title) return false;
-        if (a.status !== "active") return false;
-
-        // If Target_Email → ONLY that person
-        if (a.targetEmail && a.targetEmail.length > 0) {
-          return a.targetEmail === email;
-        }
-
-        // Role filter
-        if (a.targetRole === "all") return true;
-        if (a.targetRole === role) return true;
-        if (a.targetRole === "employee") return true;
-        if (a.targetRole === "staff") return true;
-        return false;
-      })
-      .sort(
-        (a, b) =>
-          new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
-      );
-
-    // Add isRead + count unread
-    announcements = announcements.map((a) => ({
-      ...a,
-      isRead: readIds.has(a.id),
-    }));
-    unreadCount = announcements.filter((a) => !a.isRead).length;
-  } catch {
-    // ignore
   }
 
   return (
@@ -193,28 +214,30 @@ export default async function EmployeeDashboardPage() {
           </div>
 
           {/* Stats */}
-          <div className="grid grid-cols-3 gap-4">
-            <StatCard
-              label="Today's Sales"
-              value={todayCount}
-              icon="📅"
-              color="emerald"
-            />
-            <StatCard
-              label="This Week"
-              value={weekCount}
-              icon="📊"
-              color="blue"
-            />
-            <StatCard
-              label="This Month"
-              value={monthCount}
-              icon="📈"
-              color="purple"
-            />
-          </div>
+          {permissions.canViewBasicStats && (
+            <div className="grid grid-cols-3 gap-4">
+              <StatCard
+                label="Today's Sales"
+                value={todayCount}
+                icon="📅"
+                color="emerald"
+              />
+              <StatCard
+                label="This Week"
+                value={weekCount}
+                icon="📊"
+                color="blue"
+              />
+              <StatCard
+                label="This Month"
+                value={monthCount}
+                icon="📈"
+                color="purple"
+              />
+            </div>
+          )}
 
-          {/* Quick Actions — permission-based */}
+          {/* Quick Actions — Permission-based */}
           {(permissions.canRegisterSale || permissions.canRegisterIncome) && (
             <div className="bg-white rounded-2xl border border-slate-200 p-5">
               <h2 className="font-bold text-slate-900 mb-3">
@@ -276,14 +299,12 @@ export default async function EmployeeDashboardPage() {
                         : "bg-blue-50 border-blue-300"
                     }`}
                   >
-                    <div className="flex items-center justify-between">
-                      <p className="text-sm font-semibold text-slate-900">
-                        {!a.isRead && "🆕 "}
-                        {a.priority === "high" && "🔴 "}
-                        {a.priority === "urgent" && "🚨 "}
-                        {a.title}
-                      </p>
-                    </div>
+                    <p className="text-sm font-semibold text-slate-900">
+                      {!a.isRead && "🆕 "}
+                      {a.priority === "high" && "🔴 "}
+                      {a.priority === "urgent" && "🚨 "}
+                      {a.title}
+                    </p>
                     <p className="text-xs text-slate-600 mt-1 line-clamp-2">
                       {a.message}
                     </p>
