@@ -16,8 +16,15 @@ export async function GET() {
   }
 
   const role = normalizeRole((session.user as any)?.role);
+
+  // ✅ Employee/Staff → empty lists (no 403 error)
   if (role !== "owner" && role !== "manager") {
-    return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+    return NextResponse.json({
+      online: [],
+      offline: [],
+      total: 0,
+      onlineCount: 0,
+    });
   }
 
   try {
@@ -42,7 +49,9 @@ export async function GET() {
 
     // Only active users
     const active = staff.filter(
-      (s) => s.status.toLowerCase() !== "suspended" && s.status.toLowerCase() !== "inactive"
+      (s) =>
+        s.status.toLowerCase() !== "suspended" &&
+        s.status.toLowerCase() !== "inactive"
     );
 
     const online = active.filter((s) => s.isOnline);
