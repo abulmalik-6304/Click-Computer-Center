@@ -127,4 +127,20 @@ export default async function EmployeeAnnouncementsPage() {
                   </div>
                   {a.image && (
                     <img
-                      src={
+                      src={a.image}
+                      alt={a.title}
+                      className="w-full max-h-64 object-cover rounded-lg mb-3"
+                    />
+                  )}
+                  <p className="text-sm text-slate-700 whitespace-pre-wrap">
+                    {a.message}
+                  </p>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      </main>
+    </div>
+  );
+}
