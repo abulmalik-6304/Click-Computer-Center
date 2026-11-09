@@ -9,7 +9,10 @@ export type EmployeePermissionKey =
   | "canRegisterSale"
   | "canRegisterIncome"
   | "canViewAnnouncements"
-  | "canCreateAnnouncements";
+  | "canCreateAnnouncements"
+  | "canViewReports"
+  | "canPrint"
+  | "canViewBasicStats";
 
 export interface EmployeePermissions {
   email: string;
@@ -18,9 +21,12 @@ export interface EmployeePermissions {
   canRegisterIncome: boolean;
   canViewAnnouncements: boolean;
   canCreateAnnouncements: boolean;
+  canViewReports: boolean; // ✅ አዲስ
+  canPrint: boolean; // ✅ አዲስ
+  canViewBasicStats: boolean; // ✅ አዲስ
 }
 
-// ✅ Safe defaults — employee can always do basics
+// ✅ Safe defaults
 export const DEFAULT_EMPLOYEE_PERMISSIONS: Omit<
   EmployeePermissions,
   "email"
@@ -30,6 +36,9 @@ export const DEFAULT_EMPLOYEE_PERMISSIONS: Omit<
   canRegisterIncome: true,
   canViewAnnouncements: true,
   canCreateAnnouncements: false,
+  canViewReports: false, // 🔒 ሁልጊዜ false
+  canPrint: false, // 🔒 ሁልጊዜ false
+  canViewBasicStats: true,
 };
 
 // ✅ Hard-blocked permissions (አይፈቀዱም — ሁልጊዜ false)
@@ -57,17 +66,16 @@ export function canAccessAdminArea(role: string | undefined | null): boolean {
   return r === "owner" || r === "manager";
 }
 
-// ✅ Helper: Get default route for employee
+// ✅ Helper: Default routes
 export function getEmployeeHomeRoute(): string {
   return "/employee/dashboard";
 }
 
-// ✅ Helper: Get default route for admin
 export function getAdminHomeRoute(): string {
   return "/admin/dashboard";
 }
 
-// ✅ Helper: Blocked admin routes for employees
+// ✅ Blocked admin routes for employees
 export const EMPLOYEE_BLOCKED_ROUTES = [
   "/admin/reports",
   "/admin/analytics",
@@ -92,12 +100,14 @@ export function isRouteBlockedForEmployee(route: string): boolean {
   );
 }
 
-// ✅ Alias (ከስህተቱ ስም ጋር — backward compat)
+// ✅ Alias (backward compat)
 export function isEmployeeBlockedFromRoute(route: string): boolean {
   return isRouteBlockedForEmployee(route);
 }
 
-// ✅ Helper: Parse permissions from row object
+// ═══════════════════════════════════════════════════════════════
+// ✅ PARSE PERMISSIONS FROM ROW
+// ═══════════════════════════════════════════════════════════════
 export function parseEmployeePermissions(
   email: string,
   obj: any
@@ -132,6 +142,18 @@ export function parseEmployeePermissions(
     canCreateAnnouncements: getBool(
       ["Can_Create_Announcements", "canCreateAnnouncements"],
       false
+    ),
+    canViewReports: getBool(
+      ["Can_View_Reports", "canViewReports"],
+      false // 🔒 ሁልጊዜ false
+    ),
+    canPrint: getBool(
+      ["Can_Print", "canPrint"],
+      false // 🔒 ሁልጊዜ false
+    ),
+    canViewBasicStats: getBool(
+      ["Can_View_Basic_Stats", "canViewBasicStats"],
+      true
     ),
   };
 }
