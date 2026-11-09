@@ -119,10 +119,11 @@ export async function POST(req: NextRequest) {
           "Can_Access_Employee_Dashboard",
           "Can_Register_Sale",
           "Can_Register_Income",
+          "Can_Register_Inventory", // 🆕
           "Can_View_Announcements",
           "Can_Create_Announcements",
-          "Can_View_Reports",
-          "Can_Print",
+          "Can_View_Reports", // ✅
+          "Can_Print", // ✅
           "Can_View_Basic_Stats",
           "Updated_By",
           "Updated_At",
@@ -144,12 +145,13 @@ export async function POST(req: NextRequest) {
         permissions.canAccessEmployeeDashboard ? "TRUE" : "FALSE",
       Can_Register_Sale: permissions.canRegisterSale ? "TRUE" : "FALSE",
       Can_Register_Income: permissions.canRegisterIncome ? "TRUE" : "FALSE",
+      Can_Register_Inventory: permissions.canRegisterInventory ? "TRUE" : "FALSE", // 🆕
       Can_View_Announcements:
         permissions.canViewAnnouncements ? "TRUE" : "FALSE",
       Can_Create_Announcements:
         permissions.canCreateAnnouncements ? "TRUE" : "FALSE",
-      Can_View_Reports: permissions.canViewReports ? "TRUE" : "FALSE",
-      Can_Print: permissions.canPrint ? "TRUE" : "FALSE",
+      Can_View_Reports: permissions.canViewReports ? "TRUE" : "FALSE", // ✅
+      Can_Print: permissions.canPrint ? "TRUE" : "FALSE", // ✅
       Can_View_Basic_Stats: permissions.canViewBasicStats ? "TRUE" : "FALSE",
       Updated_By: session.user?.email || "",
       Updated_At: new Date().toISOString(),
