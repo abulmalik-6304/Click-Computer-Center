@@ -1,7 +1,7 @@
 // src/components/employee/QuickIncomeForm.tsx
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import {
   INCOME_SOURCES,
@@ -36,8 +36,8 @@ export default function QuickIncomeForm() {
     [incomeSource]
   );
 
-  // Set default category when source changes
-  useMemo(() => {
+  // ✅ Set default category when source changes
+  useEffect(() => {
     if (availableCategories.length > 0 && !incomeCategory) {
       setIncomeCategory(availableCategories[0].value);
     }
@@ -55,20 +55,27 @@ export default function QuickIncomeForm() {
       return;
     }
 
+    if (!incomeCategory) {
+      setError("❌ Please select a category");
+      return;
+    }
+
     setSaving(true);
     try {
+      const payload = {
+        date,
+        incomeSource,
+        incomeCategory,
+        price,
+        quantity,
+        description,
+        materials: [], // ✅ Simple income — no materials
+      };
+
       const res = await fetch("/api/income", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          date,
-          incomeSource,
-          incomeCategory,
-          price,
-          quantity,
-          description,
-          materials: [],
-        }),
+        body: JSON.stringify(payload),
       });
       const data = await res.json();
       if (!res.ok) {
@@ -77,7 +84,7 @@ export default function QuickIncomeForm() {
         return;
       }
 
-      setSuccess("✅ ገቢ ተመዝግቧል!");
+      setSuccess(`✅ ገቢ ተመዝግቧል! (${data.id || ""})`);
 
       // Reset
       setPrice(0);
@@ -145,7 +152,9 @@ export default function QuickIncomeForm() {
           value={incomeCategory}
           onChange={(e) => setIncomeCategory(e.target.value)}
           className="w-full rounded-lg border border-slate-300 px-3 py-2.5 text-sm"
+          required
         >
+          <option value="">-- Select category --</option>
           {availableCategories.map((c) => (
             <option key={c.value} value={c.value}>
               {c.label}
@@ -227,7 +236,9 @@ export default function QuickIncomeForm() {
         disabled={saving || price <= 0}
         className="w-full py-3 rounded-lg bg-blue-600 hover:bg-blue-700 text-white font-bold text-sm disabled:opacity-50"
       >
-        {saving ? "⏳ Saving…" : `✅ Save Income · ${fmt(total)} ETB`}
+        {saving
+          ? "⏳ Saving…"
+          : `✅ Save Income · ${fmt(total)} ETB`}
       </button>
     </form>
   );
