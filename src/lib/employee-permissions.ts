@@ -8,10 +8,9 @@ export type EmployeePermissionKey =
   | "canAccessEmployeeDashboard"
   | "canRegisterSale"
   | "canRegisterIncome"
+  | "canRegisterInventory"  // 🆕
   | "canViewAnnouncements"
   | "canCreateAnnouncements"
-  | "canViewReports"
-  | "canPrint"
   | "canViewBasicStats";
 
 export interface EmployeePermissions {
@@ -19,11 +18,10 @@ export interface EmployeePermissions {
   canAccessEmployeeDashboard: boolean;
   canRegisterSale: boolean;
   canRegisterIncome: boolean;
+  canRegisterInventory: boolean;  // 🆕
   canViewAnnouncements: boolean;
   canCreateAnnouncements: boolean;
-  canViewReports: boolean; // ✅ አዲስ
-  canPrint: boolean; // ✅ አዲስ
-  canViewBasicStats: boolean; // ✅ አዲስ
+  canViewBasicStats: boolean;
 }
 
 // ✅ Safe defaults
@@ -34,14 +32,13 @@ export const DEFAULT_EMPLOYEE_PERMISSIONS: Omit<
   canAccessEmployeeDashboard: true,
   canRegisterSale: true,
   canRegisterIncome: true,
+  canRegisterInventory: true,  // 🆕
   canViewAnnouncements: true,
   canCreateAnnouncements: false,
-  canViewReports: false, // 🔒 ሁልጊዜ false
-  canPrint: false, // 🔒 ሁልጊዜ false
   canViewBasicStats: true,
 };
 
-// ✅ Hard-blocked permissions (አይፈቀዱም — ሁልጊዜ false)
+// ✅ Blocked permissions (ሁልጊዜ false — አይፈቀዱም)
 export const EMPLOYEE_BLOCKED_PERMISSIONS = [
   "canViewReports",
   "canPrint",
@@ -60,13 +57,13 @@ export function isEmployeeRole(role: string | undefined | null): boolean {
   return r === "employee" || r === "staff";
 }
 
-// ✅ Helper: Check if user can access admin dashboard
+// ✅ Helper: Can access admin area?
 export function canAccessAdminArea(role: string | undefined | null): boolean {
   const r = String(role || "").toLowerCase();
   return r === "owner" || r === "manager";
 }
 
-// ✅ Helper: Default routes
+// ✅ Routes
 export function getEmployeeHomeRoute(): string {
   return "/employee/dashboard";
 }
@@ -93,7 +90,6 @@ export const EMPLOYEE_BLOCKED_ROUTES = [
   "/admin/announcements",
 ] as const;
 
-// ✅ Helper: Is this route blocked for employees?
 export function isRouteBlockedForEmployee(route: string): boolean {
   return EMPLOYEE_BLOCKED_ROUTES.some(
     (blocked) => route === blocked || route.startsWith(blocked + "/")
@@ -135,6 +131,10 @@ export function parseEmployeePermissions(
       ["Can_Register_Income", "canRegisterIncome"],
       true
     ),
+    canRegisterInventory: getBool(  // 🆕
+      ["Can_Register_Inventory", "canRegisterInventory"],
+      true
+    ),
     canViewAnnouncements: getBool(
       ["Can_View_Announcements", "canViewAnnouncements"],
       true
@@ -142,14 +142,6 @@ export function parseEmployeePermissions(
     canCreateAnnouncements: getBool(
       ["Can_Create_Announcements", "canCreateAnnouncements"],
       false
-    ),
-    canViewReports: getBool(
-      ["Can_View_Reports", "canViewReports"],
-      false // 🔒 ሁልጊዜ false
-    ),
-    canPrint: getBool(
-      ["Can_Print", "canPrint"],
-      false // 🔒 ሁልጊዜ false
     ),
     canViewBasicStats: getBool(
       ["Can_View_Basic_Stats", "canViewBasicStats"],
