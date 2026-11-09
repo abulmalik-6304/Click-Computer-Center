@@ -8,16 +8,17 @@ interface InventoryItem {
   id: string;
   name: string;
   code: string;
-  price: number;
+  price: number;        // selling price (fallback)
+  sellingPrice: number; // ✅ from API
   costPrice: number;
   stock: number;
   image: string;
 }
 
-interface SaleItem {
+interface CartLine {
   itemId: string;
   itemName: string;
-  price: number;
+  sellingPrice: number; // ✅ API expects this
   quantity: number;
   subtotal: number;
 }
@@ -38,10 +39,10 @@ export default function QuickSaleForm() {
   const [items, setItems] = useState<InventoryItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState("");
-  const [cart, setCart] = useState<SaleItem[]>([]);
+  const [cart, setCart] = useState<CartLine[]>([]);
   const [customerName, setCustomerName] = useState("");
   const [customerPhone, setCustomerPhone] = useState("");
-  const [paymentMethod, setPaymentMethod] = useState("cash");
+  const [paymentMethod, setPaymentMethod] = useState("Cash");
   const [notes, setNotes] = useState("");
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
@@ -56,7 +57,23 @@ export default function QuickSaleForm() {
         });
         const data = await res.json();
         const list = data.items || data.inventory || [];
-        if (Array.isArray(list)) setItems(list);
+        if (Array.isArray(list)) {
+          // ✅ Normalize items
+          setItems(
+            list.map((i: any) => ({
+              id: String(i.id || i.Item_ID || ""),
+              name: String(i.name || i.Item_Name || ""),
+              code: String(i.code || i.Item_Code || ""),
+              price: Number(i.price || i.sellingPrice || 0),
+              sellingPrice: Number(
+                i.sellingPrice || i.price || i.Selling_Price || 0
+              ),
+              costPrice: Number(i.costPrice || i.Cost_Price || 0),
+              stock: Number(i.stock || 0),
+              image: String(i.image || ""),
+            }))
+          );
+        }
       } catch (e) {
         console.error("Load inventory failed:", e);
       } finally {
@@ -68,14 +85,14 @@ export default function QuickSaleForm() {
 
   const filtered = useMemo(() => {
     const q = search.trim().toLowerCase();
-    if (!q) return items.slice(0, 20);
+    if (!q) return items.slice(0, 24);
     return items
       .filter(
         (i) =>
           i.name.toLowerCase().includes(q) ||
           i.code.toLowerCase().includes(q)
       )
-      .slice(0, 20);
+      .slice(0, 24);
   }, [items, search]);
 
   // ─── Cart logic ───
@@ -96,7 +113,7 @@ export default function QuickSaleForm() {
             ? {
                 ...c,
                 quantity: c.quantity + 1,
-                subtotal: (c.quantity + 1) * c.price,
+                subtotal: (c.quantity + 1) * c.sellingPrice,
               }
             : c
         )
@@ -107,9 +124,9 @@ export default function QuickSaleForm() {
         {
           itemId: item.id,
           itemName: item.name,
-          price: item.price,
+          sellingPrice: item.sellingPrice || item.price,
           quantity: 1,
-          subtotal: item.price,
+          subtotal: item.sellingPrice || item.price,
         },
       ]);
     }
@@ -128,7 +145,7 @@ export default function QuickSaleForm() {
     setCart(
       cart.map((c) =>
         c.itemId === itemId
-          ? { ...c, quantity: qty, subtotal: qty * c.price }
+          ? { ...c, quantity: qty, subtotal: qty * c.sellingPrice }
           : c
       )
     );
@@ -153,17 +170,26 @@ export default function QuickSaleForm() {
 
     setSaving(true);
     try {
+      // ✅ API payload — matches /api/sales/route.ts
+      const payload = {
+        customerName: customerName || "Walk-in",
+        customerPhone,
+        paymentMethod,
+        discount: 0,
+        paidAmount: total,     // ✅ fully paid
+        saleStatus: "Completed",
+        items: cart.map((c) => ({
+          itemId: c.itemId,
+          itemName: c.itemName,
+          sellingPrice: c.sellingPrice, // ✅ API expects sellingPrice
+          quantity: c.quantity,
+        })),
+      };
+
       const res = await fetch("/api/sales", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          customerName,
-          customerPhone,
-          paymentMethod,
-          notes,
-          items: cart,
-          total,
-        }),
+        body: JSON.stringify(payload),
       });
       const data = await res.json();
       if (!res.ok) {
@@ -172,13 +198,15 @@ export default function QuickSaleForm() {
         return;
       }
 
-      setSuccess(`✅ ሽያጭ ተመዝግቧል! (Sale #${data.id})`);
+      setSuccess(
+        `✅ ሽያጭ ተመዝግቧል! Sale #${data.salesId || ""}`
+      );
 
       // Reset form
       setCart([]);
       setCustomerName("");
       setCustomerPhone("");
-      setPaymentMethod("cash");
+      setPaymentMethod("Cash");
       setNotes("");
 
       setTimeout(() => {
@@ -205,7 +233,7 @@ export default function QuickSaleForm() {
           />
         </div>
 
-        <div className="bg-white rounded-2xl border border-slate-200 p-4 max-h-96 overflow-y-auto">
+        <div className="bg-white rounded-2xl border border-slate-200 p-4">
           {loading ? (
             <p className="text-center py-8 text-slate-500">⏳ Loading…</p>
           ) : filtered.length === 0 ? (
@@ -227,7 +255,7 @@ export default function QuickSaleForm() {
                   </p>
                   <p className="text-xs text-slate-500">{item.code}</p>
                   <p className="text-sm font-bold text-emerald-600 mt-1">
-                    {fmt(item.price)} ETB
+                    {fmt(item.sellingPrice || item.price)} ETB
                   </p>
                   <p className="text-xs text-slate-500">
                     Stock: {item.stock}
@@ -347,11 +375,11 @@ export default function QuickSaleForm() {
               onChange={(e) => setPaymentMethod(e.target.value)}
               className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"
             >
-              <option value="cash">💵 Cash</option>
-              <option value="telebirr">📱 Telebirr</option>
-              <option value="cbe">🏦 CBE</option>
-              <option value="card">💳 Card</option>
-              <option value="credit">📝 Credit</option>
+              <option value="Cash">💵 Cash</option>
+              <option value="Telebirr">📱 Telebirr</option>
+              <option value="CBE">🏦 CBE</option>
+              <option value="Card">💳 Card</option>
+              <option value="Credit">📝 Credit</option>
             </select>
             <textarea
               value={notes}
@@ -378,7 +406,9 @@ export default function QuickSaleForm() {
             disabled={saving || cart.length === 0}
             className="w-full py-3 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-sm disabled:opacity-50"
           >
-            {saving ? "⏳ Saving…" : `✅ Complete Sale · ${fmt(total)} ETB`}
+            {saving
+              ? "⏳ Saving…"
+              : `✅ Complete Sale · ${fmt(total)} ETB`}
           </button>
         </form>
       </div>
