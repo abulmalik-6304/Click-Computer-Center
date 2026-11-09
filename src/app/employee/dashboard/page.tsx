@@ -6,24 +6,50 @@ import { normalizeRole } from "@/lib/roles";
 import { getSheet, SHEETS } from "@/lib/google-sheets";
 import Link from "next/link";
 import EmployeeSidebar from "@/components/employee/EmployeeSidebar";
+import {
+  isEmployeeRole,
+  parseEmployeePermissions,
+} from "@/lib/employee-permissions";
 
 export const revalidate = 0;
 export const dynamic = "force-dynamic";
+
+const EMPLOYEE_PERMS_SHEET = "Employee_Permissions_TBL";
 
 export default async function EmployeeDashboardPage() {
   const session = await getServerSession(authOptions);
   if (!session) redirect("/login");
 
   const role = normalizeRole((session.user as any)?.role);
-  if (role !== "employee" && role !== "staff") {
-    redirect("/admin/dashboard");
-  }
+  if (!isEmployeeRole(role)) redirect("/admin/dashboard");
 
   const name = session.user?.name || "Employee";
-  const email = String(session.user?.email || "");
+  const email = String(session.user?.email || "").toLowerCase().trim();
   const photo = session.user?.image || null;
 
-  // ✅ Load stats (today, week, month)
+  // ═══════════════════════════════════════════════════════════════
+  // ✅ LOAD EMPLOYEE PERMISSIONS
+  // ═══════════════════════════════════════════════════════════════
+  let permissions = parseEmployeePermissions(email, {}); // defaults
+  try {
+    const permSheet = await getSheet(EMPLOYEE_PERMS_SHEET);
+    const permRows = await permSheet.getRows();
+    const myPerm = permRows.find((r) => {
+      const o = r.toObject() as any;
+      return (
+        String(o.Employee_Email || "").toLowerCase() === email
+      );
+    });
+    if (myPerm) {
+      permissions = parseEmployeePermissions(email, myPerm.toObject());
+    }
+  } catch (e) {
+    console.warn("Employee permissions load failed:", e);
+  }
+
+  // ═══════════════════════════════════════════════════════════════
+  // ✅ LOAD STATS
+  // ═══════════════════════════════════════════════════════════════
   let todayCount = 0;
   let weekCount = 0;
   let monthCount = 0;
@@ -41,15 +67,15 @@ export default async function EmployeeDashboardPage() {
       .map((r) => {
         const o = r.toObject() as any;
         return {
-          id: String(o.Sale_ID || ""),
+          id: String(o.Sales_ID || ""),
           date: String(o.Date || ""),
           recordedBy: String(o.Recorded_By || ""),
-          total: Number(o.Total || 0),
+          total: Number(o.Total_Amount || 0),
         };
       })
       .filter(
         (s) =>
-          s.recordedBy.toLowerCase() === email.toLowerCase() ||
+          s.recordedBy.toLowerCase() === email ||
           s.recordedBy.toLowerCase() === name.toLowerCase()
       );
 
@@ -67,11 +93,32 @@ export default async function EmployeeDashboardPage() {
     // ignore
   }
 
-  // ✅ Load announcements
+  // ═══════════════════════════════════════════════════════════════
+  // ✅ LOAD ANNOUNCEMENTS (filtered for this user)
+  // ═══════════════════════════════════════════════════════════════
   let announcements: any[] = [];
+  let unreadCount = 0;
   try {
     const annSheet = await getSheet(SHEETS.ANNOUNCEMENTS);
     const annRows = await annSheet.getRows();
+
+    // Load read IDs
+    let readIds = new Set<string>();
+    try {
+      const readsSheet = await getSheet("Announcement_Reads_TBL");
+      const readsRows = await readsSheet.getRows();
+      readIds = new Set(
+        readsRows
+          .filter((r) => {
+            const o = r.toObject() as any;
+            return String(o.Employee_Email || "").toLowerCase() === email;
+          })
+          .map((r) => String(r.get("Announcement_ID") || ""))
+      );
+    } catch {
+      // Reads sheet optional
+    }
+
     announcements = annRows
       .map((r) => {
         const o = r.toObject() as any;
@@ -80,15 +127,39 @@ export default async function EmployeeDashboardPage() {
           title: String(o.Title || ""),
           message: String(o.Message || ""),
           priority: String(o.Priority || "normal"),
-          createdAt: String(o.Created_At || ""),
+          createdAt: String(o.Date || ""),
+          targetRole: String(o.Target_Role || "all").toLowerCase(),
+          targetEmail: String(o.Target_Email || "").toLowerCase().trim(),
+          status: String(o.Status || "Active").toLowerCase(),
         };
       })
-      .filter((a) => a.title)
+      .filter((a) => {
+        if (!a.title) return false;
+        if (a.status !== "active") return false;
+
+        // If Target_Email → ONLY that person
+        if (a.targetEmail && a.targetEmail.length > 0) {
+          return a.targetEmail === email;
+        }
+
+        // Role filter
+        if (a.targetRole === "all") return true;
+        if (a.targetRole === role) return true;
+        if (a.targetRole === "employee") return true;
+        if (a.targetRole === "staff") return true;
+        return false;
+      })
       .sort(
         (a, b) =>
           new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
-      )
-      .slice(0, 3);
+      );
+
+    // Add isRead + count unread
+    announcements = announcements.map((a) => ({
+      ...a,
+      isRead: readIds.has(a.id),
+    }));
+    unreadCount = announcements.filter((a) => !a.isRead).length;
   } catch {
     // ignore
   }
@@ -98,10 +169,10 @@ export default async function EmployeeDashboardPage() {
       <EmployeeSidebar
         user={{ name, email, role, photo }}
         permissions={{
-          canRegisterSale: true,
-          canRegisterIncome: true,
-          canViewAnnouncements: true,
-          canCreateAnnouncements: false,
+          canRegisterSale: permissions.canRegisterSale,
+          canRegisterIncome: permissions.canRegisterIncome,
+          canViewAnnouncements: permissions.canViewAnnouncements,
+          canCreateAnnouncements: permissions.canCreateAnnouncements,
         }}
       />
       <main className="flex-1 overflow-y-auto p-6">
@@ -143,33 +214,50 @@ export default async function EmployeeDashboardPage() {
             />
           </div>
 
-          {/* Quick Actions */}
-          <div className="bg-white rounded-2xl border border-slate-200 p-5">
-            <h2 className="font-bold text-slate-900 mb-3">⚡ Quick Actions</h2>
-            <div className="grid grid-cols-2 gap-3">
-              <Link
-                href="/employee/sale/new"
-                className="p-4 rounded-xl bg-emerald-50 hover:bg-emerald-100 border border-emerald-200 text-center transition"
-              >
-                <div className="text-3xl mb-2">🛒</div>
-                <p className="font-semibold text-emerald-700">New Sale</p>
-              </Link>
-              <Link
-                href="/employee/income/new"
-                className="p-4 rounded-xl bg-blue-50 hover:bg-blue-100 border border-blue-200 text-center transition"
-              >
-                <div className="text-3xl mb-2">💰</div>
-                <p className="font-semibold text-blue-700">New Income</p>
-              </Link>
+          {/* Quick Actions — permission-based */}
+          {(permissions.canRegisterSale || permissions.canRegisterIncome) && (
+            <div className="bg-white rounded-2xl border border-slate-200 p-5">
+              <h2 className="font-bold text-slate-900 mb-3">
+                ⚡ Quick Actions
+              </h2>
+              <div className="grid grid-cols-2 gap-3">
+                {permissions.canRegisterSale && (
+                  <Link
+                    href="/employee/sale/new"
+                    className="p-4 rounded-xl bg-emerald-50 hover:bg-emerald-100 border border-emerald-200 text-center transition"
+                  >
+                    <div className="text-3xl mb-2">🛒</div>
+                    <p className="font-semibold text-emerald-700">
+                      New Sale
+                    </p>
+                  </Link>
+                )}
+                {permissions.canRegisterIncome && (
+                  <Link
+                    href="/employee/income/new"
+                    className="p-4 rounded-xl bg-blue-50 hover:bg-blue-100 border border-blue-200 text-center transition"
+                  >
+                    <div className="text-3xl mb-2">💰</div>
+                    <p className="font-semibold text-blue-700">
+                      New Income
+                    </p>
+                  </Link>
+                )}
+              </div>
             </div>
-          </div>
+          )}
 
           {/* Announcements */}
-          {announcements.length > 0 && (
+          {permissions.canViewAnnouncements && announcements.length > 0 && (
             <div className="bg-white rounded-2xl border border-slate-200 p-5">
               <div className="flex items-center justify-between mb-3">
                 <h2 className="font-bold text-slate-900">
                   📢 Announcements
+                  {unreadCount > 0 && (
+                    <span className="ml-2 px-2 py-0.5 bg-red-500 text-white text-xs rounded-full">
+                      {unreadCount} new
+                    </span>
+                  )}
                 </h2>
                 <Link
                   href="/employee/announcements"
@@ -179,16 +267,23 @@ export default async function EmployeeDashboardPage() {
                 </Link>
               </div>
               <div className="space-y-2">
-                {announcements.map((a) => (
+                {announcements.slice(0, 3).map((a) => (
                   <div
                     key={a.id}
-                    className="p-3 bg-slate-50 rounded-lg border border-slate-200"
+                    className={`p-3 rounded-lg border ${
+                      a.isRead
+                        ? "bg-slate-50 border-slate-200"
+                        : "bg-blue-50 border-blue-300"
+                    }`}
                   >
-                    <p className="text-sm font-semibold text-slate-900">
-                      {a.priority === "high" && "🔴 "}
-                      {a.priority === "urgent" && "🚨 "}
-                      {a.title}
-                    </p>
+                    <div className="flex items-center justify-between">
+                      <p className="text-sm font-semibold text-slate-900">
+                        {!a.isRead && "🆕 "}
+                        {a.priority === "high" && "🔴 "}
+                        {a.priority === "urgent" && "🚨 "}
+                        {a.title}
+                      </p>
+                    </div>
                     <p className="text-xs text-slate-600 mt-1 line-clamp-2">
                       {a.message}
                     </p>
