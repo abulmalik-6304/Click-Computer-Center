@@ -71,6 +71,7 @@ export default async function EmployeeAnnouncementsPage() {
         permissions={{
           canRegisterSale: true,
           canRegisterIncome: true,
+          canRegisterInventory: false, // 🆕
           canViewAnnouncements: true,
           canCreateAnnouncements: false,
         }}
