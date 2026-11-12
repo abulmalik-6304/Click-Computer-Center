@@ -65,9 +65,40 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
+  // ✅ አዲስ — employee permission ጭምር ይፈቅዳል
   const role = String((session.user as any).role || "staff").toLowerCase();
-  if (!["owner", "manager"].includes(role)) {
-    return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+  const email = String(session.user?.email || "").toLowerCase().trim();
+
+  let canCreate = false;
+
+  if (role === "owner" || role === "manager") {
+    canCreate = true;
+  } else if (role === "employee" || role === "staff") {
+    // Check employee permissions
+    const { getSheet: getEmpSheet } = await import("@/lib/google-sheets");
+    const { parseEmployeePermissions } = await import("@/lib/employee-permissions");
+
+    try {
+      const permSheet = await getEmpSheet("Employee_Permissions_TBL");
+      const permRows = await permSheet.getRows();
+      const myPerm = permRows.find(
+        (r) =>
+          String((r.toObject() as any).Employee_Email || "").toLowerCase() === email
+      );
+      const perms = myPerm
+        ? parseEmployeePermissions(email, myPerm.toObject())
+        : parseEmployeePermissions(email, {});
+      canCreate = perms.canCreateAnnouncements;
+    } catch {
+      canCreate = false;
+    }
+  }
+
+  if (!canCreate) {
+    return NextResponse.json(
+      { error: "No permission to create announcements" },
+      { status: 403 }
+    );
   }
 
   try {
