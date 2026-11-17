@@ -14,7 +14,7 @@ interface Props {
   permissions: {
     canRegisterSale: boolean;
     canRegisterIncome: boolean;
-    canRegisterInventory: boolean;  // 🆕
+    canRegisterInventory: boolean;
     canViewAnnouncements: boolean;
     canCreateAnnouncements: boolean;
   };
@@ -34,31 +34,35 @@ export default function EmployeeSidebar({ user, permissions }: Props) {
       href: "/employee/sale/new",
       label: "New Sale",
       icon: "🛒",
-      show: permissions.canRegisterSale,
+      show: permissions.canRegisterSale === true,
     },
     {
       href: "/employee/income/new",
       label: "New Income",
       icon: "💰",
-      show: permissions.canRegisterIncome,
+      show: permissions.canRegisterIncome === true,
     },
     {
-      href: "/employee/inventory/new",   // 🆕
+      href: "/employee/inventory/new",
       label: "New Inventory",
       icon: "📦",
-      show: permissions.canRegisterInventory,
+      show: permissions.canRegisterInventory === true,
     },
     {
       href: "/employee/announcements",
       label: "Announcements",
       icon: "📢",
-      show: permissions.canViewAnnouncements,
+      show: permissions.canViewAnnouncements === true,
     },
+    // ❌ /employee/announcements/new — ገጹ የለም
+    // ✅ Employee ማስታወቂያ መፍጠር → /admin/announcements (permission ካለው)
     {
-      href: "/employee/announcements/new",   // 🆕
-      label: "New Announcement",
+      href: "/admin/announcements",
+      label: "Create Announcement",
       icon: "✉️",
-      show: permissions.canCreateAnnouncements,
+      show:
+        permissions.canCreateAnnouncements === true &&
+        permissions.canViewAnnouncements === true,
     },
   ];
 
