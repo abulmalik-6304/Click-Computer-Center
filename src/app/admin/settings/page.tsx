@@ -19,11 +19,16 @@ export default async function SettingsPage() {
   const isOwner = role === "owner";
   const isManager = role === "manager";
 
+  // 🚫 Block employee/staff
+  if (!isOwner && !isManager) {
+    redirect("/employee/dashboard");
+  }
+
   const pageKey = `settings-${Date.now()}`;
 
   return (
     <div className="p-4 sm:p-6 lg:p-10 space-y-6">
-      {/* ✅ Profile Settings — ሁሉም ሰው ያያል */}
+      {/* ✅ Profile Settings — ሁሉም ያያል */}
       <SettingsClient
         key={`profile-${pageKey}`}
         user={{
@@ -37,7 +42,7 @@ export default async function SettingsPage() {
       {/* ✅ Manager Permissions — Owner ብቻ */}
       {isOwner && <ManagerPermissions key={`perms-${pageKey}`} />}
 
-      {/* ✅ Employee Permissions — Owner + Manager ሁለቱም ያያሉ */}
+      {/* ✅ Employee Permissions — Owner + Manager */}
       {(isOwner || isManager) && (
         <EmployeePermissions
           key={`emp-perms-${pageKey}`}
