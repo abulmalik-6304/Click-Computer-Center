@@ -1,154 +1,356 @@
-// src/app/api/inventory/stock-in/route.ts
+// src/app/api/inventory/route.ts
 import { NextRequest, NextResponse } from "next/server";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
-import { getSheet, SHEETS } from "@/lib/google-sheets";
+import { getSheet, getDoc, SHEETS } from "@/lib/google-sheets";
+import { hasPermission } from "@/lib/permissions";
+import { normalizeRole } from "@/lib/roles";
+import {
+  isEmployeeRole,
+  parseEmployeePermissions,
+} from "@/lib/employee-permissions";
+import { refreshCache } from "@/lib/sheets-cache";
 
 export const revalidate = 0;
+export const dynamic = "force-dynamic";
 
-// ─── POST: Stock-In (add quantity) ───
+// ═══════════════════════════════════════════════════════════════
+// Helper: Can this user register inventory?
+// ═══════════════════════════════════════════════════════════════
+async function canRegisterInventory(
+  email: string,
+  role: string
+): Promise<boolean> {
+  const r = normalizeRole(role);
+
+  // Owner/manager always
+  if (r === "owner" || r === "manager") return true;
+
+  // Employee/staff → check permissions
+  if (r === "employee" || r === "staff") {
+    try {
+      const permSheet = await getSheet("Employee_Permissions_TBL");
+      const permRows = await permSheet.getRows();
+      const myPerm = permRows.find(
+        (row) =>
+          String((row.toObject() as any).Employee_Email || "")
+            .toLowerCase()
+            .trim() === email.toLowerCase().trim()
+      );
+      const perms = myPerm
+        ? parseEmployeePermissions(email, myPerm.toObject())
+        : parseEmployeePermissions(email, {});
+      return perms.canRegisterInventory === true;
+    } catch {
+      return false;
+    }
+  }
+
+  return false;
+}
+
+// ═══════════════════════════════════════════════════════════════
+// GET: List all inventory items
+// ═══════════════════════════════════════════════════════════════
+export async function GET() {
+  const session = await getServerSession(authOptions);
+  if (!session) {
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  }
+
+  try {
+    const sheet = await getSheet(SHEETS.INVENTORY);
+    const rows = await sheet.getRows();
+
+    const items = rows
+      .map((r) => {
+        const obj = r.toObject() as any;
+        return {
+          id: String(obj.Item_ID || ""),
+          name: String(obj.Item_Name || ""),
+          code: String(obj.Item_Code || ""),
+          category: String(obj.Category || "General"),
+          image: String(obj.Item_Image || ""),
+          stock: Number(obj.Stock_Quantity || 0),
+          costPrice: Number(obj.Cost_Price || 0),
+          sellingPrice: Number(obj.Selling_Price || 0),
+          avgCost: Number(obj.Avg_Cost || obj.Cost_Price || 0),
+          unitType: String(obj.Unit_Type || "pcs"),
+          packSize: Number(obj.Pack_Size || 1),
+          reorderLevel: Number(obj.Reorder_Level || 10),
+          status: String(obj.Status || "Active"),
+          supplierId: String(obj.Supplier_ID || ""),
+          date: String(obj.Date || ""),
+          description: String(obj.Description || ""),
+        };
+      })
+      .filter((i) => i.status !== "Archived");
+
+    return NextResponse.json({ items });
+  } catch (e: any) {
+    if (String(e.message).includes("not found")) {
+      return NextResponse.json({ items: [] });
+    }
+    return NextResponse.json({ error: e.message }, { status: 500 });
+  }
+}
+
+// ═══════════════════════════════════════════════════════════════
+// POST: Create new inventory item
+// ═══════════════════════════════════════════════════════════════
 export async function POST(req: NextRequest) {
   const session = await getServerSession(authOptions);
-  if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  if (!session) {
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  }
 
-  const role = String((session.user as any).role || "").toLowerCase();
-  if (!["owner", "manager", "employee", "staff"].includes(role)) {
-    return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+  const role = normalizeRole((session.user as any)?.role);
+  const email = String(session.user?.email || "").toLowerCase().trim();
+
+  // ✅ Check permission
+  const canCreate = await canRegisterInventory(email, role);
+  if (!canCreate) {
+    return NextResponse.json(
+      { error: "No permission to register inventory" },
+      { status: 403 }
+    );
   }
 
   try {
     const body = await req.json();
     const {
-      itemId,
-      quantity,
-      buyingPrice,
-      note,
+      itemName,
+      itemCode,
+      category,
+      costPrice,
+      sellingPrice,
+      stockQuantity,
+      unitType,
+      packSize,
+      reorderLevel,
+      description,
+      image,
       supplierId,
-      paymentMonth,
     } = body;
 
-    if (!itemId) {
-      return NextResponse.json({ error: "Item ID required" }, { status: 400 });
-    }
-    const qty = Number(quantity);
-    if (!qty || qty <= 0) {
+    // ─── Validation ───
+    if (!itemName?.trim()) {
       return NextResponse.json(
-        { error: "Quantity must be greater than 0" },
+        { error: "Item name is required" },
+        { status: 400 }
+      );
+    }
+    if (Number(costPrice) <= 0) {
+      return NextResponse.json(
+        { error: "Cost price must be > 0" },
+        { status: 400 }
+      );
+    }
+    if (Number(sellingPrice) <= 0) {
+      return NextResponse.json(
+        { error: "Selling price must be > 0" },
+        { status: 400 }
+      );
+    }
+    if (Number(sellingPrice) < Number(costPrice)) {
+      return NextResponse.json(
+        { error: "Selling price must be >= cost price" },
         { status: 400 }
       );
     }
 
-    // ─── Load Inventory ───
-    const invSheet = await getSheet(SHEETS.INVENTORY);
-    const invRows = await invSheet.getRows();
-    const invRow = invRows.find(
-      (r) => String(r.get("Item_ID")) === String(itemId)
-    );
-    if (!invRow) {
-      return NextResponse.json({ error: "Item not found" }, { status: 404 });
-    }
-
-    const oldStock = Number(invRow.get("Stock_Quantity") ?? 0);
-    const oldAvgCost = Number(invRow.get("Avg_Cost") ?? invRow.get("Cost_Price") ?? 0);
-    const newBuyPrice = Number(buyingPrice ?? oldAvgCost) || oldAvgCost;
-
-    // ═══════════════════════════════════════════════════════════
-    // Weighted average cost — DO NOT change formula
-    // ═══════════════════════════════════════════════════════════
-    const totalOldValue = oldStock * oldAvgCost;
-    const totalNewValue = qty * newBuyPrice;
-    const newStock = oldStock + qty;
-    const newAvgCost =
-      newStock > 0
-        ? Math.round(((totalOldValue + totalNewValue) / newStock) * 100) / 100
-        : 0;
-
-    // ─── Write Stock_In_TBL ───
-    let stockSheet;
+    // ─── Get or create sheet ───
+    let sheet;
     try {
-      stockSheet = await getSheet(SHEETS.STOCK_IN);
+      sheet = await getSheet(SHEETS.INVENTORY);
     } catch {
-      const { getDoc } = await import("@/lib/google-sheets");
       const doc = await getDoc();
-      stockSheet = await doc.addSheet({
-        title: SHEETS.STOCK_IN,
+      sheet = await doc.addSheet({
+        title: SHEETS.INVENTORY,
         headerValues: [
-          "Stock_In_ID",
-          "Date",
           "Item_ID",
-          "Quantity_In",
-          "Buying_Price",
-          "Recorded_By",
-          "Note",
+          "Item_Code",
+          "Item_Name",
+          "Category",
+          "Item_Image",
+          "Cost_Price",
+          "Selling_Price",
+          "Avg_Cost",
+          "Stock_Quantity",
+          "Unit_Type",
+          "Pack_Size",
+          "Reorder_Level",
+          "Status",
+          "Supplier_ID",
+          "Description",
+          "Date",
         ],
       });
     }
-    const stockRows = await stockSheet.getRows();
-    const stockId = `STK-${String(stockRows.length + 1).padStart(5, "0")}`;
 
-    await stockSheet.addRow({
-      Stock_In_ID: stockId,
+    // ─── Generate ID ───
+    const rows = await sheet.getRows();
+    const existingIds = rows
+      .map((r) => String(r.get("Item_ID") || ""))
+      .filter((id) => id.startsWith("ITM-"));
+
+    const maxNum = existingIds.reduce((max, id) => {
+      const n = Number(id.replace("ITM-", ""));
+      return isNaN(n) ? max : Math.max(max, n);
+    }, 0);
+
+    const newId = `ITM-${String(maxNum + 1).padStart(5, "0")}`;
+    const finalCode = itemCode?.trim() || newId;
+
+    const newRow = {
+      Item_ID: newId,
+      Item_Code: finalCode,
+      Item_Name: itemName.trim(),
+      Category: category || "General",
+      Item_Image: image || "",
+      Cost_Price: Number(costPrice),
+      Selling_Price: Number(sellingPrice),
+      Avg_Cost: Number(costPrice),
+      Stock_Quantity: Number(stockQuantity || 0),
+      Unit_Type: unitType || "pcs",
+      Pack_Size: Number(packSize || 1),
+      Reorder_Level: Number(reorderLevel || 10),
+      Status: "Active",
+      Supplier_ID: supplierId || "",
+      Description: description || "",
       Date: new Date().toISOString().slice(0, 10),
-      Item_ID: itemId,
-      Quantity_In: qty,
-      Buying_Price: newBuyPrice,
-      Recorded_By: session.user?.name ?? session.user?.email ?? "",
-      Note: note || supplierId || paymentMonth || "",
-    });
+    };
 
-    // ─── Update Inventory ───
-    invRow.set("Stock_Quantity", newStock);
-    invRow.set("Avg_Cost", newAvgCost);
-    if (buyingPrice) invRow.set("Cost_Price", newBuyPrice);
-    await invRow.save();
+    await sheet.addRow(newRow);
+    await refreshCache(SHEETS.INVENTORY);
 
     return NextResponse.json({
       ok: true,
-      stockId,
-      newStock,
-      newAvgCost,
-      added: qty,
+      id: newId,
+      item: {
+        id: newId,
+        name: newRow.Item_Name,
+        code: newRow.Item_Code,
+        category: newRow.Category,
+        stock: newRow.Stock_Quantity,
+        costPrice: newRow.Cost_Price,
+        sellingPrice: newRow.Selling_Price,
+      },
     });
   } catch (e: any) {
-    console.error("Stock-in error:", e);
+    console.error("Inventory POST error:", e);
     return NextResponse.json({ error: e.message }, { status: 500 });
   }
 }
 
-// ─── GET: Stock-In history for an item ───
-export async function GET(req: NextRequest) {
+// ═══════════════════════════════════════════════════════════════
+// PUT: Update existing item
+// ═══════════════════════════════════════════════════════════════
+export async function PUT(req: NextRequest) {
   const session = await getServerSession(authOptions);
-  if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  if (!session) {
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  }
+
+  const role = normalizeRole((session.user as any)?.role);
+  const email = String(session.user?.email || "").toLowerCase().trim();
+
+  // Owner/manager OR manager with canEditInventory
+  const isOwnerOrManager = role === "owner" || role === "manager";
+  const canEdit = isOwnerOrManager
+    ? true
+    : await hasPermission(email, role, "canEditInventory");
+
+  if (!canEdit) {
+    return NextResponse.json(
+      { error: "No permission to edit inventory" },
+      { status: 403 }
+    );
+  }
 
   try {
-    const { searchParams } = new URL(req.url);
-    const itemId = searchParams.get("itemId") || "";
+    const body = await req.json();
+    const { id, ...updates } = body;
 
-    const sheet = await getSheet(SHEETS.STOCK_IN);
+    if (!id) {
+      return NextResponse.json({ error: "ID required" }, { status: 400 });
+    }
+
+    const sheet = await getSheet(SHEETS.INVENTORY);
     const rows = await sheet.getRows();
-    let logs = rows.map((r) => {
-      const obj = r.toObject() as any;
-      return {
-        id: String(obj.Stock_In_ID || ""),
-        date: String(obj.Date || ""),
-        itemId: String(obj.Item_ID || ""),
-        quantity: Number(obj.Quantity_In || 0),
-        buyingPrice: Number(obj.Buying_Price || 0),
-        recordedBy: String(obj.Recorded_By || ""),
-        note: String(obj.Note || ""),
-      };
-    });
-
-    if (itemId) {
-      logs = logs.filter((l) => l.itemId === itemId);
+    const row = rows.find((r) => String(r.get("Item_ID")) === String(id));
+    if (!row) {
+      return NextResponse.json({ error: "Item not found" }, { status: 404 });
     }
-    logs.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
 
-    return NextResponse.json({ logs });
+    if (updates.name !== undefined) row.set("Item_Name", updates.name);
+    if (updates.itemCode !== undefined) row.set("Item_Code", updates.itemCode);
+    if (updates.category !== undefined) row.set("Category", updates.category);
+    if (updates.image !== undefined) row.set("Item_Image", updates.image);
+    if (updates.costPrice !== undefined)
+      row.set("Cost_Price", Number(updates.costPrice));
+    if (updates.sellingPrice !== undefined)
+      row.set("Selling_Price", Number(updates.sellingPrice));
+    if (updates.stockQuantity !== undefined)
+      row.set("Stock_Quantity", Number(updates.stockQuantity));
+    if (updates.unitType !== undefined) row.set("Unit_Type", updates.unitType);
+    if (updates.packSize !== undefined)
+      row.set("Pack_Size", Number(updates.packSize));
+    if (updates.reorderLevel !== undefined)
+      row.set("Reorder_Level", Number(updates.reorderLevel));
+    if (updates.status !== undefined) row.set("Status", updates.status);
+    if (updates.description !== undefined)
+      row.set("Description", updates.description);
+    if (updates.supplierId !== undefined)
+      row.set("Supplier_ID", updates.supplierId);
+
+    await row.save();
+    await refreshCache(SHEETS.INVENTORY);
+
+    return NextResponse.json({ ok: true, id });
   } catch (e: any) {
-    if (String(e.message).includes("not found")) {
-      return NextResponse.json({ logs: [] });
+    console.error("Inventory PUT error:", e);
+    return NextResponse.json({ error: e.message }, { status: 500 });
+  }
+}
+
+// ═══════════════════════════════════════════════════════════════
+// DELETE: Archive item (soft delete)
+// ═══════════════════════════════════════════════════════════════
+export async function DELETE(req: NextRequest) {
+  const session = await getServerSession(authOptions);
+  if (!session) {
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  }
+
+  const role = normalizeRole((session.user as any)?.role);
+  if (role !== "owner" && role !== "manager") {
+    return NextResponse.json(
+      { error: "Only owner/manager can delete items" },
+      { status: 403 }
+    );
+  }
+
+  try {
+    const { id } = await req.json();
+    if (!id) {
+      return NextResponse.json({ error: "ID required" }, { status: 400 });
     }
+
+    const sheet = await getSheet(SHEETS.INVENTORY);
+    const rows = await sheet.getRows();
+    const row = rows.find((r) => String(r.get("Item_ID")) === String(id));
+    if (!row) {
+      return NextResponse.json({ error: "Item not found" }, { status: 404 });
+    }
+
+    row.set("Status", "Archived");
+    await row.save();
+    await refreshCache(SHEETS.INVENTORY);
+
+    return NextResponse.json({ ok: true, id });
+  } catch (e: any) {
+    console.error("Inventory DELETE error:", e);
     return NextResponse.json({ error: e.message }, { status: 500 });
   }
 }
