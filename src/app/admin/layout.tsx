@@ -1,3 +1,4 @@
+// src/app/admin/layout.tsx
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { redirect } from "next/navigation";
@@ -14,6 +15,13 @@ export default async function AdminLayout({
 
   const rawRole = (session.user as any).role || "staff";
   const role = String(rawRole).toLowerCase();
+
+  // ═══════════════════════════════════════════════════════════════
+  // 🚫 Employee/Staff → ወደ employee dashboard
+  // ═══════════════════════════════════════════════════════════════
+  if (role === "employee" || role === "staff") {
+    redirect("/employee/dashboard");
+  }
 
   return (
     <Providers session={session}>
