@@ -19,11 +19,11 @@ export default async function SettingsPage() {
   const isOwner = role === "owner";
   const isManager = role === "manager";
 
-  // ✅ Unique key forces React to remount children on every visit
   const pageKey = `settings-${Date.now()}`;
 
   return (
     <div className="p-4 sm:p-6 lg:p-10 space-y-6">
+      {/* ✅ Profile Settings — ሁሉም ሰው ያያል */}
       <SettingsClient
         key={`profile-${pageKey}`}
         user={{
@@ -34,10 +34,10 @@ export default async function SettingsPage() {
         }}
       />
 
-      {/* ✅ Manager Permissions — Owner only */}
+      {/* ✅ Manager Permissions — Owner ብቻ */}
       {isOwner && <ManagerPermissions key={`perms-${pageKey}`} />}
 
-      {/* 🆕 Employee Permissions — Owner + Manager */}
+      {/* ✅ Employee Permissions — Owner + Manager ሁለቱም ያያሉ */}
       {(isOwner || isManager) && (
         <EmployeePermissions
           key={`emp-perms-${pageKey}`}
@@ -45,11 +45,13 @@ export default async function SettingsPage() {
         />
       )}
 
-      {/* ✅ Profit Sharing — Owner only */}
+      {/* ✅ Profit Sharing — Owner ብቻ */}
       {isOwner && <ProfitSharingSettings key={`profit-${pageKey}`} />}
 
-      {/* ✅ Sign-in Log */}
-      <SigninLogClient key={`signin-${pageKey}`} />
+      {/* ✅ Sign-in Log — Owner + Manager */}
+      {(isOwner || isManager) && (
+        <SigninLogClient key={`signin-${pageKey}`} />
+      )}
     </div>
   );
 }
