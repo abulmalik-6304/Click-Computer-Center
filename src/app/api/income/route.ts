@@ -120,6 +120,56 @@ export async function POST(req: NextRequest) {
   const session = await getServerSession(authOptions);
   if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
+  // ═══════════════════════════════════════════════════════════════
+  // ✅ PERMISSION CHECK — employee/staff needs canRegisterIncome
+  // ═══════════════════════════════════════════════════════════════
+  const role = normalizeRole((session.user as any)?.role);
+  const email = String(session.user?.email || "").toLowerCase().trim();
+
+  const isOwnerOrManager = role === "owner" || role === "manager";
+  if (!isOwnerOrManager) {
+    // Employee/staff → check permission
+    try {
+      const permSheet = await getSheet("Employee_Permissions_TBL");
+      const permRows = await permSheet.getRows();
+      const myPerm = permRows.find(
+        (row) =>
+          String((row.toObject() as any).Employee_Email || "")
+            .toLowerCase()
+            .trim() === email
+      );
+
+      // ✅ Read from sheet
+      const getBool = (obj: any, keys: string[]): boolean => {
+        for (const k of keys) {
+          if (obj[k] !== undefined && obj[k] !== null && obj[k] !== "") {
+            return String(obj[k]).toUpperCase() === "TRUE";
+          }
+        }
+        return false;
+      };
+
+      const canRegister = myPerm
+        ? getBool(myPerm.toObject(), [
+            "Can_Register_Income",
+            "canRegisterIncome",
+          ])
+        : false; // ← default false if no row
+
+      if (!canRegister) {
+        return NextResponse.json(
+          { error: "No permission to register income" },
+          { status: 403 }
+        );
+      }
+    } catch {
+      return NextResponse.json(
+        { error: "No permission to register income" },
+        { status: 403 }
+      );
+    }
+  }
+
   try {
     const body = await req.json();
     const {
