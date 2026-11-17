@@ -3,12 +3,18 @@ import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { redirect } from "next/navigation";
 import { normalizeRole } from "@/lib/roles";
-import { isEmployeeRole } from "@/lib/employee-permissions";
+import { getSheet } from "@/lib/google-sheets";
+import {
+  isEmployeeRole,
+  parseEmployeePermissions,
+} from "@/lib/employee-permissions";
 import EmployeeSidebar from "@/components/employee/EmployeeSidebar";
 import QuickIncomeForm from "@/components/employee/QuickIncomeForm";
 
 export const revalidate = 0;
 export const dynamic = "force-dynamic";
+
+const EMPLOYEE_PERMS_SHEET = "Employee_Permissions_TBL";
 
 export default async function NewIncomePage() {
   const session = await getServerSession(authOptions);
@@ -18,19 +24,65 @@ export default async function NewIncomePage() {
   if (!isEmployeeRole(role)) redirect("/admin/dashboard");
 
   const name = session.user?.name || "Employee";
-  const email = String(session.user?.email || "");
+  const email = String(session.user?.email || "").toLowerCase().trim();
   const photo = session.user?.image || null;
+
+  // ═══════════════════════════════════════════════════════════════
+  // ✅ LOAD REAL PERMISSIONS FROM SHEET
+  // ═══════════════════════════════════════════════════════════════
+  let permissions = parseEmployeePermissions(email, {});
+  try {
+    const permSheet = await getSheet(EMPLOYEE_PERMS_SHEET);
+    const permRows = await permSheet.getRows();
+    const myPerm = permRows.find(
+      (r) =>
+        String((r.toObject() as any).Employee_Email || "").toLowerCase() ===
+        email
+    );
+    if (myPerm) {
+      permissions = parseEmployeePermissions(email, myPerm.toObject());
+    }
+  } catch {}
+
+  // 🚫 Block if no permission
+  if (!permissions.canRegisterIncome) {
+    return (
+      <div className="flex h-screen bg-slate-50">
+        <EmployeeSidebar
+          user={{ name, email, role, photo }}
+          permissions={{
+            canRegisterSale: permissions.canRegisterSale,
+            canRegisterIncome: false,
+            canRegisterInventory: permissions.canRegisterInventory,
+            canViewAnnouncements: permissions.canViewAnnouncements,
+            canCreateAnnouncements: permissions.canCreateAnnouncements,
+          }}
+        />
+        <main className="flex-1 flex items-center justify-center p-6">
+          <div className="bg-red-50 border border-red-200 rounded-2xl p-8 max-w-md text-center">
+            <p className="text-4xl mb-3">🚫</p>
+            <h1 className="text-xl font-bold text-red-900 mb-2">
+              Access Denied
+            </h1>
+            <p className="text-sm text-red-700">
+              You don't have permission to register income.
+            </p>
+          </div>
+        </main>
+      </div>
+    );
+  }
 
   return (
     <div className="flex h-screen bg-slate-50">
       <EmployeeSidebar
         user={{ name, email, role, photo }}
         permissions={{
-          canRegisterSale: true,
-          canRegisterIncome: true,
-          canRegisterInventory: false, // 🆕
-          canViewAnnouncements: true,
-          canCreateAnnouncements: false,
+          canRegisterSale: permissions.canRegisterSale,
+          canRegisterIncome: permissions.canRegisterIncome,
+          canRegisterInventory: permissions.canRegisterInventory,
+          canViewAnnouncements: permissions.canViewAnnouncements,
+          canCreateAnnouncements: permissions.canCreateAnnouncements,
         }}
       />
       <main className="flex-1 overflow-y-auto p-6">
