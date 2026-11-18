@@ -4,6 +4,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { UNIT_TYPES, CATEGORY_OPTIONS } from "@/lib/inventory-helpers";
 import { InventoryItem } from "./page";
+import ImageUploader from "@/components/shared/ImageUploader"; // 🆕
 
 type Mode = "add" | "edit" | "stock-in";
 
@@ -328,18 +329,15 @@ export default function ItemFormModal({
                 />
               </div>
 
-              <div>
-                <label className="block text-xs font-semibold text-slate-700 mb-1">
-                  Item Image (Google Drive URL)
-                </label>
-                <input
-                  type="text"
-                  value={form.image}
-                  onChange={(e) => setForm({ ...form, image: e.target.value })}
-                  placeholder="https://drive.google.com/file/d/..."
-                  className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm text-slate-900"
-                />
-              </div>
+              {/* 🆕 Image Uploader — replaces Google Drive URL input */}
+              <ImageUploader
+                value={form.image}
+                onChange={(url) => setForm({ ...form, image: url })}
+                folder="inventory"
+                label="Item Image"
+                accept="image"
+                maxSizeMB={5}
+              />
 
               <div className="grid grid-cols-2 gap-3">
                 <div>
