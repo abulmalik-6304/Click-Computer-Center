@@ -3,6 +3,7 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
+import ImageUploader from "@/components/shared/ImageUploader"; // 🆕
 
 export default function QuickInventoryForm() {
   const router = useRouter();
@@ -17,6 +18,7 @@ export default function QuickInventoryForm() {
   const [packSize, setPackSize] = useState(1);
   const [reorderLevel, setReorderLevel] = useState(10);
   const [description, setDescription] = useState("");
+  const [image, setImage] = useState(""); // 🆕
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
   const [success, setSuccess] = useState("");
@@ -59,6 +61,7 @@ export default function QuickInventoryForm() {
           packSize,
           reorderLevel,
           description,
+          image, // 🆕
         }),
       });
       const data = await res.json();
@@ -233,6 +236,18 @@ export default function QuickInventoryForm() {
           rows={2}
           placeholder="Optional notes…"
           className="w-full rounded-lg border border-slate-300 px-3 py-2.5 text-sm"
+        />
+      </div>
+
+      {/* 🆕 Image Upload */}
+      <div>
+        <ImageUploader
+          value={image}
+          onChange={setImage}
+          folder="inventory"
+          label="📷 Item Image (Optional)"
+          accept="image"
+          maxSizeMB={5}
         />
       </div>
 
