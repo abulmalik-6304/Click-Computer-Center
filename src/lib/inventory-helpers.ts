@@ -1,7 +1,4 @@
 // src/lib/inventory-helpers.ts
-// ═══════════════════════════════════════════════════════════════
-// 📦 INVENTORY HELPERS
-// ═══════════════════════════════════════════════════════════════
 
 export interface InventoryItem {
   id: string;
@@ -22,7 +19,6 @@ export interface InventoryItem {
 
 export type StockStatus = "in-stock" | "low" | "out";
 
-// ✅ Null-safe stock status
 export function getStockStatus(item: InventoryItem): StockStatus {
   const stock = Number(item.stock) || 0;
   const reorder = Number(item.reorderLevel) || 10;
@@ -31,7 +27,6 @@ export function getStockStatus(item: InventoryItem): StockStatus {
   return "in-stock";
 }
 
-// ✅ Null-safe stock badge
 export function getStockBadge(item: InventoryItem): {
   label: string;
   color: string;
@@ -60,7 +55,6 @@ export function getStockBadge(item: InventoryItem): {
   };
 }
 
-// ✅ Null-safe profit margin
 export function getProfitMargin(item: InventoryItem): number {
   const cost = Number(item.costPrice) || 0;
   const sell = Number(item.sellingPrice) || 0;
