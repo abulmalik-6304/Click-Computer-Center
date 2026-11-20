@@ -83,10 +83,29 @@ export default function ItemFormModal({
     alert("📷 Ready to scan barcode — place barcode near scanner or type code");
   }
 
+  // ✅ Safe JSON parse helper
+  async function parseResponse(res: Response): Promise<any> {
+    try {
+      return await res.json();
+    } catch {
+      throw new Error("Server returned invalid response");
+    }
+  }
+
+  // ✅ Non-blocking activity log
+  function logActivity(payload: Record<string, any>) {
+    fetch("/api/inventory/activity", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(payload),
+    }).catch(() => {});
+  }
+
   async function submitAdd(e: React.FormEvent) {
     e.preventDefault();
     setError("");
     setSuccess("");
+
     if (!form.name.trim()) {
       setError("Item name is required");
       return;
@@ -95,6 +114,7 @@ export default function ItemFormModal({
       setError("Selling price must be greater than 0");
       return;
     }
+
     setSaving(true);
     try {
       const res = await fetch("/api/inventory", {
@@ -102,34 +122,34 @@ export default function ItemFormModal({
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(form),
       });
-      const data = await res.json();
+
+      const data = await parseResponse(res);
+
       if (!res.ok) {
-        setError(data.error || "Failed to save");
+        setError(data.error || `Failed to save (HTTP ${res.status})`);
         setSaving(false);
         return;
       }
 
-      // Log activity
-      try {
-        await fetch("/api/inventory/activity", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            action: "create",
-            itemId: data.itemId,
-            itemName: form.name,
-            details: `New item created`,
-            newValue: `Name: ${form.name}, Price: ${form.sellingPrice}`,
-          }),
-        });
-      } catch {
-        /* ignore */
-      }
+      // ✅ Non-blocking activity log
+      logActivity({
+        action: "create",
+        itemId: data.itemId,
+        itemName: form.name,
+        details: `New item created`,
+        newValue: `Name: ${form.name}, Price: ${form.sellingPrice}`,
+      });
 
       setSuccess("✅ Item added successfully!");
-      setTimeout(() => onSaved(), 800);
+      setTimeout(() => {
+        try {
+          onSaved();
+        } catch (err) {
+          console.error("onSaved error:", err);
+        }
+      }, 800);
     } catch (e: any) {
-      setError(e.message);
+      setError(e.message || "Network error — please check your connection");
       setSaving(false);
     }
   }
@@ -138,6 +158,7 @@ export default function ItemFormModal({
     e.preventDefault();
     setError("");
     setSuccess("");
+
     setSaving(true);
     try {
       const res = await fetch("/api/inventory", {
@@ -145,35 +166,35 @@ export default function ItemFormModal({
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ id: item?.id, ...form }),
       });
-      const data = await res.json();
+
+      const data = await parseResponse(res);
+
       if (!res.ok) {
-        setError(data.error || "Failed to save");
+        setError(data.error || `Failed to save (HTTP ${res.status})`);
         setSaving(false);
         return;
       }
 
-      // Log activity
-      try {
-        await fetch("/api/inventory/activity", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            action: "edit",
-            itemId: item?.id,
-            itemName: form.name,
-            details: `Item edited`,
-            oldValue: `Price: ${item?.sellingPrice}, Stock: ${item?.stock}`,
-            newValue: `Price: ${form.sellingPrice}, Name: ${form.name}`,
-          }),
-        });
-      } catch {
-        /* ignore */
-      }
+      // ✅ Non-blocking activity log
+      logActivity({
+        action: "edit",
+        itemId: item?.id,
+        itemName: form.name,
+        details: `Item edited`,
+        oldValue: `Price: ${item?.sellingPrice}, Stock: ${item?.stock}`,
+        newValue: `Price: ${form.sellingPrice}, Name: ${form.name}`,
+      });
 
       setSuccess("✅ Item updated!");
-      setTimeout(() => onSaved(), 800);
+      setTimeout(() => {
+        try {
+          onSaved();
+        } catch (err) {
+          console.error("onSaved error:", err);
+        }
+      }, 800);
     } catch (e: any) {
-      setError(e.message);
+      setError(e.message || "Network error — please check your connection");
       setSaving(false);
     }
   }
@@ -182,10 +203,12 @@ export default function ItemFormModal({
     e.preventDefault();
     setError("");
     setSuccess("");
+
     if (stockIn.quantity <= 0) {
       setError("Quantity must be greater than 0");
       return;
     }
+
     setSaving(true);
     try {
       const res = await fetch("/api/inventory/stock-in", {
@@ -198,34 +221,34 @@ export default function ItemFormModal({
           note: stockIn.note,
         }),
       });
-      const data = await res.json();
+
+      const data = await parseResponse(res);
+
       if (!res.ok) {
-        setError(data.error || "Failed to stock-in");
+        setError(data.error || `Failed to stock-in (HTTP ${res.status})`);
         setSaving(false);
         return;
       }
 
-      // Log activity
-      try {
-        await fetch("/api/inventory/activity", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            action: "stock-in",
-            itemId: item?.id,
-            itemName: item?.name,
-            details: `Added ${stockIn.quantity} ${item?.unitType}`,
-            newValue: `Stock: ${data.newStock}, Avg Cost: ${data.newAvg}`,
-          }),
-        });
-      } catch {
-        /* ignore */
-      }
+      // ✅ Non-blocking activity log
+      logActivity({
+        action: "stock-in",
+        itemId: item?.id,
+        itemName: item?.name,
+        details: `Added ${stockIn.quantity} ${item?.unitType}`,
+        newValue: `Stock: ${data.newStock}, Avg Cost: ${data.newAvg}`,
+      });
 
       setSuccess(`✅ Added ${stockIn.quantity} to stock!`);
-      setTimeout(() => onSaved(), 800);
+      setTimeout(() => {
+        try {
+          onSaved();
+        } catch (err) {
+          console.error("onSaved error:", err);
+        }
+      }, 800);
     } catch (e: any) {
-      setError(e.message);
+      setError(e.message || "Network error — please check your connection");
       setSaving(false);
     }
   }
