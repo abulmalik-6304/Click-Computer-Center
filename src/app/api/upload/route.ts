@@ -10,23 +10,69 @@ import {
   MAX_IMAGE_SIZE,
   MAX_DOC_SIZE,
 } from "@/lib/r2-client";
-import { normalizeRole } from "@/lib/roles";
+import { normalizeRole } from "@/lib/roles"; // 🆕
 
 export const revalidate = 0;
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
 
 export async function POST(req: NextRequest) {
+  // ═══════════════════════════════════════════════════════════════
+  // 🔍 DEBUG: Check env vars
+  // ═══════════════════════════════════════════════════════════════
+  console.log("🔍 [UPLOAD] Env check:", {
+    hasAccountId: !!process.env.R2_ACCOUNT_ID,
+    hasAccessKey: !!process.env.R2_ACCESS_KEY_ID,
+    hasSecretKey: !!process.env.R2_SECRET_ACCESS_KEY,
+    hasBucket: !!process.env.R2_BUCKET_NAME,
+    hasEndpoint: !!process.env.R2_ENDPOINT,
+    hasPublicUrl: !!process.env.R2_PUBLIC_URL,
+    bucket: process.env.R2_BUCKET_NAME,
+    endpoint: process.env.R2_ENDPOINT,
+    publicUrl: process.env.R2_PUBLIC_URL,
+  });
+
+  // ✅ Validate env vars exist
+  const missingVars: string[] = [];
+  if (!process.env.R2_ACCOUNT_ID) missingVars.push("R2_ACCOUNT_ID");
+  if (!process.env.R2_ACCESS_KEY_ID) missingVars.push("R2_ACCESS_KEY_ID");
+  if (!process.env.R2_SECRET_ACCESS_KEY)
+    missingVars.push("R2_SECRET_ACCESS_KEY");
+  if (!process.env.R2_BUCKET_NAME) missingVars.push("R2_BUCKET_NAME");
+  if (!process.env.R2_ENDPOINT) missingVars.push("R2_ENDPOINT");
+  if (!process.env.R2_PUBLIC_URL) missingVars.push("R2_PUBLIC_URL");
+
+  if (missingVars.length > 0) {
+    return NextResponse.json(
+      { error: `Missing env vars: ${missingVars.join(", ")}` },
+      { status: 500 }
+    );
+  }
+
   const session = await getServerSession(authOptions);
   if (!session) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
+
+  const role = normalizeRole((session.user as any)?.role);
+  console.log("🔍 [UPLOAD] User:", {
+    email: session.user?.email,
+    role,
+  });
 
   try {
     const formData = await req.formData();
     const file = formData.get("file") as File | null;
     const folder = String(formData.get("folder") || "uploads");
     const type = String(formData.get("type") || "image"); // "image" | "document"
+
+    console.log("🔍 [UPLOAD] File:", {
+      name: file?.name,
+      size: file?.size,
+      type: file?.type,
+      folder,
+      uploadType: type,
+    });
 
     if (!file) {
       return NextResponse.json({ error: "No file provided" }, { status: 400 });
@@ -60,7 +106,11 @@ export async function POST(req: NextRequest) {
     const buffer = Buffer.from(arrayBuffer);
     const key = generateKey(folder, file.name);
 
+    console.log("🔍 [UPLOAD] Uploading to R2:", { key });
+
     const result = await uploadFile(buffer, key, file.type);
+
+    console.log("✅ [UPLOAD] Success:", result);
 
     return NextResponse.json({
       ok: true,
@@ -70,9 +120,20 @@ export async function POST(req: NextRequest) {
       contentType: result.contentType,
     });
   } catch (e: any) {
-    console.error("Upload error:", e);
+    console.error("❌ [UPLOAD] Error:", {
+      message: e.message,
+      name: e.name,
+      code: e.Code || e.code,
+      statusCode: e.$metadata?.httpStatusCode,
+      requestId: e.$metadata?.requestId,
+    });
+
     return NextResponse.json(
-      { error: e.message || "Upload failed" },
+      {
+        error: e.message || "Upload failed",
+        code: e.Code || e.code || "unknown",
+        details: e.$metadata || null,
+      },
       { status: 500 }
     );
   }
