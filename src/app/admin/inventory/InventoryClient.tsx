@@ -143,12 +143,17 @@ export default function InventoryClient({
     return out;
   }, [items, q, filter]);
 
+  // ✅ Null-safe stats value
   const stats = {
     total: items.length,
     low: items.filter((i) => getStockStatus(i) === "low").length,
     out: items.filter((i) => getStockStatus(i) === "out").length,
     value: canEdit
-      ? items.reduce((sum, i) => sum + i.stock * i.costPrice, 0)
+      ? items.reduce(
+          (sum, i) =>
+            sum + (Number(i.stock) || 0) * (Number(i.costPrice) || 0),
+          0
+        )
       : 0,
   };
 
@@ -426,13 +431,15 @@ function ItemCard({
         </button>
 
         <div className="mt-2 flex items-baseline justify-between">
+          {/* ✅ Null-safe selling price */}
           <p className="text-lg font-bold text-emerald-600">
-            {item.sellingPrice.toLocaleString()}
+            {Number(item.sellingPrice || 0).toLocaleString()}
             <span className="text-xs text-slate-400 ml-1">ETB</span>
           </p>
           {canEdit && (
             <p className="text-xs text-slate-400">
-              Cost: {item.costPrice.toLocaleString()}
+              {/* ✅ Null-safe cost price */}
+              Cost: {Number(item.costPrice || 0).toLocaleString()}
             </p>
           )}
         </div>
@@ -542,11 +549,13 @@ function ItemTable({
                   </td>
                   {canEdit && (
                     <td className="px-3 py-3 text-right text-slate-700">
-                      {item.costPrice.toFixed(2)}
+                      {/* ✅ Null-safe cost price */}
+                      {Number(item.costPrice || 0).toFixed(2)}
                     </td>
                   )}
                   <td className="px-3 py-3 text-right font-medium text-slate-900">
-                    {item.sellingPrice.toFixed(2)}
+                    {/* ✅ Null-safe selling price */}
+                    {Number(item.sellingPrice || 0).toFixed(2)}
                   </td>
                   {canEdit && (
                     <td className="px-3 py-3 text-right hidden sm:table-cell">
