@@ -1,7 +1,7 @@
 // src/app/admin/inventory/InventoryClient.tsx
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState, useCallback, useRef } from "react";
 import { useRouter } from "next/navigation";
 import { toDriveImageUrl as formatDriveUrl } from "@/lib/drive-url";
 import {
@@ -34,6 +34,13 @@ export default function InventoryClient({
   const [active, setActive] = useState<InventoryItem | null>(null);
   const [detailId, setDetailId] = useState<string | null>(null);
   const [showActivity, setShowActivity] = useState(false);
+  const [error, setError] = useState("");
+  const [refreshing, setRefreshing] = useState(false);
+
+  // ✅ Refs for cleanup
+  const isMountedRef = useRef(true);
+  const abortRef = useRef<AbortController | null>(null);
+  const refreshTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const isOwner = userRole === "owner";
   const canEdit =
@@ -42,14 +49,83 @@ export default function InventoryClient({
       : ["owner", "manager"].includes(userRole);
   const canSell = ["owner", "manager", "employee", "staff"].includes(userRole);
 
-  // ✅ Auto-refresh on window focus (e.g. after POS sale)
+  // ✅ Stable refresh with useCallback
+  const refresh = useCallback(async () => {
+    if (!isMountedRef.current) return;
+    if (refreshing) return;
+
+    // Cancel previous request
+    if (abortRef.current) {
+      abortRef.current.abort();
+    }
+    const controller = new AbortController();
+    abortRef.current = controller;
+
+    setRefreshing(true);
+    setError("");
+
+    try {
+      const res = await fetch("/api/inventory/refresh", {
+        cache: "no-store",
+        signal: controller.signal,
+      });
+
+      // ✅ Handle HTTP errors
+      if (!res.ok) {
+        throw new Error(`HTTP ${res.status}`);
+      }
+
+      const data = await res.json();
+
+      if (!isMountedRef.current) return;
+
+      if (Array.isArray(data.items)) {
+        setItems(data.items.filter((i: any) => i.status !== "Archived"));
+      } else if (data.error) {
+        setError(data.error);
+      }
+    } catch (e: any) {
+      // ✅ Ignore aborts
+      if (e.name === "AbortError") return;
+
+      console.error("Refresh error:", e);
+      if (isMountedRef.current) {
+        setError("Failed to load inventory. Please refresh the page.");
+      }
+    } finally {
+      if (isMountedRef.current) {
+        setRefreshing(false);
+      }
+    }
+  }, [refreshing]);
+
+  // ✅ Debounced focus refresh (max once per 30s)
   useEffect(() => {
+    isMountedRef.current = true;
+
     const handleFocus = () => {
-      refresh();
+      // Debounce — skip if we refreshed recently
+      if (refreshTimerRef.current) return;
+
+      refreshTimerRef.current = setTimeout(() => {
+        refresh();
+        refreshTimerRef.current = null;
+      }, 500); // 500ms debounce
     };
+
     window.addEventListener("focus", handleFocus);
-    return () => window.removeEventListener("focus", handleFocus);
-  }, []);
+
+    return () => {
+      isMountedRef.current = false;
+      window.removeEventListener("focus", handleFocus);
+      if (refreshTimerRef.current) {
+        clearTimeout(refreshTimerRef.current);
+      }
+      if (abortRef.current) {
+        abortRef.current.abort();
+      }
+    };
+  }, [refresh]);
 
   const filtered = useMemo(() => {
     let out = items;
@@ -76,31 +152,37 @@ export default function InventoryClient({
       : 0,
   };
 
-  async function refresh() {
-    try {
-      const res = await fetch("/api/inventory/refresh", { cache: "no-store" });
-      const data = await res.json();
-      if (Array.isArray(data.items)) {
-        setItems(data.items.filter((i: any) => i.status !== "Archived"));
-      }
-    } catch (e) {
-      console.error(e);
-    }
-  }
-
   function handleSell(item: InventoryItem) {
-    // ✅ Navigate to POS with item auto-selected
     router.push(`/admin/sales?item=${encodeURIComponent(item.id)}&open=1`);
   }
 
   return (
     <div className="p-4 sm:p-6 lg:p-10 space-y-6">
+      {/* Error banner */}
+      {error && (
+        <div className="p-3 bg-red-50 border border-red-200 rounded-lg">
+          <p className="text-sm text-red-700">⚠️ {error}</p>
+          <button
+            onClick={() => {
+              setError("");
+              refresh();
+            }}
+            className="mt-2 text-xs text-red-600 underline hover:text-red-800"
+          >
+            Retry
+          </button>
+        </div>
+      )}
+
       {/* Header */}
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
         <div>
-          <h1 className="text-2xl sm:text-3xl font-bold text-slate-900">📦 Inventory</h1>
+          <h1 className="text-2xl sm:text-3xl font-bold text-slate-900">
+            📦 Inventory
+          </h1>
           <p className="text-sm text-slate-500 mt-1">
             {stats.total} items · {stats.low} low · {stats.out} out
+            {refreshing && " · 🔄 refreshing…"}
           </p>
         </div>
         <div className="flex flex-wrap gap-2">
@@ -118,7 +200,10 @@ export default function InventoryClient({
           )}
           {canEdit && (
             <button
-              onClick={() => { setActive(null); setModal("add"); }}
+              onClick={() => {
+                setActive(null);
+                setModal("add");
+              }}
               className="inline-flex items-center gap-2 px-4 py-2.5 bg-orange-500 hover:bg-orange-600 text-white font-semibold rounded-lg shadow-sm"
             >
               + Add Item
@@ -141,7 +226,7 @@ export default function InventoryClient({
         )}
       </div>
 
-      {/* Activity Panel (owner only) */}
+      {/* Activity Panel */}
       {showActivity && isOwner && <ActivityPanel />}
 
       {/* Filter Bar */}
@@ -172,7 +257,9 @@ export default function InventoryClient({
             <button
               onClick={() => setView("cards")}
               className={`px-3 py-1.5 text-sm rounded-md font-medium ${
-                view === "cards" ? "bg-white shadow-sm text-slate-900" : "text-slate-600"
+                view === "cards"
+                  ? "bg-white shadow-sm text-slate-900"
+                  : "text-slate-600"
               }`}
             >
               🎴 Cards
@@ -180,7 +267,9 @@ export default function InventoryClient({
             <button
               onClick={() => setView("table")}
               className={`px-3 py-1.5 text-sm rounded-md font-medium ${
-                view === "table" ? "bg-white shadow-sm text-slate-900" : "text-slate-600"
+                view === "table"
+                  ? "bg-white shadow-sm text-slate-900"
+                  : "text-slate-600"
               }`}
             >
               📋 Table
@@ -205,8 +294,14 @@ export default function InventoryClient({
               canSell={canSell}
               onClick={() => setDetailId(item.id)}
               onSell={() => handleSell(item)}
-              onEdit={() => { setActive(item); setModal("edit"); }}
-              onStockIn={() => { setActive(item); setModal("stock-in"); }}
+              onEdit={() => {
+                setActive(item);
+                setModal("edit");
+              }}
+              onStockIn={() => {
+                setActive(item);
+                setModal("stock-in");
+              }}
             />
           ))}
         </div>
@@ -225,23 +320,40 @@ export default function InventoryClient({
         <ItemFormModal
           mode="add"
           onClose={() => setModal(null)}
-          onSaved={() => { setModal(null); refresh(); }}
+          onSaved={() => {
+            setModal(null);
+            refresh();
+          }}
         />
       )}
       {modal === "edit" && active && (
         <ItemFormModal
           mode="edit"
           item={active}
-          onClose={() => { setModal(null); setActive(null); }}
-          onSaved={() => { setModal(null); setActive(null); refresh(); }}
+          onClose={() => {
+            setModal(null);
+            setActive(null);
+          }}
+          onSaved={() => {
+            setModal(null);
+            setActive(null);
+            refresh();
+          }}
         />
       )}
       {modal === "stock-in" && active && (
         <ItemFormModal
           mode="stock-in"
           item={active}
-          onClose={() => { setModal(null); setActive(null); }}
-          onSaved={() => { setModal(null); setActive(null); refresh(); }}
+          onClose={() => {
+            setModal(null);
+            setActive(null);
+          }}
+          onSaved={() => {
+            setModal(null);
+            setActive(null);
+            refresh();
+          }}
         />
       )}
       {detailId && (
@@ -279,7 +391,6 @@ function ItemCard({
 
   return (
     <div className="bg-white rounded-2xl border border-slate-200 overflow-hidden hover:shadow-lg transition flex flex-col">
-      {/* Image — click to open detail */}
       <button
         onClick={onClick}
         className="relative aspect-square bg-slate-100 overflow-hidden w-full"
@@ -288,7 +399,9 @@ function ItemCard({
           src={formatDriveUrl(item.image)}
           alt={item.name}
           className="w-full h-full object-cover hover:scale-105 transition duration-300"
-          onError={(e) => ((e.target as HTMLImageElement).src = "/placeholder.svg")}
+          onError={(e) =>
+            ((e.target as HTMLImageElement).src = "/placeholder.svg")
+          }
         />
         <span
           className={`absolute top-2 left-2 px-2 py-0.5 rounded-full text-xs font-semibold ${stockBadge.color}`}
@@ -302,10 +415,11 @@ function ItemCard({
         )}
       </button>
 
-      {/* Content */}
       <div className="p-3 flex-1 flex flex-col">
         <button onClick={onClick} className="text-left">
-          <p className="font-semibold text-slate-900 truncate text-sm">{item.name}</p>
+          <p className="font-semibold text-slate-900 truncate text-sm">
+            {item.name}
+          </p>
           <p className="text-xs text-slate-500 truncate">
             {item.code} · {item.category}
           </p>
@@ -323,7 +437,6 @@ function ItemCard({
           )}
         </div>
 
-        {/* Actions */}
         <div className="mt-3 pt-3 border-t border-slate-100 space-y-1">
           {canSell && (
             <button
@@ -410,11 +523,14 @@ function ItemTable({
                         alt={item.name}
                         className="w-10 h-10 rounded-lg object-cover bg-slate-100"
                         onError={(e) =>
-                          ((e.target as HTMLImageElement).src = "/placeholder.svg")
+                          ((e.target as HTMLImageElement).src =
+                            "/placeholder.svg")
                         }
                       />
                       <div>
-                        <p className="font-medium text-slate-900">{item.name}</p>
+                        <p className="font-medium text-slate-900">
+                          {item.name}
+                        </p>
                         <p className="text-xs text-slate-500 md:hidden">
                           {item.code}
                         </p>
@@ -481,7 +597,6 @@ function ItemTable({
   );
 }
 
-// ─── Stat Card ───
 function StatCard({
   label,
   value,
