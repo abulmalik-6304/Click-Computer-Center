@@ -22,38 +22,50 @@ export interface InventoryItem {
 
 export type StockStatus = "in-stock" | "low" | "out";
 
+// ✅ Null-safe stock status
 export function getStockStatus(item: InventoryItem): StockStatus {
-  if (item.stock <= 0) return "out";
-  if (item.stock <= item.reorderLevel) return "low";
+  const stock = Number(item.stock) || 0;
+  const reorder = Number(item.reorderLevel) || 10;
+  if (stock <= 0) return "out";
+  if (stock <= reorder) return "low";
   return "in-stock";
 }
 
+// ✅ Null-safe stock badge
 export function getStockBadge(item: InventoryItem): {
   label: string;
   color: string;
   emoji: string;
 } {
+  const stock = Number(item.stock) || 0;
   const status = getStockStatus(item);
   if (status === "out") {
-    return { label: "Out of stock", color: "bg-red-100 text-red-700", emoji: "🔴" };
+    return {
+      label: "Out of stock",
+      color: "bg-red-100 text-red-700",
+      emoji: "🔴",
+    };
   }
   if (status === "low") {
     return {
-      label: `Only ${item.stock} left`,
+      label: `Only ${stock} left`,
       color: "bg-orange-100 text-orange-700",
       emoji: "🟡",
     };
   }
   return {
-    label: `${item.stock} in stock`,
+    label: `${stock} in stock`,
     color: "bg-emerald-100 text-emerald-700",
     emoji: "🟢",
   };
 }
 
+// ✅ Null-safe profit margin
 export function getProfitMargin(item: InventoryItem): number {
-  if (item.costPrice <= 0) return 0;
-  return Math.round(((item.sellingPrice - item.costPrice) / item.costPrice) * 1000) / 10;
+  const cost = Number(item.costPrice) || 0;
+  const sell = Number(item.sellingPrice) || 0;
+  if (cost <= 0) return 0;
+  return Math.round(((sell - cost) / cost) * 1000) / 10;
 }
 
 export const UNIT_TYPES = [
