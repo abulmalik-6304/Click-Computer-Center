@@ -4,12 +4,15 @@
 import { useState } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
+import { BUSINESS_INFO } from "@/lib/public-constants";
 
 const NAV = [
   { href: "/", label: "Home" },
   { href: "/store", label: "Store" },
-  { href: "/training", label: "Training" },
   { href: "/services", label: "Services" },
+  { href: "/training", label: "Training" },
+  { href: "/about", label: "About" },
+  { href: "/contact", label: "Contact" },
 ];
 
 export default function PublicNav() {
@@ -22,26 +25,32 @@ export default function PublicNav() {
         <div className="flex items-center justify-between h-16">
           {/* Logo */}
           <Link href="/" className="flex items-center gap-2">
-            <div className="w-9 h-9 rounded-lg bg-gradient-to-br from-orange-500 to-orange-700 flex items-center justify-center text-white font-bold">
+            <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-emerald-500 to-emerald-700 flex items-center justify-center text-white font-bold text-lg shadow-md">
               C
             </div>
             <div className="hidden sm:block">
-              <p className="font-bold text-slate-900 leading-tight">Click Computer</p>
-              <p className="text-xs text-slate-500 leading-tight">Enterprise</p>
+              <p className="font-bold text-slate-900 leading-tight">
+                Click Computer
+              </p>
+              <p className="text-xs text-slate-500 leading-tight">
+                Center
+              </p>
             </div>
           </Link>
 
           {/* Desktop nav */}
           <nav className="hidden md:flex items-center gap-1">
             {NAV.map((n) => {
-              const active = pathname === n.href || pathname?.startsWith(n.href + "/");
+              const active =
+                pathname === n.href ||
+                (n.href !== "/" && pathname?.startsWith(n.href + "/"));
               return (
                 <Link
                   key={n.href}
                   href={n.href}
-                  className={`px-4 py-2 rounded-lg text-sm font-medium transition ${
+                  className={`px-3 py-2 rounded-lg text-sm font-medium transition ${
                     active
-                      ? "bg-orange-100 text-orange-700"
+                      ? "bg-emerald-100 text-emerald-700"
                       : "text-slate-700 hover:bg-slate-100"
                   }`}
                 >
@@ -53,12 +62,14 @@ export default function PublicNav() {
 
           {/* Right actions */}
           <div className="flex items-center gap-2">
-            <Link
-              href="/training/register"
-              className="hidden sm:inline-block px-4 py-2 text-sm font-semibold text-white bg-orange-500 hover:bg-orange-600 rounded-lg"
+            <a
+              href={BUSINESS_INFO.whatsappUrl}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="hidden sm:inline-flex items-center gap-1 px-4 py-2 text-sm font-semibold text-white bg-emerald-600 hover:bg-emerald-700 rounded-lg transition"
             >
-              Enroll Now
-            </Link>
+              💬 WhatsApp
+            </a>
             <button
               onClick={() => setOpen((s) => !s)}
               className="md:hidden p-2 text-slate-700 hover:bg-slate-100 rounded-lg"
@@ -81,7 +92,7 @@ export default function PublicNav() {
                   onClick={() => setOpen(false)}
                   className={`block px-4 py-2.5 rounded-lg text-sm font-medium ${
                     active
-                      ? "bg-orange-100 text-orange-700"
+                      ? "bg-emerald-100 text-emerald-700"
                       : "text-slate-700 hover:bg-slate-100"
                   }`}
                 >
@@ -89,13 +100,15 @@ export default function PublicNav() {
                 </Link>
               );
             })}
-            <Link
-              href="/training/register"
+            <a
+              href={BUSINESS_INFO.whatsappUrl}
+              target="_blank"
+              rel="noopener noreferrer"
               onClick={() => setOpen(false)}
-              className="block px-4 py-2.5 rounded-lg text-sm font-semibold text-white bg-orange-500 hover:bg-orange-600 text-center"
+              className="block px-4 py-2.5 rounded-lg text-sm font-semibold text-white bg-emerald-600 hover:bg-emerald-700 text-center"
             >
-              Enroll Now
-            </Link>
+              💬 WhatsApp Us
+            </a>
           </div>
         )}
       </div>
