@@ -4,6 +4,7 @@
 import { useState } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
+import { signOut } from "next-auth/react";
 
 interface Props {
   user: {
@@ -68,54 +69,100 @@ export default function EmployeeSidebar({ user, permissions }: Props) {
 
   const visibleItems = navItems.filter((item) => item.show);
 
+  // ✅ Get initials
+  const initials = user.name
+    .split(" ")
+    .map((p) => p[0])
+    .slice(0, 2)
+    .join("")
+    .toUpperCase();
+
   return (
     <>
       {/* ═══════════════════════════════════════════════════════════════
-          MOBILE TOP BAR — ሁልጊዜ ይታያል (ሞባይል ላይ)
+          MOBILE TOP BAR — ስም እና Logout ይታያሉ
       ═══════════════════════════════════════════════════════════════ */}
-      <header className="lg:hidden fixed top-0 left-0 right-0 z-40 bg-white border-b border-slate-200 h-14 px-4 flex items-center justify-between">
-        <button
-          onClick={() => setMobileOpen(true)}
-          className="p-2 -ml-2 text-slate-700 hover:bg-slate-100 rounded-lg"
-          aria-label="Open menu"
-        >
-          <svg
-            className="w-6 h-6"
-            fill="none"
-            stroke="currentColor"
-            viewBox="0 0 24 24"
+      <header className="lg:hidden fixed top-0 left-0 right-0 z-40 bg-white border-b border-slate-200 h-16 px-3 flex items-center justify-between gap-2 shadow-sm">
+        {/* Left: Hamburger + Logo */}
+        <div className="flex items-center gap-2 flex-shrink-0">
+          <button
+            onClick={() => setMobileOpen(true)}
+            className="p-2 -ml-1 text-slate-700 hover:bg-slate-100 rounded-lg"
+            aria-label="Open menu"
           >
-            <path
-              strokeLinecap="round"
-              strokeLinejoin="round"
-              strokeWidth={2}
-              d="M4 6h16M4 12h16M4 18h16"
-            />
-          </svg>
-        </button>
-
-        <div className="flex items-center gap-2">
-          <span className="text-lg font-bold text-emerald-700">💼 Click CC</span>
+            <svg
+              className="w-6 h-6"
+              fill="none"
+              stroke="currentColor"
+              viewBox="0 0 24 24"
+            >
+              <path
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                strokeWidth={2}
+                d="M4 6h16M4 12h16M4 18h16"
+              />
+            </svg>
+          </button>
+          <span className="text-base font-bold text-emerald-700 whitespace-nowrap">
+            💼 Click CC
+          </span>
         </div>
 
-        <div className="w-10 h-10 rounded-full bg-emerald-100 flex items-center justify-center text-emerald-700 font-bold overflow-hidden">
-          {user.photo ? (
-            <img
-              src={user.photo}
-              alt={user.name}
-              className="w-full h-full object-cover"
-              onError={(e) =>
-                ((e.target as HTMLImageElement).src = "/placeholder.svg")
-              }
-            />
-          ) : (
-            user.name.charAt(0).toUpperCase()
-          )}
+        {/* Right: Name + Avatar + Logout */}
+        <div className="flex items-center gap-1.5 flex-shrink-0">
+          {/* Name (truncated) */}
+          <div className="text-right min-w-0 max-w-[100px]">
+            <p className="text-xs font-semibold text-slate-900 truncate">
+              {user.name.split(" ")[0]}
+            </p>
+            <p className="text-[10px] text-slate-500 capitalize truncate">
+              {user.role}
+            </p>
+          </div>
+
+          {/* Avatar */}
+          <div className="w-8 h-8 rounded-full bg-emerald-100 flex items-center justify-center text-emerald-700 font-bold text-xs overflow-hidden flex-shrink-0">
+            {user.photo ? (
+              <img
+                src={user.photo}
+                alt={user.name}
+                className="w-full h-full object-cover"
+                onError={(e) =>
+                  ((e.target as HTMLImageElement).src = "/placeholder.svg")
+                }
+              />
+            ) : (
+              initials
+            )}
+          </div>
+
+          {/* Logout */}
+          <button
+            onClick={() => signOut({ callbackUrl: "/login" })}
+            className="p-1.5 text-red-600 hover:bg-red-50 rounded-lg flex-shrink-0"
+            aria-label="Logout"
+            title="Logout"
+          >
+            <svg
+              className="w-5 h-5"
+              fill="none"
+              stroke="currentColor"
+              viewBox="0 0 24 24"
+            >
+              <path
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                strokeWidth={2}
+                d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1"
+              />
+            </svg>
+          </button>
         </div>
       </header>
 
       {/* ═══════════════════════════════════════════════════════════════
-          MOBILE BACKDROP — ሲከፈት ጥላ
+          MOBILE BACKDROP
       ═══════════════════════════════════════════════════════════════ */}
       {mobileOpen && (
         <div
@@ -125,7 +172,7 @@ export default function EmployeeSidebar({ user, permissions }: Props) {
       )}
 
       {/* ═══════════════════════════════════════════════════════════════
-          SIDEBAR — Desktop: fixed, Mobile: slide-in
+          SIDEBAR
       ═══════════════════════════════════════════════════════════════ */}
       <aside
         className={`
@@ -143,7 +190,6 @@ export default function EmployeeSidebar({ user, permissions }: Props) {
             <h1 className="font-bold text-emerald-700 text-lg">💼 Click CC</h1>
             <p className="text-xs text-slate-500">Employee Portal</p>
           </div>
-          {/* Mobile close button */}
           <button
             onClick={() => setMobileOpen(false)}
             className="lg:hidden p-1 text-slate-400 hover:text-slate-900 text-xl"
@@ -166,14 +212,16 @@ export default function EmployeeSidebar({ user, permissions }: Props) {
             />
           ) : (
             <div className="w-10 h-10 rounded-full bg-emerald-100 flex items-center justify-center text-emerald-700 font-bold flex-shrink-0">
-              {user.name.charAt(0).toUpperCase()}
+              {initials}
             </div>
           )}
           <div className="flex-1 min-w-0">
             <p className="text-sm font-semibold text-slate-900 truncate">
               {user.name}
             </p>
-            <p className="text-xs text-slate-500 capitalize">{user.role}</p>
+            <p className="text-xs text-slate-500 capitalize truncate">
+              {user.role}
+            </p>
           </div>
         </div>
 
@@ -202,13 +250,12 @@ export default function EmployeeSidebar({ user, permissions }: Props) {
 
         {/* Footer */}
         <div className="p-3 border-t border-slate-200">
-          <Link
-            href="/api/auth/signout"
-            onClick={() => setMobileOpen(false)}
-            className="flex items-center gap-2 px-3 py-2 rounded-lg text-sm text-red-600 hover:bg-red-50"
+          <button
+            onClick={() => signOut({ callbackUrl: "/login" })}
+            className="w-full flex items-center gap-2 px-3 py-2 rounded-lg text-sm text-red-600 hover:bg-red-50"
           >
             🚪 Logout
-          </Link>
+          </button>
         </div>
       </aside>
     </>
