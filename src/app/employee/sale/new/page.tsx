@@ -89,19 +89,19 @@ export default async function NewSalePage() {
       />
       <main className="lg:pl-64 pt-14 lg:pt-0">
         <div className="p-4 sm:p-6 lg:p-8 max-w-5xl mx-auto space-y-4 sm:space-y-6">
-          {/* Header */}
-          <div className="flex items-center justify-between">
-            <div>
-              <h1 className="text-2xl sm:text-3xl font-bold text-slate-900">
+          {/* ✅ Header — responsive with truncation */}
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <div className="min-w-0 flex-1">
+              <h1 className="text-2xl sm:text-3xl font-bold text-slate-900 truncate">
                 🛒 New Sale
               </h1>
-              <p className="text-sm text-slate-500 mt-1">
+              <p className="text-sm text-slate-500 mt-1 truncate">
                 ሽያጭ ይመዝግቡ — ቀላል እና ፈጣን
               </p>
             </div>
             <a
               href="/employee/dashboard"
-              className="text-sm text-slate-600 hover:text-slate-900"
+              className="text-sm text-slate-600 hover:text-slate-900 whitespace-nowrap"
             >
               ← Back
             </a>
