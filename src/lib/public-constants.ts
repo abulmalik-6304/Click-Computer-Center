@@ -21,6 +21,13 @@ export const BUSINESS_INFO = {
   country: "Ethiopia",
   workingHours: "Monday – Sunday: 1:30 – 12:00",
   mapUrl: "https://maps.google.com/?q=Chagni,Ethiopia",
+
+  // Payment accounts
+  payment: {
+    telebirr: "0923236304",
+    cbe: "1000174622087",
+    dashen: "5190002922001",
+  },
 } as const;
 
 // ═══════════════════════════════════════════════════════════════
@@ -158,17 +165,6 @@ export const HOMEPAGE_STATS = [
   { label: "Students Trained", value: "300+", icon: "🎓" },
   { label: "Years Experience", value: "5+", icon: "⭐" },
 ];
-
-// ═══════════════════════════════════════════════════════════════
-// 🎨 BRAND COLORS (የ logo ቀለም)
-// ═══════════════════════════════════════════════════════════════
-export const BRAND_COLORS = {
-  primary: "#10b981", // emerald-500
-  primaryDark: "#059669", // emerald-600
-  accent: "#f97316", // orange-500
-  dark: "#0f172a", // slate-900
-  gradient: "from-slate-900 via-emerald-900 to-slate-900",
-} as const;
 
 export type TrainingCourse = (typeof TRAINING_COURSES)[number];
 export type ServiceItem = (typeof SERVICES)[number];
