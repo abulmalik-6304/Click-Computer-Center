@@ -47,7 +47,7 @@ export default async function NewSalePage() {
   // 🚫 Block if no permission
   if (!permissions.canRegisterSale) {
     return (
-      <div className="flex h-screen bg-slate-50">
+      <div className="min-h-screen bg-slate-50">
         <EmployeeSidebar
           user={{ name, email, role, photo }}
           permissions={{
@@ -58,15 +58,17 @@ export default async function NewSalePage() {
             canCreateAnnouncements: permissions.canCreateAnnouncements,
           }}
         />
-        <main className="flex-1 flex items-center justify-center p-6">
-          <div className="bg-red-50 border border-red-200 rounded-2xl p-8 max-w-md text-center">
-            <p className="text-4xl mb-3">🚫</p>
-            <h1 className="text-xl font-bold text-red-900 mb-2">
-              Access Denied
-            </h1>
-            <p className="text-sm text-red-700">
-              You don't have permission to register sales.
-            </p>
+        <main className="lg:pl-64 pt-14 lg:pt-0">
+          <div className="flex items-center justify-center p-6 min-h-[calc(100vh-3.5rem)] lg:min-h-screen">
+            <div className="bg-red-50 border border-red-200 rounded-2xl p-8 max-w-md text-center">
+              <p className="text-4xl mb-3">🚫</p>
+              <h1 className="text-xl font-bold text-red-900 mb-2">
+                Access Denied
+              </h1>
+              <p className="text-sm text-red-700">
+                You don't have permission to register sales.
+              </p>
+            </div>
           </div>
         </main>
       </div>
@@ -74,7 +76,7 @@ export default async function NewSalePage() {
   }
 
   return (
-    <div className="flex h-screen bg-slate-50">
+    <div className="min-h-screen bg-slate-50">
       <EmployeeSidebar
         user={{ name, email, role, photo }}
         permissions={{
@@ -85,8 +87,9 @@ export default async function NewSalePage() {
           canCreateAnnouncements: permissions.canCreateAnnouncements,
         }}
       />
-      <main className="flex-1 overflow-y-auto p-6">
-        <div className="max-w-5xl mx-auto space-y-6">
+      <main className="lg:pl-64 pt-14 lg:pt-0">
+        <div className="p-4 sm:p-6 lg:p-8 max-w-5xl mx-auto space-y-4 sm:space-y-6">
+          {/* Header */}
           <div className="flex items-center justify-between">
             <div>
               <h1 className="text-2xl sm:text-3xl font-bold text-slate-900">
