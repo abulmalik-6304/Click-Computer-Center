@@ -1,19 +1,34 @@
-export default function StorePage() {
+// src/app/store/page.tsx
+import PublicNav from "@/components/public/PublicNav";
+import PublicFooter from "@/components/public/PublicFooter";
+import StoreClient from "./StoreClient";
+
+export const revalidate = 60;
+
+async function getProducts() {
+  try {
+    const baseUrl = process.env.NEXTAUTH_URL || "http://localhost:3000";
+    const res = await fetch(`${baseUrl}/api/public/products?limit=100`, {
+      next: { revalidate: 60 },
+    });
+    if (!res.ok) return { products: [], categories: [] };
+    return await res.json();
+  } catch {
+    return { products: [], categories: [] };
+  }
+}
+
+export default async function StorePage() {
+  const data = await getProducts();
+
   return (
-    <div className="max-w-7xl mx-auto px-4 py-16">
-      <h1 className="text-4xl font-bold text-slate-900">Store</h1>
-      <p className="mt-3 text-slate-600">Browse our collection.</p>
-      <div className="mt-8 grid sm:grid-cols-2 lg:grid-cols-4 gap-6">
-        {[1, 2, 3, 4].map((i) => (
-          <div key={i} className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
-            <div className="aspect-square bg-slate-100" />
-            <div className="p-4">
-              <h2 className="font-bold text-slate-900">Product {i}</h2>
-              <p className="text-sm text-slate-500 mt-1">Coming soon</p>
-            </div>
-          </div>
-        ))}
-      </div>
-    </div>
+    <>
+      <PublicNav />
+      <StoreClient
+        initialProducts={data.products || []}
+        categories={data.categories || []}
+      />
+      <PublicFooter />
+    </>
   );
 }
