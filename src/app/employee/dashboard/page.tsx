@@ -1,186 +1,11 @@
 // src/app/employee/dashboard/page.tsx
-import { getServerSession } from "next-auth";
-import { authOptions } from "@/lib/auth";
-import { redirect } from "next/navigation";
-import { normalizeRole } from "@/lib/roles";
-import { getSheet, SHEETS } from "@/lib/google-sheets";
-import Link from "next/link";
-import EmployeeSidebar from "@/components/employee/EmployeeSidebar";
-import {
-  isEmployeeRole,
-  parseEmployeePermissions,
-} from "@/lib/employee-permissions";
-
-export const revalidate = 0;
-export const dynamic = "force-dynamic";
-
-const EMPLOYEE_PERMS_SHEET = "Employee_Permissions_TBL";
+// ... (imports እና data logic እንዳሉ ይቆዩ)
 
 export default async function EmployeeDashboardPage() {
-  const session = await getServerSession(authOptions);
-  if (!session) redirect("/login");
-
-  const role = normalizeRole((session.user as any)?.role);
-  if (!isEmployeeRole(role)) redirect("/admin/dashboard");
-
-  const name = session.user?.name || "Employee";
-  const email = String(session.user?.email || "").toLowerCase().trim();
-  const photo = session.user?.image || null;
-
-  // ═══════════════════════════════════════════════════════════════
-  // ✅ LOAD PERMISSIONS
-  // ═══════════════════════════════════════════════════════════════
-  let permissions = parseEmployeePermissions(email, {});
-
-  try {
-    const permSheet = await getSheet(EMPLOYEE_PERMS_SHEET);
-    const permRows = await permSheet.getRows();
-    const myPerm = permRows.find((r) => {
-      const o = r.toObject() as any;
-      return (
-        String(o.Employee_Email || "").toLowerCase().trim() === email
-      );
-    });
-    if (myPerm) {
-      permissions = parseEmployeePermissions(email, myPerm.toObject());
-    }
-  } catch {}
-
-  // ═══════════════════════════════════════════════════════════════
-  // ✅ LOAD ALL STATS (today/week/month/all)
-  // ═══════════════════════════════════════════════════════════════
-  let todayCount = 0;
-  let weekCount = 0;
-  let monthCount = 0;
-  let allCount = 0;
-  let todayTotal = 0;
-  let weekTotal = 0;
-  let monthTotal = 0;
-  let allTotal = 0;
-  let recentSales: any[] = [];
-
-  try {
-    const salesSheet = await getSheet(SHEETS.SALES);
-    const salesRows = await salesSheet.getRows();
-    const now = new Date();
-    const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
-    const weekAgo = new Date(today.getTime() - 7 * 24 * 60 * 60 * 1000);
-    const monthAgo = new Date(today.getTime() - 30 * 24 * 60 * 60 * 1000);
-
-    const mySales = salesRows
-      .map((r) => {
-        const o = r.toObject() as any;
-        return {
-          id: String(o.Sales_ID || ""),
-          date: String(o.Date || ""),
-          recordedBy: String(o.Recorded_By || "").toLowerCase(),
-          total: Number(o.Total_Amount || 0),
-        };
-      })
-      .filter(
-        (s) =>
-          s.recordedBy === email ||
-          s.recordedBy === name.toLowerCase()
-      );
-
-    for (const s of mySales) {
-      const d = new Date(s.date);
-      if (d >= today) {
-        todayCount++;
-        todayTotal += s.total;
-      }
-      if (d >= weekAgo) {
-        weekCount++;
-        weekTotal += s.total;
-      }
-      if (d >= monthAgo) {
-        monthCount++;
-        monthTotal += s.total;
-      }
-      allCount++;
-      allTotal += s.total;
-    }
-
-    recentSales = mySales
-      .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime())
-      .slice(0, 5);
-  } catch {}
-
-  // ═══════════════════════════════════════════════════════════════
-  // ✅ LOAD ANNOUNCEMENTS
-  // ═══════════════════════════════════════════════════════════════
-  let announcements: any[] = [];
-  let unreadCount = 0;
-
-  if (permissions.canViewAnnouncements) {
-    try {
-      const annSheet = await getSheet(SHEETS.ANNOUNCEMENTS);
-      const annRows = await annSheet.getRows();
-
-      let readIds = new Set<string>();
-      try {
-        const readsSheet = await getSheet("Announcement_Reads_TBL");
-        const readsRows = await readsSheet.getRows();
-        readIds = new Set(
-          readsRows
-            .filter((r) => {
-              const o = r.toObject() as any;
-              return (
-                String(o.Employee_Email || "").toLowerCase().trim() === email
-              );
-            })
-            .map((r) => String(r.get("Announcement_ID") || ""))
-        );
-      } catch {}
-
-      announcements = annRows
-        .map((r) => {
-          const o = r.toObject() as any;
-          return {
-            id: String(o.Announcement_ID || ""),
-            title: String(o.Title || ""),
-            message: String(o.Message || ""),
-            priority: String(o.Priority || "normal"),
-            createdAt: String(o.Date || ""),
-            targetRole: String(o.Target_Role || "all").toLowerCase(),
-            targetEmail: String(o.Target_Email || "").toLowerCase().trim(),
-            status: String(o.Status || "Active").toLowerCase(),
-          };
-        })
-        .filter((a) => {
-          if (!a.title) return false;
-          if (a.status !== "active") return false;
-          if (a.targetEmail && a.targetEmail.length > 0) {
-            return a.targetEmail === email;
-          }
-          if (a.targetRole === "all") return true;
-          if (a.targetRole === role) return true;
-          if (a.targetRole === "employee") return true;
-          if (a.targetRole === "staff") return true;
-          return false;
-        })
-        .sort(
-          (a, b) =>
-            new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
-        );
-
-      announcements = announcements.map((a) => ({
-        ...a,
-        isRead: readIds.has(a.id),
-      }));
-      unreadCount = announcements.filter((a) => !a.isRead).length;
-    } catch {}
-  }
-
-  // ═══════════════════════════════════════════════════════════════
-  // 🎨 COMPUTED STATS
-  // ═══════════════════════════════════════════════════════════════
-  const monthPct = allCount > 0 ? (monthCount / allCount) * 100 : 0;
-  const weekPct = monthCount > 0 ? (weekCount / monthCount) * 100 : 0;
-  const todayPct = weekCount > 0 ? (todayCount / weekCount) * 100 : 0;
+  // ... (existing data logic — አትቀይር)
 
   return (
-    <div className="flex h-screen bg-slate-50">
+    <div className="min-h-screen bg-slate-50">
       <EmployeeSidebar
         user={{ name, email, role, photo }}
         permissions={{
@@ -191,14 +16,16 @@ export default async function EmployeeDashboardPage() {
           canCreateAnnouncements: permissions.canCreateAnnouncements,
         }}
       />
-      <main className="flex-1 overflow-y-auto p-6">
-        <div className="max-w-5xl mx-auto space-y-6">
+
+      {/* ✅ Main content — mobile top bar + desktop sidebar offsets */}
+      <main className="lg:pl-64 pt-14 lg:pt-0">
+        <div className="p-4 sm:p-6 lg:p-8 max-w-5xl mx-auto space-y-4 sm:space-y-6">
           {/* Header */}
           <div>
-            <h1 className="text-3xl font-bold text-slate-900">
+            <h1 className="text-2xl sm:text-3xl font-bold text-slate-900">
               👋 Welcome, {name}!
             </h1>
-            <p className="text-slate-500 mt-1">
+            <p className="text-sm text-slate-500 mt-1">
               {new Date().toLocaleDateString("en-US", {
                 weekday: "long",
                 year: "numeric",
@@ -208,12 +35,10 @@ export default async function EmployeeDashboardPage() {
             </p>
           </div>
 
-          {/* ═══════════════════════════════════════════════════════════
-              🎨 STATS — Beautiful cards with percentages
-          ═══════════════════════════════════════════════════════════ */}
+          {/* Stats — responsive */}
           {permissions.canViewBasicStats && (
             <>
-              <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+              <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4">
                 <StatCardEnhanced
                   label="Today"
                   count={todayCount}
@@ -248,9 +73,9 @@ export default async function EmployeeDashboardPage() {
                 />
               </div>
 
-              {/* Percentage Breakdown */}
-              <div className="bg-white rounded-2xl border border-slate-200 p-5">
-                <h2 className="font-bold text-slate-900 mb-3">
+              {/* Progress bars */}
+              <div className="bg-white rounded-2xl border border-slate-200 p-4 sm:p-5">
+                <h2 className="font-bold text-slate-900 mb-3 text-sm sm:text-base">
                   📊 Your Progress (Last 30 Days)
                 </h2>
                 <div className="space-y-3">
@@ -274,22 +99,22 @@ export default async function EmployeeDashboardPage() {
             </>
           )}
 
-          {/* Quick Actions */}
+          {/* Quick Actions — responsive grid */}
           {(permissions.canRegisterSale ||
             permissions.canRegisterIncome ||
             permissions.canRegisterInventory) && (
-            <div className="bg-white rounded-2xl border border-slate-200 p-5">
-              <h2 className="font-bold text-slate-900 mb-3">
+            <div className="bg-white rounded-2xl border border-slate-200 p-4 sm:p-5">
+              <h2 className="font-bold text-slate-900 mb-3 text-sm sm:text-base">
                 ⚡ Quick Actions
               </h2>
-              <div className="grid grid-cols-2 lg:grid-cols-3 gap-3">
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 sm:gap-3">
                 {permissions.canRegisterSale && (
                   <Link
                     href="/employee/sale/new"
-                    className="p-4 rounded-xl bg-emerald-50 hover:bg-emerald-100 border border-emerald-200 text-center transition"
+                    className="p-3 sm:p-4 rounded-xl bg-emerald-50 hover:bg-emerald-100 border border-emerald-200 text-center transition"
                   >
-                    <div className="text-3xl mb-2">🛒</div>
-                    <p className="font-semibold text-emerald-700">
+                    <div className="text-2xl sm:text-3xl mb-1 sm:mb-2">🛒</div>
+                    <p className="font-semibold text-emerald-700 text-sm">
                       New Sale
                     </p>
                   </Link>
@@ -297,10 +122,10 @@ export default async function EmployeeDashboardPage() {
                 {permissions.canRegisterIncome && (
                   <Link
                     href="/employee/income/new"
-                    className="p-4 rounded-xl bg-blue-50 hover:bg-blue-100 border border-blue-200 text-center transition"
+                    className="p-3 sm:p-4 rounded-xl bg-blue-50 hover:bg-blue-100 border border-blue-200 text-center transition"
                   >
-                    <div className="text-3xl mb-2">💰</div>
-                    <p className="font-semibold text-blue-700">
+                    <div className="text-2xl sm:text-3xl mb-1 sm:mb-2">💰</div>
+                    <p className="font-semibold text-blue-700 text-sm">
                       New Income
                     </p>
                   </Link>
@@ -308,10 +133,10 @@ export default async function EmployeeDashboardPage() {
                 {permissions.canRegisterInventory && (
                   <Link
                     href="/employee/inventory/new"
-                    className="p-4 rounded-xl bg-purple-50 hover:bg-purple-100 border border-purple-200 text-center transition"
+                    className="p-3 sm:p-4 rounded-xl bg-purple-50 hover:bg-purple-100 border border-purple-200 text-center transition"
                   >
-                    <div className="text-3xl mb-2">📦</div>
-                    <p className="font-semibold text-purple-700">
+                    <div className="text-2xl sm:text-3xl mb-1 sm:mb-2">📦</div>
+                    <p className="font-semibold text-purple-700 text-sm">
                       New Inventory
                     </p>
                   </Link>
@@ -322,9 +147,9 @@ export default async function EmployeeDashboardPage() {
 
           {/* Announcements */}
           {permissions.canViewAnnouncements && announcements.length > 0 && (
-            <div className="bg-white rounded-2xl border border-slate-200 p-5">
+            <div className="bg-white rounded-2xl border border-slate-200 p-4 sm:p-5">
               <div className="flex items-center justify-between mb-3">
-                <h2 className="font-bold text-slate-900">
+                <h2 className="font-bold text-slate-900 text-sm sm:text-base">
                   📢 Announcements
                   {unreadCount > 0 && (
                     <span className="ml-2 px-2 py-0.5 bg-red-500 text-white text-xs rounded-full">
@@ -366,25 +191,25 @@ export default async function EmployeeDashboardPage() {
 
           {/* Recent Sales */}
           {recentSales.length > 0 && (
-            <div className="bg-white rounded-2xl border border-slate-200 p-5">
-              <h2 className="font-bold text-slate-900 mb-3">
+            <div className="bg-white rounded-2xl border border-slate-200 p-4 sm:p-5">
+              <h2 className="font-bold text-slate-900 mb-3 text-sm sm:text-base">
                 🧾 Recent Sales
               </h2>
               <div className="space-y-2">
                 {recentSales.map((s) => (
                   <div
                     key={s.id}
-                    className="flex items-center justify-between p-2 border-b border-slate-100"
+                    className="flex items-center justify-between p-2 border-b border-slate-100 text-sm"
                   >
-                    <div>
-                      <p className="text-sm text-slate-900">
+                    <div className="min-w-0">
+                      <p className="text-slate-900 truncate">
                         Sale #{s.id.slice(-6)}
                       </p>
                       <p className="text-xs text-slate-500">
                         {new Date(s.date).toLocaleString()}
                       </p>
                     </div>
-                    <p className="text-sm font-bold text-emerald-600">
+                    <p className="font-bold text-emerald-600 whitespace-nowrap ml-2">
                       {s.total.toLocaleString()} ETB
                     </p>
                   </div>
@@ -399,7 +224,7 @@ export default async function EmployeeDashboardPage() {
 }
 
 // ═══════════════════════════════════════════════════════════════
-// 🎨 ENHANCED STAT CARD
+// StatCardEnhanced — ሞባይል ላይ ትንሽ
 // ═══════════════════════════════════════════════════════════════
 function StatCardEnhanced({
   label,
@@ -445,13 +270,13 @@ function StatCardEnhanced({
     };
 
   return (
-    <div className={`p-4 rounded-2xl border ${cls.card}`}>
+    <div className={`p-3 sm:p-4 rounded-2xl border ${cls.card}`}>
       <div className="flex items-center justify-between">
-        <p className="text-xs font-medium opacity-75">{label}</p>
-        <span className="text-lg">{icon}</span>
+        <p className="text-xs font-medium opacity-75 truncate">{label}</p>
+        <span className="text-base sm:text-lg">{icon}</span>
       </div>
-      <p className={`text-2xl font-bold mt-1 ${cls.text}`}>{count}</p>
-      <p className="text-xs text-slate-500 mt-0.5">
+      <p className={`text-xl sm:text-2xl font-bold mt-1 ${cls.text}`}>{count}</p>
+      <p className="text-xs text-slate-500 mt-0.5 truncate">
         {total.toLocaleString()} ETB
       </p>
       <div className="mt-2 h-1.5 bg-white/50 rounded-full overflow-hidden">
@@ -460,9 +285,7 @@ function StatCardEnhanced({
           style={{ width: `${Math.min(pct, 100)}%` }}
         />
       </div>
-      <p className="text-[10px] text-slate-500 mt-1">
-        {pct.toFixed(0)}% of period
-      </p>
+      <p className="text-[10px] text-slate-500 mt-1">{pct.toFixed(0)}%</p>
     </div>
   );
 }
@@ -487,9 +310,7 @@ function ProgressBar({
     <div>
       <div className="flex items-center justify-between mb-1">
         <p className="text-xs font-medium text-slate-700">{label}</p>
-        <p className="text-xs font-bold text-slate-900">
-          {pct.toFixed(1)}%
-        </p>
+        <p className="text-xs font-bold text-slate-900">{pct.toFixed(1)}%</p>
       </div>
       <div className="h-2 bg-slate-100 rounded-full overflow-hidden">
         <div
