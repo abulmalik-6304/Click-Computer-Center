@@ -128,11 +128,12 @@ export default function DocumentUploadForm({ onClose, onSaved }: Props) {
             value={fileUrl}
             onChange={(url) => {
               setFileUrl(url);
-              // Extract key + type from URL
               if (url) {
                 const parts = url.split("/");
                 setFileKey(parts.slice(-2).join("/"));
-                setFileType(url.toLowerCase().endsWith(".pdf") ? "pdf" : "image");
+                setFileType(
+                  url.toLowerCase().endsWith(".pdf") ? "pdf" : "image"
+                );
                 setFileSize(0);
               }
             }}
@@ -190,4 +191,37 @@ export default function DocumentUploadForm({ onClose, onSaved }: Props) {
             <input
               type="text"
               value={tags}
-              onChange={(e) => setTags(e.target.value
+              onChange={(e) => setTags(e.target.value)}
+              placeholder="e.g. 2024, renewal, important"
+              className="w-full rounded-lg border border-slate-300 px-3 py-2.5 text-sm"
+            />
+          </div>
+
+          {error && (
+            <div className="p-3 bg-red-50 border border-red-200 rounded-lg">
+              <p className="text-sm text-red-700">❌ {error}</p>
+            </div>
+          )}
+        </div>
+
+        {/* Footer */}
+        <div className="sticky bottom-0 bg-white border-t border-slate-200 px-5 py-3 flex gap-2">
+          <button
+            type="button"
+            onClick={onClose}
+            className="flex-1 py-2.5 rounded-lg border border-slate-300 text-slate-700 font-medium"
+          >
+            Cancel
+          </button>
+          <button
+            type="submit"
+            disabled={saving || !fileUrl}
+            className="flex-1 py-2.5 rounded-lg bg-orange-500 hover:bg-orange-600 text-white font-semibold disabled:opacity-50"
+          >
+            {saving ? "Saving…" : "Upload"}
+          </button>
+        </div>
+      </form>
+    </div>
+  );
+}
