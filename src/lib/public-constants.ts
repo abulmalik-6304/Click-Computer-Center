@@ -1,14 +1,37 @@
 // src/lib/public-constants.ts
-// ═══════════════════════════════════════════════════════════════
-// 📦 STATIC PUBLIC DATA — safe for client + server components
-// ⚠️  NO imports from google-sheets, auth, or server-only modules
-// ═══════════════════════════════════════════════════════════════
 
+// ═══════════════════════════════════════════════════════════════
+// 🏢 BUSINESS INFO
+// ═══════════════════════════════════════════════════════════════
+export const BUSINESS_INFO = {
+  name: "Click Computer Center",
+  shortName: "Click CC",
+  tagline: "Your trusted tech partner in Chagni",
+  description:
+    "Ethiopia's trusted tech partner for computers, training, and repairs. Located in Chagni, 01 Kebele.",
+  phones: ["+2519 23 23 63 04", "+2519 69 04 75 88"],
+  phone1: "+2519 23 23 63 04",
+  phone2: "+2519 69 04 75 88",
+  whatsapp: "+251 92 323 6304",
+  whatsappUrl: "https://wa.me/251923236304",
+  telegram: "https://t.me/rizqmarket1",
+  email: "clickcomputercenter230@gmail.com",
+  address: "Chagni, 01 Kebele",
+  city: "Chagni",
+  country: "Ethiopia",
+  workingHours: "Monday – Sunday: 1:30 – 12:00",
+  mapUrl: "https://maps.google.com/?q=Chagni,Ethiopia",
+} as const;
+
+// ═══════════════════════════════════════════════════════════════
+// 🎓 TRAINING COURSES
+// ═══════════════════════════════════════════════════════════════
 export const TRAINING_COURSES = [
   {
     id: "web-dev",
     title: "Full-Stack Web Development",
-    description: "HTML, CSS, JavaScript, React, Node.js, MongoDB. Build real projects.",
+    description:
+      "HTML, CSS, JavaScript, React, Node.js, MongoDB. Build real projects.",
     duration: "12 weeks",
     fee: 8500,
     level: "Beginner → Advanced",
@@ -18,7 +41,8 @@ export const TRAINING_COURSES = [
   {
     id: "ccna",
     title: "Networking (CCNA Prep)",
-    description: "Routing, switching, network security. Cisco certified path.",
+    description:
+      "Routing, switching, network security. Cisco certified path.",
     duration: "10 weeks",
     fee: 7000,
     level: "Intermediate",
@@ -28,7 +52,8 @@ export const TRAINING_COURSES = [
   {
     id: "office",
     title: "MS Office & Digital Literacy",
-    description: "Word, Excel, PowerPoint, internet skills for the workplace.",
+    description:
+      "Word, Excel, PowerPoint, internet skills for the workplace.",
     duration: "6 weeks",
     fee: 3500,
     level: "Beginner",
@@ -38,7 +63,8 @@ export const TRAINING_COURSES = [
   {
     id: "graphic",
     title: "Graphic Design Essentials",
-    description: "Photoshop, Illustrator, branding, social media design.",
+    description:
+      "Photoshop, Illustrator, branding, social media design.",
     duration: "8 weeks",
     fee: 6000,
     level: "Beginner → Intermediate",
@@ -48,7 +74,8 @@ export const TRAINING_COURSES = [
   {
     id: "mobile",
     title: "Mobile App Development",
-    description: "React Native, Flutter. Build iOS & Android apps from scratch.",
+    description:
+      "React Native, Flutter. Build iOS & Android apps from scratch.",
     duration: "10 weeks",
     fee: 7500,
     level: "Intermediate",
@@ -58,7 +85,8 @@ export const TRAINING_COURSES = [
   {
     id: "data",
     title: "Data Analysis & Excel",
-    description: "Advanced Excel, SQL, Power BI. Turn data into insights.",
+    description:
+      "Advanced Excel, SQL, Power BI. Turn data into insights.",
     duration: "8 weeks",
     fee: 6500,
     level: "Beginner → Intermediate",
@@ -67,6 +95,9 @@ export const TRAINING_COURSES = [
   },
 ];
 
+// ═══════════════════════════════════════════════════════════════
+// 🔧 SERVICES
+// ═══════════════════════════════════════════════════════════════
 export const SERVICES = [
   {
     id: "hardware",
@@ -117,6 +148,27 @@ export const SERVICES = [
     startingPrice: 5000,
   },
 ];
+
+// ═══════════════════════════════════════════════════════════════
+// 📊 HOMEPAGE STATS
+// ═══════════════════════════════════════════════════════════════
+export const HOMEPAGE_STATS = [
+  { label: "Happy Customers", value: "500+", icon: "😊" },
+  { label: "Devices Repaired", value: "1,200+", icon: "🔧" },
+  { label: "Students Trained", value: "300+", icon: "🎓" },
+  { label: "Years Experience", value: "5+", icon: "⭐" },
+];
+
+// ═══════════════════════════════════════════════════════════════
+// 🎨 BRAND COLORS (የ logo ቀለም)
+// ═══════════════════════════════════════════════════════════════
+export const BRAND_COLORS = {
+  primary: "#10b981", // emerald-500
+  primaryDark: "#059669", // emerald-600
+  accent: "#f97316", // orange-500
+  dark: "#0f172a", // slate-900
+  gradient: "from-slate-900 via-emerald-900 to-slate-900",
+} as const;
 
 export type TrainingCourse = (typeof TRAINING_COURSES)[number];
 export type ServiceItem = (typeof SERVICES)[number];
