@@ -176,7 +176,7 @@ export default function QuickSaleForm() {
         customerPhone,
         paymentMethod,
         discount: 0,
-        paidAmount: total,     // ✅ fully paid
+        paidAmount: total, // ✅ fully paid
         saleStatus: "Completed",
         items: cart.map((c) => ({
           itemId: c.itemId,
@@ -198,9 +198,7 @@ export default function QuickSaleForm() {
         return;
       }
 
-      setSuccess(
-        `✅ ሽያጭ ተመዝግቧል! Sale #${data.salesId || ""}`
-      );
+      setSuccess(`✅ ሽያጭ ተመዝግቧል! Sale #${data.salesId || ""}`);
 
       // Reset form
       setCart([]);
@@ -220,9 +218,10 @@ export default function QuickSaleForm() {
   }
 
   return (
-    <div className="grid lg:grid-cols-3 gap-4">
-      {/* Left — Item picker */}
-      <div className="lg:col-span-2 space-y-4">
+    <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
+      {/* ✅ Cart FIRST on mobile (order-1), item picker SECOND (order-2) */}
+      {/* ✅ On desktop: item picker LEFT (order-1, col-span-2), cart RIGHT (order-2) */}
+      <div className="order-2 lg:order-1 lg:col-span-2 space-y-4">
         <div className="bg-white rounded-2xl border border-slate-200 p-4">
           <input
             type="text"
@@ -237,9 +236,7 @@ export default function QuickSaleForm() {
           {loading ? (
             <p className="text-center py-8 text-slate-500">⏳ Loading…</p>
           ) : filtered.length === 0 ? (
-            <p className="text-center py-8 text-slate-500">
-              No items found
-            </p>
+            <p className="text-center py-8 text-slate-500">No items found</p>
           ) : (
             <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
               {filtered.map((item) => (
@@ -257,9 +254,7 @@ export default function QuickSaleForm() {
                   <p className="text-sm font-bold text-emerald-600 mt-1">
                     {fmt(item.sellingPrice || item.price)} ETB
                   </p>
-                  <p className="text-xs text-slate-500">
-                    Stock: {item.stock}
-                  </p>
+                  <p className="text-xs text-slate-500">Stock: {item.stock}</p>
                 </button>
               ))}
             </div>
@@ -267,11 +262,11 @@ export default function QuickSaleForm() {
         </div>
       </div>
 
-      {/* Right — Cart */}
-      <div className="space-y-4">
+      {/* Cart — order-1 on mobile (FIRST), order-2 on desktop (RIGHT) */}
+      <div className="order-1 lg:order-2 space-y-4">
         <form
           onSubmit={submit}
-          className="bg-white rounded-2xl border border-slate-200 p-4 space-y-3 sticky top-4"
+          className="bg-white rounded-2xl border border-slate-200 p-4 space-y-3 lg:sticky lg:top-4"
         >
           <h2 className="font-bold text-slate-900">🛒 Cart ({cart.length})</h2>
 
