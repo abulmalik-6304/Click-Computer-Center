@@ -20,12 +20,12 @@ export default async function EmployeeDashboardPage() {
       {/* ✅ Main content — mobile top bar + desktop sidebar offsets */}
       <main className="lg:pl-64 pt-14 lg:pt-0">
         <div className="p-4 sm:p-6 lg:p-8 max-w-5xl mx-auto space-y-4 sm:space-y-6">
-          {/* ✅ Header — min-w-0 for truncation */}
+          {/* ✅ Header — break-words for long names */}
           <div className="min-w-0">
-            <h1 className="text-2xl sm:text-3xl font-bold text-slate-900 truncate">
+            <h1 className="text-xl sm:text-2xl lg:text-3xl font-bold text-slate-900 break-words leading-tight">
               👋 Welcome, {name}!
             </h1>
-            <p className="text-sm text-slate-500 mt-1">
+            <p className="text-xs sm:text-sm text-slate-500 mt-1 break-words">
               {new Date().toLocaleDateString("en-US", {
                 weekday: "long",
                 year: "numeric",
