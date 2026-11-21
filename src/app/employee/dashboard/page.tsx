@@ -20,9 +20,9 @@ export default async function EmployeeDashboardPage() {
       {/* ✅ Main content — mobile top bar + desktop sidebar offsets */}
       <main className="lg:pl-64 pt-14 lg:pt-0">
         <div className="p-4 sm:p-6 lg:p-8 max-w-5xl mx-auto space-y-4 sm:space-y-6">
-          {/* Header */}
-          <div>
-            <h1 className="text-2xl sm:text-3xl font-bold text-slate-900">
+          {/* ✅ Header — min-w-0 for truncation */}
+          <div className="min-w-0">
+            <h1 className="text-2xl sm:text-3xl font-bold text-slate-900 truncate">
               👋 Welcome, {name}!
             </h1>
             <p className="text-sm text-slate-500 mt-1">
@@ -148,7 +148,7 @@ export default async function EmployeeDashboardPage() {
           {/* Announcements */}
           {permissions.canViewAnnouncements && announcements.length > 0 && (
             <div className="bg-white rounded-2xl border border-slate-200 p-4 sm:p-5">
-              <div className="flex items-center justify-between mb-3">
+              <div className="flex items-center justify-between mb-3 flex-wrap gap-2">
                 <h2 className="font-bold text-slate-900 text-sm sm:text-base">
                   📢 Announcements
                   {unreadCount > 0 && (
@@ -159,7 +159,7 @@ export default async function EmployeeDashboardPage() {
                 </h2>
                 <Link
                   href="/employee/announcements"
-                  className="text-xs text-emerald-600 hover:underline"
+                  className="text-xs text-emerald-600 hover:underline whitespace-nowrap"
                 >
                   View all →
                 </Link>
@@ -199,17 +199,17 @@ export default async function EmployeeDashboardPage() {
                 {recentSales.map((s) => (
                   <div
                     key={s.id}
-                    className="flex items-center justify-between p-2 border-b border-slate-100 text-sm"
+                    className="flex items-center justify-between p-2 border-b border-slate-100 text-sm gap-2"
                   >
-                    <div className="min-w-0">
+                    <div className="min-w-0 flex-1">
                       <p className="text-slate-900 truncate">
                         Sale #{s.id.slice(-6)}
                       </p>
-                      <p className="text-xs text-slate-500">
+                      <p className="text-xs text-slate-500 truncate">
                         {new Date(s.date).toLocaleString()}
                       </p>
                     </div>
-                    <p className="font-bold text-emerald-600 whitespace-nowrap ml-2">
+                    <p className="font-bold text-emerald-600 whitespace-nowrap ml-2 flex-shrink-0">
                       {s.total.toLocaleString()} ETB
                     </p>
                   </div>
