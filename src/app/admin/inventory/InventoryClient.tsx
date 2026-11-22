@@ -41,6 +41,7 @@ export default function InventoryClient({
   const isMountedRef = useRef(true);
   const abortRef = useRef<AbortController | null>(null);
   const refreshTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const refreshingRef = useRef(false);
 
   const isOwner = userRole === "owner";
   const canEdit =
@@ -52,7 +53,7 @@ export default function InventoryClient({
   // ✅ Stable refresh with useCallback
   const refresh = useCallback(async () => {
     if (!isMountedRef.current) return;
-    if (refreshing) return;
+    if (refreshingRef.current) return;
 
     // Cancel previous request
     if (abortRef.current) {
@@ -61,6 +62,7 @@ export default function InventoryClient({
     const controller = new AbortController();
     abortRef.current = controller;
 
+    refreshingRef.current = true;
     setRefreshing(true);
     setError("");
 
@@ -93,24 +95,24 @@ export default function InventoryClient({
         setError("Failed to load inventory. Please refresh the page.");
       }
     } finally {
+      refreshingRef.current = false;
       if (isMountedRef.current) {
         setRefreshing(false);
       }
     }
-  }, [refreshing]);
+  }, []);
 
-  // ✅ Debounced focus refresh (max once per 30s)
+  // ✅ Debounced focus refresh
   useEffect(() => {
     isMountedRef.current = true;
 
     const handleFocus = () => {
-      // Debounce — skip if we refreshed recently
       if (refreshTimerRef.current) return;
 
       refreshTimerRef.current = setTimeout(() => {
         refresh();
         refreshTimerRef.current = null;
-      }, 500); // 500ms debounce
+      }, 500);
     };
 
     window.addEventListener("focus", handleFocus);
@@ -455,20 +457,52 @@ function ItemCard({
             </button>
           )}
           {canEdit && (
-            <div className="grid grid-cols-2 gap-1">
+            <>
+              <div className="grid grid-cols-2 gap-1">
+                <button
+                  onClick={onStockIn}
+                  className="py-1.5 bg-blue-100 hover:bg-blue-200 text-blue-700 text-xs font-medium rounded"
+                >
+                  ➕ Stock In
+                </button>
+                <button
+                  onClick={onEdit}
+                  className="py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-medium rounded"
+                >
+                  ✏️ Edit
+                </button>
+              </div>
+
+              {/* Add to Web button */}
               <button
-                onClick={onStockIn}
-                className="py-1.5 bg-blue-100 hover:bg-blue-200 text-blue-700 text-xs font-medium rounded"
+                type="button"
+                onClick={async () => {
+                  if (!confirm(`Add "${item.name}" to public website?`)) return;
+                  try {
+                    const res = await fetch("/api/admin/inventory/add-to-web", {
+                      method: "POST",
+                      headers: { "Content-Type": "application/json" },
+                      body: JSON.stringify({
+                        itemId: item.id,
+                        displayPrice: item.sellingPrice,
+                        displayName: item.name,
+                      }),
+                    });
+                    if (!res.ok) {
+                      const data = await res.json().catch(() => ({}));
+                      alert(data.error || "Failed");
+                      return;
+                    }
+                    alert("✅ Added to website!");
+                  } catch (e: any) {
+                    alert(e?.message || "Failed");
+                  }
+                }}
+                className="w-full py-1.5 bg-emerald-100 hover:bg-emerald-200 text-emerald-700 text-xs font-medium rounded"
               >
-                ➕ Stock In
+                🌐 Add to Web
               </button>
-              <button
-                onClick={onEdit}
-                className="py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-medium rounded"
-              >
-                ✏️ Edit
-              </button>
-            </div>
+            </>
           )}
         </div>
       </div>
