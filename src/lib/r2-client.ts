@@ -180,4 +180,4 @@ export const ALLOWED_DIGITAL_PRODUCT_TYPES = [
 
 export const MAX_IMAGE_SIZE = 10 * 1024 * 1024; // 10MB
 export const MAX_DOC_SIZE = 10 * 1024 * 1024; // 10MB
-export const MAX_DIGITAL_PRODUCT_SIZE = 500 * 1024 * 1024; // 500MB
+export const MAX_DIGITAL_PRODUCT_SIZE = 1000 * 1024 * 1024; // 1000MB
