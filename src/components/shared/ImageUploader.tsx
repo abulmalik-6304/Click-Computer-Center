@@ -4,25 +4,52 @@
 import { useState, useRef } from "react";
 import { toDriveImageUrl as formatDriveUrl } from "@/lib/drive-url";
 
+type UploadAcceptType = "image" | "document" | "digital";
+
 interface Props {
   value: string;
   onChange: (url: string) => void;
   folder?: string;
   label?: string;
-  accept?: "image" | "document";
+  accept?: UploadAcceptType;
   maxSizeMB?: number;
   disabled?: boolean;
+}
+
+function getDefaultMaxSizeMB(accept: UploadAcceptType): number {
+  if (accept === "digital") return 500;
+  return 10;
+}
+
+function getInputAcceptAttr(accept: UploadAcceptType): string {
+  if (accept === "image") return "image/*";
+  if (accept === "document") return "image/*,.pdf";
+  return ".pdf,.zip,.rar,.7z,.mp4,.mp3,application/pdf,application/zip,video/mp4,audio/mpeg";
+}
+
+function getHintText(accept: UploadAcceptType, maxSizeMB: number): string {
+  if (accept === "image") return `JPG, PNG, WebP, GIF · Max ${maxSizeMB}MB`;
+  if (accept === "document") return `PDF, JPG, PNG, WebP · Max ${maxSizeMB}MB`;
+  return `ZIP, RAR, 7Z, PDF, MP4, MP3 · Max ${maxSizeMB}MB`;
+}
+
+function isLikelyImage(value: string, accept: UploadAcceptType): boolean {
+  if (accept === "digital") return false;
+  const clean = value.split("?")[0].toLowerCase();
+  if (clean.endsWith(".pdf")) return false;
+  return true;
 }
 
 export default function ImageUploader({
   value,
   onChange,
   folder = "uploads",
-  label = "Upload Image",
+  label = "Upload File",
   accept = "image",
-  maxSizeMB = 5,
+  maxSizeMB,
   disabled = false,
 }: Props) {
+  const effectiveMaxMB = maxSizeMB ?? getDefaultMaxSizeMB(accept);
   const [uploading, setUploading] = useState(false);
   const [error, setError] = useState("");
   const [progress, setProgress] = useState(0);
@@ -34,15 +61,13 @@ export default function ImageUploader({
     setProgress(0);
 
     try {
-      // Validate
-      const maxBytes = maxSizeMB * 1024 * 1024;
+      const maxBytes = effectiveMaxMB * 1024 * 1024;
       if (file.size > maxBytes) {
-        setError(`File too large. Max ${maxSizeMB}MB`);
+        setError(`File too large. Max ${effectiveMaxMB}MB allowed`);
         setUploading(false);
         return;
       }
 
-      // Upload
       const formData = new FormData();
       formData.append("file", file);
       formData.append("folder", folder);
@@ -57,28 +82,28 @@ export default function ImageUploader({
       });
 
       xhr.addEventListener("load", () => {
-        if (xhr.status === 200) {
-          const data = JSON.parse(xhr.responseText);
-          if (data.ok && data.url) {
-            onChange(data.url);
+        try {
+          const data = JSON.parse(xhr.responseText || "{}");
+          if (xhr.status >= 200 && xhr.status < 300 && data.ok && (data.url || data.key)) {
+            onChange(data.url || data.key);
           } else {
-            setError(data.error || "Upload failed");
+            setError(data.error || `Upload failed (HTTP ${xhr.status})`);
           }
-        } else {
-          setError("Upload failed");
+        } catch {
+          setError(xhr.status >= 200 && xhr.status < 300 ? "Invalid server response" : "Upload failed");
         }
         setUploading(false);
       });
 
       xhr.addEventListener("error", () => {
-        setError("Upload failed");
+        setError("Network error while uploading");
         setUploading(false);
       });
 
       xhr.open("POST", "/api/upload");
       xhr.send(formData);
     } catch (e: any) {
-      setError(e.message);
+      setError(e?.message || "Upload failed");
       setUploading(false);
     }
   }
@@ -93,41 +118,58 @@ export default function ImageUploader({
     if (inputRef.current) inputRef.current.value = "";
   }
 
+  const showImagePreview = isLikelyImage(value, accept);
+
   return (
     <div className="space-y-2">
       <label className="block text-sm font-semibold text-slate-900">
         {label}
       </label>
 
-      {/* Preview */}
       {value ? (
-        <div className="relative group">
-          <img
-            src={formatDriveUrl(value)}
-            alt="Preview"
-            className="w-full h-48 object-cover rounded-lg border-2 border-slate-200 bg-slate-50"
-            onError={(e) =>
-              ((e.target as HTMLImageElement).src = "/placeholder.svg")
-            }
-          />
+        <div className="relative group rounded-lg border-2 border-slate-200 bg-slate-50 p-2">
+          {showImagePreview ? (
+            <img
+              src={formatDriveUrl(value)}
+              alt="Preview"
+              className="w-full h-48 object-cover rounded-md bg-slate-100"
+              onError={(e) => {
+                (e.target as HTMLImageElement).src = "/placeholder.svg";
+              }}
+            />
+          ) : (
+            <div className="h-32 flex flex-col items-center justify-center gap-1 rounded-md bg-slate-100 px-4 text-center">
+              <span className="text-3xl">📦</span>
+              <p className="text-sm font-semibold text-slate-800">
+                File attached
+              </p>
+              <p className="text-xs text-slate-500 break-all max-w-full">
+                {value}
+              </p>
+            </div>
+          )}
+
           {!disabled && (
             <button
               type="button"
               onClick={handleRemove}
-              className="absolute top-2 right-2 bg-red-600 hover:bg-red-700 text-white rounded-full w-8 h-8 flex items-center justify-center font-bold shadow-lg opacity-0 group-hover:opacity-100 transition"
+              className="absolute top-3 right-3 bg-red-600 hover:bg-red-700 text-white rounded-full w-8 h-8 flex items-center justify-center font-bold shadow-lg opacity-90 group-hover:opacity-100 transition"
               title="Remove"
             >
               ✕
             </button>
           )}
-          <p className="text-xs text-slate-500 mt-1 truncate">{value}</p>
+
+          {showImagePreview && (
+            <p className="text-xs text-slate-500 mt-2 truncate">{value}</p>
+          )}
         </div>
       ) : (
         <button
           type="button"
           onClick={() => inputRef.current?.click()}
           disabled={uploading || disabled}
-          className="w-full h-48 border-2 border-dashed border-slate-300 hover:border-emerald-500 rounded-lg flex flex-col items-center justify-center gap-2 transition disabled:opacity-50 disabled:cursor-not-allowed"
+          className="w-full h-48 border-2 border-dashed border-slate-300 hover:border-emerald-500 rounded-lg flex flex-col items-center justify-center gap-2 px-4 transition disabled:opacity-50 disabled:cursor-not-allowed"
         >
           {uploading ? (
             <>
@@ -148,9 +190,8 @@ export default function ImageUploader({
               <p className="text-sm font-semibold text-slate-700">
                 Click to upload
               </p>
-              <p className="text-xs text-slate-500">
-                {accept === "image" ? "JPG, PNG, WebP, GIF" : "PDF, JPG, PNG"} · Max{" "}
-                {maxSizeMB}MB
+              <p className="text-xs text-slate-500 text-center">
+                {getHintText(accept, effectiveMaxMB)}
               </p>
             </>
           )}
@@ -160,7 +201,7 @@ export default function ImageUploader({
       <input
         ref={inputRef}
         type="file"
-        accept={accept === "image" ? "image/*" : "image/*,.pdf"}
+        accept={getInputAcceptAttr(accept)}
         onChange={handleInputChange}
         className="hidden"
       />
