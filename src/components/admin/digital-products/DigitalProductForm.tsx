@@ -105,25 +105,37 @@ export default function DigitalProductForm({ product, onClose, onSaved }: Props)
           </div>
 
           {/* Thumbnail Image */}
-          <ImageUploader value={thumbnailImage} onChange={setThumbnailImage} folder="digital-products/thumbnails" label="🖼 Thumbnail Image" accept="image" maxSizeMB={5} />
+          <ImageUploader
+            value={thumbnailImage}
+            onChange={setThumbnailImage}
+            folder="digital-products/thumbnails"
+            label="🖼 Thumbnail Image"
+            accept="image"
+            maxSizeMB={5}
+          />
 
-          {/* File Upload (PDF / ZIP) */}
+          {/* File Upload (Digital ZIP / Archive / PDF / Media) */}
           {!isEdit && (
             <ImageUploader
               value={fileUrl}
               onChange={(url) => {
                 setFileUrl(url);
                 if (url) {
+                  const cleanUrl = url.split("?")[0].toLowerCase();
+                  const ext = cleanUrl.split(".").pop() || "zip";
                   const parts = url.split("/");
                   setFileKey(parts.slice(-2).join("/"));
-                  setFileType(url.toLowerCase().endsWith(".pdf") ? "pdf" : "zip");
+                  setFileType(ext);
+                } else {
+                  setFileKey("");
+                  setFileType("");
                   setFileSize(0);
                 }
               }}
               folder="digital-products/files"
-              label="📎 File (PDF or ZIP) *"
-              accept="document"
-              maxSizeMB={5}
+              label="📎 Digital File (ZIP, RAR, 7Z, PDF, MP4, MP3) *"
+              accept="digital"
+              maxSizeMB={1000}
             />
           )}
 
@@ -144,7 +156,7 @@ export default function DigitalProductForm({ product, onClose, onSaved }: Props)
         {/* Footer */}
         <div className="sticky bottom-0 bg-white border-t border-slate-200 px-5 py-3 flex gap-2">
           <button type="button" onClick={onClose} className="flex-1 py-2.5 rounded-lg border border-slate-300 text-slate-700 font-medium">Cancel</button>
-          <button type="submit" disabled={saving || !fileUrl && !isEdit} className="flex-1 py-2.5 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white font-semibold disabled:opacity-50">
+          <button type="submit" disabled={saving || (!fileUrl && !isEdit)} className="flex-1 py-2.5 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white font-semibold disabled:opacity-50">
             {saving ? "Saving…" : isEdit ? "Update" : "Upload Product"}
           </button>
         </div>
