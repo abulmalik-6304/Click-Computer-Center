@@ -33,10 +33,10 @@ function getConfig() {
 }
 
 function createR2Client(): S3Client {
-  const { accessKeyId, secretAccessKey, endpoint } = getConfig();
+  const { accessKeyId, secretAccessKey, endpoint, bucketName } = getConfig();
 
-  if (!accessKeyId || !secretAccessKey || !endpoint) {
-    throw new Error("Missing R2 credentials or endpoint");
+  if (!accessKeyId || !secretAccessKey || !endpoint || !bucketName) {
+    throw new Error("Missing R2 credentials, bucket name, or endpoint");
   }
 
   return new S3Client({
@@ -64,17 +64,17 @@ export async function uploadFile(
   const { bucketName, publicUrl } = getConfig();
   const client = createR2Client();
 
+  const cleanKey = key.replace(/^\/+/, "");
+
   const command = new PutObjectCommand({
     Bucket: bucketName,
-    Key: key,
+    Key: cleanKey,
     Body: file,
     ContentType: contentType,
     CacheControl: "public, max-age=31536000, immutable",
   });
 
   await client.send(command);
-
-  const cleanKey = key.replace(/^\/+/, "");
 
   return {
     key: cleanKey,
@@ -90,7 +90,7 @@ export async function deleteFile(key: string): Promise<boolean> {
     const client = createR2Client();
     const command = new DeleteObjectCommand({
       Bucket: bucketName,
-      Key: key,
+      Key: key.replace(/^\/+/, ""),
     });
     await client.send(command);
     return true;
@@ -119,6 +119,7 @@ export async function listFiles(prefix?: string): Promise<string[]> {
 
 export function getPublicUrl(key: string): string {
   if (!key) return "";
+  if (/^https?:\/\//i.test(key)) return key;
   const { publicUrl } = getConfig();
   const cleanKey = key.replace(/^\/+/, "");
   return publicUrl ? `${publicUrl}/${cleanKey}` : cleanKey;
@@ -132,7 +133,7 @@ export async function getPresignedUrl(
   const client = createR2Client();
   const command = new GetObjectCommand({
     Bucket: bucketName,
-    Key: key,
+    Key: key.replace(/^\/+/, ""),
   });
   return getSignedUrl(client, command, { expiresIn });
 }
@@ -145,7 +146,7 @@ export function generateKey(folder: string, originalName: string): string {
     .replace(/\.[^/.]+$/, "")
     .toLowerCase()
     .replace(/[^a-z0-9]/g, "-")
-    .slice(0, 40);
+    .slice(0, 40) || "file";
   const cleanFolder = folder.replace(/^\/+|\/+$/g, "") || "uploads";
   return `${cleanFolder}/${timestamp}-${random}-${safeName}.${ext}`;
 }
@@ -164,5 +165,19 @@ export const ALLOWED_DOC_TYPES = [
   "image/webp",
 ] as const;
 
-export const MAX_IMAGE_SIZE = 5 * 1024 * 1024; // 5MB
-export const MAX_DOC_SIZE = 5 * 1024 * 1024; // 5MB
+export const ALLOWED_DIGITAL_PRODUCT_TYPES = [
+  "application/pdf",
+  "application/zip",
+  "application/x-zip-compressed",
+  "application/vnd.rar",
+  "application/x-rar-compressed",
+  "application/x-7z-compressed",
+  "video/mp4",
+  "audio/mpeg",
+  "audio/mp3",
+  "application/octet-stream",
+] as const;
+
+export const MAX_IMAGE_SIZE = 10 * 1024 * 1024; // 10MB
+export const MAX_DOC_SIZE = 10 * 1024 * 1024; // 10MB
+export const MAX_DIGITAL_PRODUCT_SIZE = 500 * 1024 * 1024; // 500MB
