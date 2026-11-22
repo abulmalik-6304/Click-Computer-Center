@@ -1,20 +1,12 @@
 // src/lib/telegram.ts
-// ═══════════════════════════════════════════════════════════════
-// 📱 TELEGRAM BOT HELPER
-// ═══════════════════════════════════════════════════════════════
-
 const BOT_TOKEN = process.env.TELEGRAM_BOT_TOKEN || "";
 const CHAT_ID = process.env.TELEGRAM_CHAT_ID || "";
 
-/**
- * Send a message to the configured Telegram chat.
- * Silently fails (logs error) — never throws.
- */
 export async function sendTelegramMessage(
   text: string,
   options: {
     parseMode?: "Markdown" | "HTML";
-    chatId?: string; // Override default
+    chatId?: string;
   } = {}
 ): Promise<boolean> {
   if (!BOT_TOKEN) {
@@ -56,9 +48,6 @@ export async function sendTelegramMessage(
   }
 }
 
-/**
- * Notify admin about a new digital order.
- */
 export async function notifyNewDigitalOrder(order: {
   id: string;
   productTitle: string;
@@ -92,7 +81,7 @@ ${process.env.NEXTAUTH_URL || "https://click-cc.vercel.app"}/admin/digital-order
 }
 
 /**
- * Notify customer (or admin) that order was approved.
+ * Notify both Admin AND Customer (if customer connected Telegram bot)
  */
 export async function notifyOrderApproved(order: {
   id: string;
@@ -100,36 +89,75 @@ export async function notifyOrderApproved(order: {
   customerName: string;
   customerPhone: string;
   downloadToken: string;
+  customerChatId?: string;
 }): Promise<boolean> {
-  const downloadUrl = `${
-    process.env.NEXTAUTH_URL || "https://click-cc.vercel.app"
-  }/download/${order.downloadToken}`;
+  const baseUrl = process.env.NEXTAUTH_URL || "https://click-cc.vercel.app";
+  const downloadUrl = `${baseUrl}/api/download/${order.downloadToken}`;
 
-  const text = `
+  // 1. Send directly to Customer if connected via Telegram Bot
+  let customerSent = false;
+  if (order.customerChatId) {
+    const customerText = `
+🎉 *ክፍያዎ ተረጋግጧል! / Payment Approved!*
+
+ሰላም *${order.customerName}*፣
+📦 *Product:* ${order.productTitle}
+🆔 *Order ID:* \`${order.id}\`
+
+⬇️ *ፋይሉን ለማውረድ ከታች ያለውን ሊንክ ይጫኑ / Download Link:*
+${downloadUrl}
+
+እናመሰግናለን! — *Click Computer Center*
+    `.trim();
+
+    customerSent = await sendTelegramMessage(customerText, {
+      chatId: order.customerChatId,
+    });
+  }
+
+  // 2. Notify Admin
+  const adminText = `
 ✅ *ORDER APPROVED*
 
 📦 *Product:* ${order.productTitle}
 🆔 *Order:* \`${order.id}\`
-👤 *Customer:* ${order.customerName}
+👤 *Customer:* ${order.customerName} (${order.customerPhone})
+🤖 *Bot Delivery:* ${
+    customerSent
+      ? "✅ Sent directly to customer on Telegram!"
+      : "⚠️ Customer not connected to bot (share link manually if needed)"
+  }
 
 🔗 *Download Link:*
 ${downloadUrl}
-
-📱 Share this link with the customer via WhatsApp / Telegram.
   `.trim();
 
-  return sendTelegramMessage(text);
+  return sendTelegramMessage(adminText);
 }
 
-/**
- * Notify that order was rejected.
- */
 export async function notifyOrderRejected(order: {
   id: string;
   productTitle: string;
   customerName: string;
   reason?: string;
+  customerChatId?: string;
 }): Promise<boolean> {
+  if (order.customerChatId) {
+    const customerText = `
+❌ *ትዕዛዝዎ አልጸደቀም / Order Rejected*
+
+📦 *Product:* ${order.productTitle}
+🆔 *Order ID:* \`${order.id}\`
+${order.reason ? `📝 *ምክንያት / Reason:* ${order.reason}` : ""}
+
+ለበለጠ መረጃ ያግኙን።
+    `.trim();
+
+    await sendTelegramMessage(customerText, {
+      chatId: order.customerChatId,
+    });
+  }
+
   const text = `
 ❌ *ORDER REJECTED*
 
@@ -143,9 +171,6 @@ ${order.reason ? `📝 *Reason:* ${order.reason}` : ""}
   return sendTelegramMessage(text);
 }
 
-/**
- * Send a plain text message (for webhook replies).
- */
 export async function replyToChat(
   chatId: string | number,
   text: string
