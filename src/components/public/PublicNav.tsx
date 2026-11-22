@@ -6,12 +6,11 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { BUSINESS_INFO } from "@/lib/public-constants";
 
+// ✅ Services + Training ከ menu ተወግደዋል
 const NAV = [
   { href: "/", label: "Home" },
-  { href: "/store", label: "Store" },
-  { href: "/services", label: "Services" },
-  { href: "/training", label: "Training" },
-  { href: "/about", label: "About" },
+  { href: "/store/digital", label: "💎 Digital" },
+  { href: "/store", label: "🛒 Store" },
   { href: "/contact", label: "Contact" },
 ];
 
@@ -32,9 +31,7 @@ export default function PublicNav() {
               <p className="font-bold text-slate-900 leading-tight">
                 Click Computer
               </p>
-              <p className="text-xs text-slate-500 leading-tight">
-                Center
-              </p>
+              <p className="text-xs text-slate-500 leading-tight">Center</p>
             </div>
           </Link>
 
