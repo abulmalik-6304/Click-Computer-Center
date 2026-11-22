@@ -19,20 +19,53 @@ export const runtime = "nodejs";
 
 type UploadKind = "image" | "document" | "digital";
 
-function getRules(uploadType: string) {
+const ZIP_MIME_TYPES = new Set([
+  "application/zip",
+  "application/x-zip-compressed",
+  "multipart/x-zip",
+]);
+
+function isZipFile(file: File): boolean {
+  const mime = (file.type || "").toLowerCase();
+  const name = (file.name || "").toLowerCase();
+  return ZIP_MIME_TYPES.has(mime) || name.endsWith(".zip");
+}
+
+function getRules(uploadType: UploadKind, file: File) {
+  // If a ZIP file is uploaded, check digital product rules so Windows/browser
+  // "application/x-zip-compressed" doesn't get blocked under document rules
+  if (isZipFile(file)) {
+    const digitalAllowed = ALLOWED_DIGITAL_PRODUCT_TYPES as readonly string[];
+    const zipAllowedInDigital =
+      !file.type ||
+      digitalAllowed.includes(file.type) ||
+      ZIP_MIME_TYPES.has(file.type.toLowerCase());
+
+    if (zipAllowedInDigital) {
+      return {
+        effectiveType: "digital" as UploadKind,
+        maxSize: MAX_DIGITAL_PRODUCT_SIZE,
+        allowed: [...digitalAllowed, "application/x-zip-compressed", "application/zip"],
+      };
+    }
+  }
+
   if (uploadType === "document") {
     return {
+      effectiveType: "document" as UploadKind,
       maxSize: MAX_DOC_SIZE,
       allowed: ALLOWED_DOC_TYPES as readonly string[],
     };
   }
   if (uploadType === "digital") {
     return {
+      effectiveType: "digital" as UploadKind,
       maxSize: MAX_DIGITAL_PRODUCT_SIZE,
       allowed: ALLOWED_DIGITAL_PRODUCT_TYPES as readonly string[],
     };
   }
   return {
+    effectiveType: "image" as UploadKind,
     maxSize: MAX_IMAGE_SIZE,
     allowed: ALLOWED_IMAGE_TYPES as readonly string[],
   };
@@ -70,7 +103,7 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: "No file provided" }, { status: 400 });
     }
 
-    const { maxSize, allowed } = getRules(uploadType);
+    const { effectiveType, maxSize, allowed } = getRules(uploadType, file);
 
     if (file.size > maxSize) {
       const maxMB = (maxSize / (1024 * 1024)).toFixed(0);
@@ -82,7 +115,7 @@ export async function POST(req: NextRequest) {
 
     if (file.type && !allowed.includes(file.type)) {
       return NextResponse.json(
-        { error: `File type ${file.type} not allowed for ${uploadType}` },
+        { error: `File type ${file.type} not allowed for ${effectiveType}` },
         { status: 400 }
       );
     }
