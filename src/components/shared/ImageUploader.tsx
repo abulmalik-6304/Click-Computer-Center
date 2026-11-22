@@ -17,7 +17,7 @@ interface Props {
 }
 
 function getDefaultMaxSizeMB(accept: UploadAcceptType): number {
-  if (accept === "digital") return 500;
+  if (accept === "digital") return 1000;
   return 10;
 }
 
