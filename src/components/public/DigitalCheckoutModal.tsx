@@ -1,7 +1,7 @@
 // src/components/public/DigitalCheckoutModal.tsx
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import ImageUploader from "@/components/shared/ImageUploader";
 import { BUSINESS_INFO } from "@/lib/public-constants";
 import { formatFileSize } from "@/lib/digital-product-types";
@@ -11,6 +11,8 @@ interface Props {
   product: any;
   onClose: () => void;
 }
+
+const BOT_USERNAME = process.env.NEXT_PUBLIC_TELEGRAM_BOT_USERNAME || "";
 
 export default function DigitalCheckoutModal({ product, onClose }: Props) {
   const [step, setStep] = useState<"info" | "payment" | "done">("info");
@@ -23,6 +25,13 @@ export default function DigitalCheckoutModal({ product, onClose }: Props) {
   const [error, setError] = useState("");
   const [orderId, setOrderId] = useState("");
 
+  // Live order status states
+  const [orderStatus, setOrderStatus] = useState<"pending" | "approved" | "rejected">("pending");
+  const [downloadUrl, setDownloadUrl] = useState<string | null>(null);
+  const [telegramConnected, setTelegramConnected] = useState(false);
+  const [rejectNotes, setRejectNotes] = useState("");
+  const autoDownloadedRef = useRef(false);
+
   useEffect(() => {
     function handleKeyDown(e: KeyboardEvent) {
       if (e.key === "Escape") onClose();
@@ -30,6 +39,46 @@ export default function DigitalCheckoutModal({ product, onClose }: Props) {
     window.addEventListener("keydown", handleKeyDown);
     return () => window.removeEventListener("keydown", handleKeyDown);
   }, [onClose]);
+
+  // Poll order status automatically once submitted
+  useEffect(() => {
+    if (step !== "done" || !orderId) return;
+    if (orderStatus === "approved" || orderStatus === "rejected") return;
+
+    const checkStatus = async () => {
+      try {
+        const res = await fetch(`/api/public/digital-orders/${orderId}/status`, {
+          cache: "no-store",
+        });
+        if (!res.ok) return;
+        const data = await res.json();
+
+        if (data.telegramConnected) {
+          setTelegramConnected(true);
+        }
+
+        if (data.status === "approved" && data.downloadUrl) {
+          setOrderStatus("approved");
+          setDownloadUrl(data.downloadUrl);
+
+          // Trigger automatic download once
+          if (!autoDownloadedRef.current) {
+            autoDownloadedRef.current = true;
+            window.location.href = data.downloadUrl;
+          }
+        } else if (data.status === "rejected") {
+          setOrderStatus("rejected");
+          setRejectNotes(data.notes || "");
+        }
+      } catch {
+        // Ignore transient network errors during polling
+      }
+    };
+
+    checkStatus();
+    const interval = setInterval(checkStatus, 5000);
+    return () => clearInterval(interval);
+  }, [step, orderId, orderStatus]);
 
   function goToPayment(e: React.FormEvent) {
     e.preventDefault();
@@ -86,6 +135,10 @@ export default function DigitalCheckoutModal({ product, onClose }: Props) {
     .filter(Boolean)
     .join(" · ");
 
+  const botDeepLink = BOT_USERNAME
+    ? `https://t.me/${BOT_USERNAME}?start=${encodeURIComponent(orderId)}`
+    : BUSINESS_INFO.telegram;
+
   return (
     <div className="fixed inset-0 z-50 bg-black/60 flex items-center justify-center p-4">
       <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md max-h-[92vh] overflow-y-auto">
@@ -108,7 +161,6 @@ export default function DigitalCheckoutModal({ product, onClose }: Props) {
         {/* Step 1: Info */}
         {step === "info" && (
           <form onSubmit={goToPayment} className="p-5 space-y-3">
-            {/* Product Preview */}
             <div className="flex items-center gap-3 p-3 bg-slate-50 rounded-xl border border-slate-200/80">
               {product.thumbnailImage ? (
                 <img
@@ -237,28 +289,79 @@ export default function DigitalCheckoutModal({ product, onClose }: Props) {
           </div>
         )}
 
-        {/* Step 3: Done */}
+        {/* Step 3: Done & Live Delivery */}
         {step === "done" && (
-          <div className="p-8 text-center space-y-3">
-            <div className="text-5xl">✅</div>
-            <h3 className="text-xl font-bold text-emerald-900">
-              Order Submitted!
-            </h3>
-            <p className="text-sm text-slate-600">
-              Order ID: <strong>{orderId}</strong>
-            </p>
-            <div className="p-3 bg-amber-50 border border-amber-200 rounded-lg text-xs text-amber-800">
-              ⏳ We&apos;ll verify your payment within 1-2 hours. Download link
-              will be sent via WhatsApp / Telegram.
-            </div>
-            <a
-              href={BUSINESS_INFO.telegram}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="block w-full py-2.5 rounded-lg bg-blue-600 hover:bg-blue-700 text-white font-semibold transition"
-            >
-              ✈️ Contact us on Telegram
-            </a>
+          <div className="p-6 text-center space-y-3">
+            {orderStatus === "approved" && downloadUrl ? (
+              <>
+                <div className="text-5xl">🎉</div>
+                <h3 className="text-xl font-bold text-emerald-900">
+                  Payment Approved!
+                </h3>
+                <p className="text-sm text-slate-600">
+                  Your download has started automatically. If it didn&apos;t start,
+                  click below:
+                </p>
+                <a
+                  href={downloadUrl}
+                  className="block w-full py-3 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white font-bold shadow-md transition"
+                >
+                  ⬇️ Download Now
+                </a>
+              </>
+            ) : orderStatus === "rejected" ? (
+              <>
+                <div className="text-5xl">❌</div>
+                <h3 className="text-xl font-bold text-red-900">
+                  Order Rejected
+                </h3>
+                {rejectNotes && (
+                  <p className="text-xs text-red-700 bg-red-50 p-3 rounded-lg border border-red-200">
+                    Reason: {rejectNotes}
+                  </p>
+                )}
+                <a
+                  href={BUSINESS_INFO.telegram}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="block w-full py-2.5 rounded-lg bg-blue-600 hover:bg-blue-700 text-white font-semibold transition"
+                >
+                  ✈️ Contact Support on Telegram
+                </a>
+              </>
+            ) : (
+              <>
+                <div className="text-5xl">⏳</div>
+                <h3 className="text-xl font-bold text-slate-900">
+                  Verifying Payment…
+                </h3>
+                <p className="text-sm text-slate-600">
+                  Order ID: <strong>{orderId}</strong>
+                </p>
+                <div className="p-3 bg-amber-50 border border-amber-200 rounded-lg text-xs text-amber-800">
+                  Keep this window open for instant automatic download once
+                  approved, <strong>OR</strong> connect your Telegram account
+                  below so our bot sends you the link immediately:
+                </div>
+
+                {telegramConnected ? (
+                  <div className="p-3 bg-emerald-50 border border-emerald-200 rounded-lg text-xs font-semibold text-emerald-800">
+                    ✅ Telegram Connected! We will send the link directly to
+                    your Telegram as soon as it&apos;s approved.
+                  </div>
+                ) : (
+                  <a
+                    href={botDeepLink}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="block w-full py-3 rounded-lg bg-sky-600 hover:bg-sky-700 text-white font-semibold shadow-sm transition"
+                  >
+                    🤖 Connect Telegram to Receive Link
+                  </a>
+                )}
+              </>
+            )}
+
             <button
               type="button"
               onClick={onClose}
