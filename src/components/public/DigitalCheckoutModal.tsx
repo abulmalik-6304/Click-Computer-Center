@@ -12,14 +12,18 @@ interface Props {
   onClose: () => void;
 }
 
-const BOT_USERNAME = process.env.NEXT_PUBLIC_TELEGRAM_BOT_USERNAME || "";
+// Bot username only (without @ or https://t.me/), e.g. ClickComputerBot
+const BOT_USERNAME = (process.env.NEXT_PUBLIC_TELEGRAM_BOT_USERNAME || "")
+  .replace(/^@/, "")
+  .replace(/^https?:\/\/t\.me\//i, "")
+  .trim();
 
 export default function DigitalCheckoutModal({ product, onClose }: Props) {
   const [step, setStep] = useState<"info" | "payment" | "done">("info");
   const [customerName, setCustomerName] = useState("");
   const [customerPhone, setCustomerPhone] = useState("");
   const [customerEmail, setCustomerEmail] = useState("");
-  const [paymentMethod, setPaymentMethod] = useState("telebirr");
+  const [paymentMethod, setPaymentMethod] = useState<"telebirr" | "cbe" | "dashen">("telebirr");
   const [paymentReference, setPaymentReference] = useState("");
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
@@ -61,7 +65,6 @@ export default function DigitalCheckoutModal({ product, onClose }: Props) {
           setOrderStatus("approved");
           setDownloadUrl(data.downloadUrl);
 
-          // Trigger automatic download once
           if (!autoDownloadedRef.current) {
             autoDownloadedRef.current = true;
             window.location.href = data.downloadUrl;
@@ -83,11 +86,11 @@ export default function DigitalCheckoutModal({ product, onClose }: Props) {
   function goToPayment(e: React.FormEvent) {
     e.preventDefault();
     if (!customerName.trim()) {
-      setError("Name is required");
+      setError("Name is required / እባክዎ ስምዎን ያስገቡ");
       return;
     }
     if (!customerPhone.trim()) {
-      setError("Phone is required");
+      setError("Phone is required / እባክዎ ስልክ ቁጥርዎን ያስገቡ");
       return;
     }
     setError("");
@@ -96,7 +99,7 @@ export default function DigitalCheckoutModal({ product, onClose }: Props) {
 
   async function submitPayment() {
     if (!paymentReference) {
-      setError("Please upload payment screenshot");
+      setError("Please upload payment screenshot / እባክዎ የክፍያ ስክሪን ሾት ይጫኑ");
       return;
     }
     setSaving(true);
@@ -135,9 +138,27 @@ export default function DigitalCheckoutModal({ product, onClose }: Props) {
     .filter(Boolean)
     .join(" · ");
 
-  const botDeepLink = BOT_USERNAME
+  const formattedAmount = `${Number(product.price || 0).toLocaleString()} ETB`;
+
+  const selectedAccountInfo = {
+    telebirr: {
+      title: "Telebirr / ቴሌብር",
+      account: BUSINESS_INFO.payment.telebirr,
+    },
+    cbe: {
+      title: "Commercial Bank of Ethiopia (CBE) / የኢትዮጵያ ንግድ ባንክ",
+      account: BUSINESS_INFO.payment.cbe,
+    },
+    dashen: {
+      title: "Dashen Bank / ዳሽን ባንክ",
+      account: BUSINESS_INFO.payment.dashen,
+    },
+  }[paymentMethod];
+
+  // Strictly targets the Telegram Bot (never a channel link)
+  const botStartUrl = BOT_USERNAME
     ? `https://t.me/${BOT_USERNAME}?start=${encodeURIComponent(orderId)}`
-    : BUSINESS_INFO.telegram;
+    : "";
 
   return (
     <div className="fixed inset-0 z-50 bg-black/60 flex items-center justify-center p-4">
@@ -161,6 +182,7 @@ export default function DigitalCheckoutModal({ product, onClose }: Props) {
         {/* Step 1: Info */}
         {step === "info" && (
           <form onSubmit={goToPayment} className="p-5 space-y-3">
+            {/* Product Preview */}
             <div className="flex items-center gap-3 p-3 bg-slate-50 rounded-xl border border-slate-200/80">
               {product.thumbnailImage ? (
                 <img
@@ -182,7 +204,7 @@ export default function DigitalCheckoutModal({ product, onClose }: Props) {
                 </p>
                 <p className="text-xs text-slate-500 mt-0.5">{fileMetaText}</p>
                 <p className="text-sm font-bold text-emerald-700 mt-1">
-                  {Number(product.price).toLocaleString()} ETB
+                  {formattedAmount}
                 </p>
               </div>
             </div>
@@ -191,21 +213,21 @@ export default function DigitalCheckoutModal({ product, onClose }: Props) {
               type="text"
               value={customerName}
               onChange={(e) => setCustomerName(e.target.value)}
-              placeholder="Your name *"
+              placeholder="Your name / ስምዎ *"
               className="w-full rounded-lg border border-slate-300 px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500"
             />
             <input
               type="tel"
               value={customerPhone}
               onChange={(e) => setCustomerPhone(e.target.value)}
-              placeholder="Your phone *"
+              placeholder="Your phone / ስልክ ቁጥር *"
               className="w-full rounded-lg border border-slate-300 px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500"
             />
             <input
               type="email"
               value={customerEmail}
               onChange={(e) => setCustomerEmail(e.target.value)}
-              placeholder="Email (optional)"
+              placeholder="Email (optional) / ኢሜይል (አማራጭ)"
               className="w-full rounded-lg border border-slate-300 px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500"
             />
 
@@ -222,44 +244,57 @@ export default function DigitalCheckoutModal({ product, onClose }: Props) {
 
         {/* Step 2: Payment */}
         {step === "payment" && (
-          <div className="p-5 space-y-3">
-            <div className="p-3 bg-orange-50 border border-orange-200 rounded-lg">
-              <p className="text-xs font-semibold text-orange-800 mb-2">
-                📱 Send {Number(product.price).toLocaleString()} ETB to:
+          <div className="p-5 space-y-4">
+            {/* Amount in large green text */}
+            <div className="p-3.5 bg-emerald-50 border border-emerald-200 rounded-xl text-center">
+              <p className="text-xs font-semibold text-emerald-800">
+                📱 Send {formattedAmount} to: / የሚከፈለው መጠን፦
               </p>
-              <div className="space-y-1 text-xs text-slate-800">
-                <p>
-                  <strong>Telebirr:</strong> {BUSINESS_INFO.payment.telebirr}
-                </p>
-                <p>
-                  <strong>CBE:</strong> {BUSINESS_INFO.payment.cbe}
-                </p>
-                <p>
-                  <strong>Dashen:</strong> {BUSINESS_INFO.payment.dashen}
-                </p>
-              </div>
+              <p className="text-2xl font-extrabold text-emerald-700 mt-1 tracking-tight">
+                {formattedAmount}
+              </p>
             </div>
 
+            {/* Payment Method Selector */}
             <div>
               <label className="block text-sm font-semibold text-slate-900 mb-1">
-                Payment Method *
+                Payment Method / የክፍያ አማራጭ *
               </label>
               <select
                 value={paymentMethod}
-                onChange={(e) => setPaymentMethod(e.target.value)}
-                className="w-full rounded-lg border border-slate-300 px-3 py-2.5 text-sm bg-white"
+                onChange={(e) =>
+                  setPaymentMethod(e.target.value as "telebirr" | "cbe" | "dashen")
+                }
+                className="w-full rounded-lg border border-slate-300 px-3 py-2.5 text-sm bg-white font-medium text-slate-900 focus:outline-none focus:ring-2 focus:ring-emerald-500"
               >
-                <option value="telebirr">Telebirr</option>
-                <option value="cbe">CBE</option>
-                <option value="dashen">Dashen Bank</option>
+                <option value="telebirr">Telebirr / ቴሌብር</option>
+                <option value="cbe">CBE / የኢትዮጵያ ንግድ ባንክ</option>
+                <option value="dashen">Dashen Bank / ዳሽን ባንክ</option>
               </select>
+            </div>
+
+            {/* Only the selected payment account is shown */}
+            <div className="p-3.5 bg-slate-50 border border-slate-200 rounded-xl space-y-1.5">
+              <p className="text-xs font-bold text-slate-700">
+                {selectedAccountInfo.title}
+              </p>
+              <p className="text-sm font-mono font-bold text-slate-900 bg-white px-3 py-2 rounded-lg border border-slate-200 select-all">
+                {selectedAccountInfo.account}
+              </p>
+              <p className="text-xs text-slate-600 pt-1 leading-relaxed">
+                በመረጡት የክፍያ አማራጭ ክፍያዎን ይክፈሉና ስክሪን ሾት ይላኩልን።
+                <br />
+                <span className="text-slate-500">
+                  Please pay using your selected method and upload the payment screenshot.
+                </span>
+              </p>
             </div>
 
             <ImageUploader
               value={paymentReference}
               onChange={setPaymentReference}
               folder="digital-orders/payments"
-              label="📸 Payment Screenshot *"
+              label="📸 Payment Screenshot / የክፍያ ስክሪን ሾት *"
               accept="image"
               maxSizeMB={10}
             />
@@ -296,11 +331,10 @@ export default function DigitalCheckoutModal({ product, onClose }: Props) {
               <>
                 <div className="text-5xl">🎉</div>
                 <h3 className="text-xl font-bold text-emerald-900">
-                  Payment Approved!
+                  ክፍያዎ ተረጋግጧል! / Payment Approved!
                 </h3>
                 <p className="text-sm text-slate-600">
-                  Your download has started automatically. If it didn&apos;t start,
-                  click below:
+                  ማውረድ በራሱ ተጀምሯል። ካልጀመረ ከታች ያለውን ቁልፍ ይጫኑ፦
                 </p>
                 <a
                   href={downloadUrl}
@@ -313,51 +347,49 @@ export default function DigitalCheckoutModal({ product, onClose }: Props) {
               <>
                 <div className="text-5xl">❌</div>
                 <h3 className="text-xl font-bold text-red-900">
-                  Order Rejected
+                  ትዕዛዝዎ አልጸደቀም / Order Rejected
                 </h3>
                 {rejectNotes && (
                   <p className="text-xs text-red-700 bg-red-50 p-3 rounded-lg border border-red-200">
-                    Reason: {rejectNotes}
+                    Reason / ምክንያት: {rejectNotes}
                   </p>
                 )}
-                <a
-                  href={BUSINESS_INFO.telegram}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="block w-full py-2.5 rounded-lg bg-blue-600 hover:bg-blue-700 text-white font-semibold transition"
-                >
-                  ✈️ Contact Support on Telegram
-                </a>
               </>
             ) : (
               <>
                 <div className="text-5xl">⏳</div>
                 <h3 className="text-xl font-bold text-slate-900">
-                  Verifying Payment…
+                  ክፍያዎ በመረጋገጥ ላይ ነው… / Verifying Payment…
                 </h3>
                 <p className="text-sm text-slate-600">
                   Order ID: <strong>{orderId}</strong>
                 </p>
-                <div className="p-3 bg-amber-50 border border-amber-200 rounded-lg text-xs text-amber-800">
-                  Keep this window open for instant automatic download once
-                  approved, <strong>OR</strong> connect your Telegram account
-                  below so our bot sends you the link immediately:
+                <div className="p-3 bg-amber-50 border border-amber-200 rounded-lg text-xs text-amber-800 space-y-1">
+                  <p>
+                    ክፍያዎ እንደተረጋገጠ ፋይሉ በቀጥታ እንዲወርድ ወይም በቦታችን እንዲላክልዎ ከታች ያለውን በተን ይጫኑ።
+                  </p>
+                  <p className="text-amber-700">
+                    Connect our Telegram Bot below so it sends your download link directly once approved.
+                  </p>
                 </div>
 
                 {telegramConnected ? (
                   <div className="p-3 bg-emerald-50 border border-emerald-200 rounded-lg text-xs font-semibold text-emerald-800">
-                    ✅ Telegram Connected! We will send the link directly to
-                    your Telegram as soon as it&apos;s approved.
+                    ✅ Telegram Bot Connected! ክፍያዎ ሲጸድቅ ሊንኩን በቀጥታ በቴሌግራም ቦቱ እንልክልዎታለን።
                   </div>
-                ) : (
+                ) : botStartUrl ? (
                   <a
-                    href={botDeepLink}
+                    href={botStartUrl}
                     target="_blank"
                     rel="noopener noreferrer"
                     className="block w-full py-3 rounded-lg bg-sky-600 hover:bg-sky-700 text-white font-semibold shadow-sm transition"
                   >
                     🤖 Connect Telegram to Receive Link
                   </a>
+                ) : (
+                  <div className="p-3 bg-red-50 border border-red-200 rounded-lg text-xs text-red-700">
+                    ⚠️ Telegram Bot username (`NEXT_PUBLIC_TELEGRAM_BOT_USERNAME`) is not configured yet.
+                  </div>
                 )}
               </>
             )}
