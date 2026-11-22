@@ -1,6 +1,7 @@
 // src/app/api/public/digital-orders/route.ts
 import { NextRequest, NextResponse } from "next/server";
 import { getSheet, getDoc } from "@/lib/google-sheets";
+import { notifyNewDigitalOrder } from "@/lib/telegram";
 
 const ORDERS_SHEET = "Digital_Orders_TBL";
 const PRODUCTS_SHEET = "Digital_Products_TBL";
@@ -99,6 +100,18 @@ export async function POST(req: NextRequest) {
       Approved_At: "",
       Approved_By: "",
     });
+
+    // ✅ Notify admin via Telegram (fire-and-forget, never blocks)
+    notifyNewDigitalOrder({
+      id: orderId,
+      productTitle,
+      price,
+      customerName: customerName.trim(),
+      customerPhone: customerPhone.trim(),
+      customerEmail: customerEmail?.trim(),
+      paymentMethod,
+      paymentReference,
+    }).catch((e) => console.warn("Telegram notify failed:", e));
 
     return NextResponse.json({
       ok: true,
