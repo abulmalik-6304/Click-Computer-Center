@@ -14,7 +14,6 @@ const ORDERS_SHEET = "Digital_Orders_TBL";
 export const revalidate = 0;
 export const dynamic = "force-dynamic";
 
-// ✅ POST: Approve or Reject order
 export async function POST(
   req: NextRequest,
   { params }: { params: Promise<{ id: string }> }
@@ -47,22 +46,19 @@ export async function POST(
 
     const newStatus = action === "approve" ? "approved" : "rejected";
     row.set("Status", newStatus);
-    row.set(
-      "Approved_By",
-      session.user?.name ?? session.user?.email ?? ""
-    );
+    row.set("Approved_By", session.user?.name ?? session.user?.email ?? "");
     row.set("Approved_At", new Date().toISOString());
     if (notes) row.set("Notes", notes);
 
     await row.save();
 
-    // ✅ Notify via Telegram
     const orderData = {
       id: String(row.get("Order_ID") || ""),
       productTitle: String(row.get("Product_Title") || ""),
       customerName: String(row.get("Customer_Name") || ""),
       customerPhone: String(row.get("Customer_Phone") || ""),
       downloadToken: String(row.get("Download_Token") || ""),
+      customerChatId: String(row.get("Customer_Chat_ID") || ""),
     };
 
     if (action === "approve") {
