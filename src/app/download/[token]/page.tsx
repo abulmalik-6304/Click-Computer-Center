@@ -9,7 +9,13 @@ export const dynamic = "force-dynamic";
 const ORDERS_SHEET = "Digital_Orders_TBL";
 const PRODUCTS_SHEET = "Digital_Products_TBL";
 
-async function getDownloadData(token: string) {
+// ✅ Discriminated union
+type DownloadResult =
+  | { valid: true; order: any; product: any }
+  | { valid: false; reason: string; order?: any }
+  | null;
+
+async function getDownloadData(token: string): Promise<DownloadResult> {
   try {
     const ordersSheet = await getSheet(ORDERS_SHEET);
     const orderRows = await ordersSheet.getRows();
@@ -20,6 +26,8 @@ async function getDownloadData(token: string) {
     if (!order) return null;
 
     const orderStatus = String(order.get("Status") || "").toLowerCase();
+
+    // ─── Invalid state (not approved) ───
     if (orderStatus !== "approved") {
       return {
         valid: false,
@@ -34,13 +42,19 @@ async function getDownloadData(token: string) {
       };
     }
 
+    // ─── Valid — find product ───
     const productSheet = await getSheet(PRODUCTS_SHEET);
     const productRows = await productSheet.getRows();
     const product = productRows.find(
       (r) => String(r.get("Product_ID")) === String(order.get("Product_ID"))
     );
 
-    if (!product) return null;
+    if (!product) {
+      return {
+        valid: false,
+        reason: "Product not found. Please contact support.",
+      };
+    }
 
     const downloadCount = Number(order.get("Download_Count") || 0);
     const downloadLimit = Number(order.get("Download_Limit") || 0);
@@ -72,7 +86,8 @@ async function getDownloadData(token: string) {
         fileSize: Number(product.get("File_Size") || 0),
       },
     };
-  } catch {
+  } catch (e: any) {
+    console.error("getDownloadData error:", e);
     return null;
   }
 }
@@ -92,9 +107,10 @@ export default async function DownloadPage({
   const { token } = await params;
   const data = await getDownloadData(token);
 
+  // ─── Not found ───
   if (!data) notFound();
 
-  // Invalid state
+  // ─── Invalid state ───
   if (!data.valid) {
     return (
       <div className="min-h-screen bg-slate-50 flex items-center justify-center p-4">
@@ -128,9 +144,10 @@ export default async function DownloadPage({
     );
   }
 
-  // Valid — show download button
-  const remaining = data.order.downloadLimit
-    ? data.order.downloadLimit - data.order.downloadCount
+  // ─── Valid — TypeScript knows data.product is defined here ───
+  const { order, product } = data;
+  const remaining = order.downloadLimit
+    ? order.downloadLimit - order.downloadCount
     : null;
 
   return (
@@ -143,7 +160,7 @@ export default async function DownloadPage({
             Your Download is Ready!
           </h1>
           <p className="text-sm text-slate-500 mt-1">
-            Thank you, {data.order.customerName}!
+            Thank you, {order.customerName}!
           </p>
         </div>
 
@@ -152,12 +169,10 @@ export default async function DownloadPage({
           <p className="text-xs text-emerald-700 uppercase tracking-wide">
             Your Product
           </p>
-          <h2 className="font-bold text-slate-900 mt-1">
-            {data.product.title}
-          </h2>
+          <h2 className="font-bold text-slate-900 mt-1">{product.title}</h2>
           <p className="text-xs text-slate-600 mt-1">
-            {data.product.fileType?.toUpperCase() || "FILE"} ·{" "}
-            {formatFileSize(data.product.fileSize)}
+            {product.fileType?.toUpperCase() || "FILE"} ·{" "}
+            {formatFileSize(product.fileSize)}
           </p>
         </div>
 
@@ -165,7 +180,7 @@ export default async function DownloadPage({
         <div className="p-3 bg-slate-50 rounded-lg text-xs space-y-1">
           <p>
             <span className="text-slate-500">Order:</span>{" "}
-            <strong>{data.order.id}</strong>
+            <strong>{order.id}</strong>
           </p>
           {remaining !== null && (
             <p>
