@@ -24,13 +24,13 @@ function getDefaultMaxSizeMB(accept: UploadAcceptType): number {
 function getInputAcceptAttr(accept: UploadAcceptType): string {
   if (accept === "image") return "image/*";
   if (accept === "document") return "image/*,.pdf";
-  return ".pdf,.zip,.rar,.7z,.mp4,.mp3,application/pdf,application/zip,video/mp4,audio/mpeg";
+  return ".pdf,.zip,.rar,.7z,.psd,.mp4,.mp3,application/pdf,application/zip,video/mp4,audio/mpeg";
 }
 
 function getHintText(accept: UploadAcceptType, maxSizeMB: number): string {
   if (accept === "image") return `JPG, PNG, WebP, GIF · Max ${maxSizeMB}MB`;
   if (accept === "document") return `PDF, JPG, PNG, WebP · Max ${maxSizeMB}MB`;
-  return `ZIP, RAR, 7Z, PDF, MP4, MP3 · Max ${maxSizeMB}MB`;
+  return `ZIP, RAR, 7Z, PSD, PDF, MP4, MP3 · Max ${maxSizeMB}MB`;
 }
 
 function isLikelyImage(value: string, accept: UploadAcceptType): boolean {
@@ -38,6 +38,39 @@ function isLikelyImage(value: string, accept: UploadAcceptType): boolean {
   const clean = value.split("?")[0].toLowerCase();
   if (clean.endsWith(".pdf")) return false;
   return true;
+}
+
+function uploadViaXhr(
+  method: "POST" | "PUT",
+  url: string,
+  body: XMLHttpRequestBodyInit,
+  headers: Record<string, string>,
+  onProgress: (pct: number) => void
+): Promise<{ status: number; text: string }> {
+  return new Promise((resolve, reject) => {
+    const xhr = new XMLHttpRequest();
+    xhr.open(method, url);
+
+    Object.entries(headers).forEach(([k, v]) => {
+      xhr.setRequestHeader(k, v);
+    });
+
+    xhr.upload.addEventListener("progress", (e) => {
+      if (e.lengthComputable) {
+        onProgress(Math.round((e.loaded / e.total) * 100));
+      }
+    });
+
+    xhr.addEventListener("load", () => {
+      resolve({ status: xhr.status, text: xhr.responseText || "" });
+    });
+
+    xhr.addEventListener("error", () => {
+      reject(new Error("Network error while uploading"));
+    });
+
+    xhr.send(body);
+  });
 }
 
 export default function ImageUploader({
@@ -68,40 +101,65 @@ export default function ImageUploader({
         return;
       }
 
+      const useDirectR2 = accept === "digital" || file.size > 4 * 1024 * 1024;
+
+      if (useDirectR2) {
+        const presignRes = await fetch("/api/upload/presign", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            fileName: file.name,
+            fileType: file.type || "application/octet-stream",
+            fileSize: file.size,
+            folder,
+            type: accept,
+          }),
+        });
+
+        const presignData = await presignRes.json().catch(() => ({}));
+        if (!presignRes.ok || !presignData.uploadUrl) {
+          setError(presignData.error || `Failed to prepare upload (${presignRes.status})`);
+          setUploading(false);
+          return;
+        }
+
+        const contentType = presignData.contentType || file.type || "application/octet-stream";
+        const putResult = await uploadViaXhr(
+          "PUT",
+          presignData.uploadUrl,
+          file,
+          { "Content-Type": contentType },
+          setProgress
+        );
+
+        if (putResult.status >= 200 && putResult.status < 300) {
+          onChange(presignData.url || presignData.key);
+        } else {
+          setError(`Direct R2 upload failed (HTTP ${putResult.status})`);
+        }
+        setUploading(false);
+        return;
+      }
+
       const formData = new FormData();
       formData.append("file", file);
       formData.append("folder", folder);
       formData.append("type", accept);
 
-      const xhr = new XMLHttpRequest();
+      const postResult = await uploadViaXhr("POST", "/api/upload", formData, {}, setProgress);
+      let data: any = {};
+      try {
+        data = JSON.parse(postResult.text || "{}");
+      } catch {
+        data = {};
+      }
 
-      xhr.upload.addEventListener("progress", (e) => {
-        if (e.lengthComputable) {
-          setProgress(Math.round((e.loaded / e.total) * 100));
-        }
-      });
-
-      xhr.addEventListener("load", () => {
-        try {
-          const data = JSON.parse(xhr.responseText || "{}");
-          if (xhr.status >= 200 && xhr.status < 300 && data.ok && (data.url || data.key)) {
-            onChange(data.url || data.key);
-          } else {
-            setError(data.error || `Upload failed (HTTP ${xhr.status})`);
-          }
-        } catch {
-          setError(xhr.status >= 200 && xhr.status < 300 ? "Invalid server response" : "Upload failed");
-        }
-        setUploading(false);
-      });
-
-      xhr.addEventListener("error", () => {
-        setError("Network error while uploading");
-        setUploading(false);
-      });
-
-      xhr.open("POST", "/api/upload");
-      xhr.send(formData);
+      if (postResult.status >= 200 && postResult.status < 300 && data.ok && (data.url || data.key)) {
+        onChange(data.url || data.key);
+      } else {
+        setError(data.error || `Upload failed (HTTP ${postResult.status})`);
+      }
+      setUploading(false);
     } catch (e: any) {
       setError(e?.message || "Upload failed");
       setUploading(false);
