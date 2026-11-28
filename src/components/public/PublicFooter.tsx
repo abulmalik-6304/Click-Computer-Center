@@ -86,15 +86,6 @@ export default function PublicFooter() {
                 ✈️ Telegram
               </a>
             </div>
-
-            <div className="mt-4 p-3 bg-slate-800 rounded-lg">
-              <p className="text-xs text-slate-400 mb-1">Payment Methods</p>
-              <ul className="text-xs space-y-0.5">
-                <li>Telebirr: {BUSINESS_INFO.payment.telebirr}</li>
-                <li>CBE: {BUSINESS_INFO.payment.cbe}</li>
-                <li>Dashen: {BUSINESS_INFO.payment.dashen}</li>
-              </ul>
-            </div>
           </div>
         </div>
 
