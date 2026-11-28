@@ -4,22 +4,24 @@
 import { useState } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
+import { useLanguage } from "./LanguageProvider";
 import { BUSINESS_INFO } from "@/lib/public-constants";
-
-// ✅ Services + Training ከ menu ተወግደዋል
-const NAV = [
-  { href: "/", label: "Home" },
-  { href: "/store/digital", label: "💎 Digital" },
-  { href: "/store", label: "🛒 Store" },
-  { href: "/contact", label: "Contact" },
-];
 
 export default function PublicNav() {
   const pathname = usePathname();
+  const { lang, setLang, t } = useLanguage();
   const [open, setOpen] = useState(false);
 
+  const NAV = [
+    { href: "/", label: t("nav.home") },
+    { href: "/store", label: t("nav.store") },
+    { href: "/store/digital", label: t("nav.digital") },
+    { href: "/courses", label: t("nav.courses") },
+    { href: "/contact", label: t("nav.contact") },
+  ];
+
   return (
-    <header className="sticky top-0 z-40 bg-white/90 backdrop-blur border-b border-slate-200">
+    <header className="sticky top-0 z-40 bg-white/90 backdrop-blur-md border-b border-slate-200 shadow-sm">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
         <div className="flex items-center justify-between h-16">
           {/* Logo */}
@@ -36,7 +38,7 @@ export default function PublicNav() {
           </Link>
 
           {/* Desktop nav */}
-          <nav className="hidden md:flex items-center gap-1">
+          <nav className="hidden lg:flex items-center gap-1">
             {NAV.map((n) => {
               const active =
                 pathname === n.href ||
@@ -59,17 +61,47 @@ export default function PublicNav() {
 
           {/* Right actions */}
           <div className="flex items-center gap-2">
-            <a
-              href={BUSINESS_INFO.whatsappUrl}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="hidden sm:inline-flex items-center gap-1 px-4 py-2 text-sm font-semibold text-white bg-emerald-600 hover:bg-emerald-700 rounded-lg transition"
+            {/* Language toggle */}
+            <div className="flex items-center bg-slate-100 rounded-lg p-1 text-xs font-semibold">
+              <button
+                onClick={() => setLang("am")}
+                className={`px-2 py-1 rounded ${
+                  lang === "am"
+                    ? "bg-white text-emerald-700 shadow-sm"
+                    : "text-slate-600"
+                }`}
+              >
+                አማ
+              </button>
+              <button
+                onClick={() => setLang("en")}
+                className={`px-2 py-1 rounded ${
+                  lang === "en"
+                    ? "bg-white text-emerald-700 shadow-sm"
+                    : "text-slate-600"
+                }`}
+              >
+                EN
+              </button>
+            </div>
+
+            {/* Auth */}
+            <Link
+              href="/login"
+              className="hidden sm:inline-flex items-center gap-1 px-3 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-100 rounded-lg transition"
             >
-              💬 WhatsApp
-            </a>
+              {t("nav.login")}
+            </Link>
+            <Link
+              href="/signup"
+              className="hidden sm:inline-flex items-center gap-1 px-3 py-2 text-sm font-semibold text-white bg-emerald-600 hover:bg-emerald-700 rounded-lg transition"
+            >
+              {t("nav.signup")}
+            </Link>
+
             <button
               onClick={() => setOpen((s) => !s)}
-              className="md:hidden p-2 text-slate-700 hover:bg-slate-100 rounded-lg"
+              className="lg:hidden p-2 text-slate-700 hover:bg-slate-100 rounded-lg"
               aria-label="Menu"
             >
               {open ? "✕" : "☰"}
@@ -79,33 +111,33 @@ export default function PublicNav() {
 
         {/* Mobile menu */}
         {open && (
-          <div className="md:hidden pb-4 space-y-1 border-t border-slate-100 pt-2">
-            {NAV.map((n) => {
-              const active = pathname === n.href;
-              return (
-                <Link
-                  key={n.href}
-                  href={n.href}
-                  onClick={() => setOpen(false)}
-                  className={`block px-4 py-2.5 rounded-lg text-sm font-medium ${
-                    active
-                      ? "bg-emerald-100 text-emerald-700"
-                      : "text-slate-700 hover:bg-slate-100"
-                  }`}
-                >
-                  {n.label}
-                </Link>
-              );
-            })}
-            <a
-              href={BUSINESS_INFO.whatsappUrl}
-              target="_blank"
-              rel="noopener noreferrer"
-              onClick={() => setOpen(false)}
-              className="block px-4 py-2.5 rounded-lg text-sm font-semibold text-white bg-emerald-600 hover:bg-emerald-700 text-center"
-            >
-              💬 WhatsApp Us
-            </a>
+          <div className="lg:hidden pb-4 space-y-1 border-t border-slate-100 pt-2">
+            {NAV.map((n) => (
+              <Link
+                key={n.href}
+                href={n.href}
+                onClick={() => setOpen(false)}
+                className="block px-4 py-2.5 rounded-lg text-sm font-medium text-slate-700 hover:bg-slate-100"
+              >
+                {n.label}
+              </Link>
+            ))}
+            <div className="grid grid-cols-2 gap-2 pt-2">
+              <Link
+                href="/login"
+                onClick={() => setOpen(false)}
+                className="py-2.5 rounded-lg text-sm font-semibold text-slate-700 bg-slate-100 text-center"
+              >
+                {t("nav.login")}
+              </Link>
+              <Link
+                href="/signup"
+                onClick={() => setOpen(false)}
+                className="py-2.5 rounded-lg text-sm font-semibold text-white bg-emerald-600 text-center"
+              >
+                {t("nav.signup")}
+              </Link>
+            </div>
           </div>
         )}
       </div>
