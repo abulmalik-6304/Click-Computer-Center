@@ -1,4 +1,5 @@
-// src/app/page.tsx
+// src/app/page.tsx — የተዋሃደ ምርጥ ስሪት
+import { LanguageProvider } from "@/components/public/LanguageProvider";
 import PublicNav from "@/components/public/PublicNav";
 import PublicFooter from "@/components/public/PublicFooter";
 import Hero from "@/components/public/Hero";
@@ -10,7 +11,6 @@ import { BUSINESS_INFO, HOMEPAGE_STATS } from "@/lib/public-constants";
 
 export const revalidate = 60;
 
-// ─── Server: fetch data ───
 async function getFeaturedDigital() {
   try {
     const baseUrl = process.env.NEXTAUTH_URL || "http://localhost:3000";
@@ -64,21 +64,16 @@ export default async function HomePage() {
   ]);
 
   return (
-    <>
+    <LanguageProvider>
       <PublicNav />
 
-      {/* ═══════════════════════════════════════════════════════════
-          HERO + SIDEBAR (2-column layout)
-      ═══════════════════════════════════════════════════════════ */}
+      {/* HERO + SIDEBAR */}
       <section className="bg-gradient-to-br from-slate-900 via-emerald-950 to-slate-900 text-white">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-12 lg:py-16">
           <div className="grid lg:grid-cols-3 gap-6">
-            {/* Left: Hero */}
             <div className="lg:col-span-2">
               <Hero />
             </div>
-
-            {/* Right: Product Sidebar (advertising) */}
             <div className="lg:col-span-1">
               <ProductSidebar products={sidebarProducts} />
             </div>
@@ -86,23 +81,17 @@ export default async function HomePage() {
         </div>
       </section>
 
-      {/* ═══════════════════════════════════════════════════════════
-          FEATURED DIGITAL PRODUCTS
-      ═══════════════════════════════════════════════════════════ */}
+      {/* DIGITAL PRODUCTS */}
       {digital.length > 0 && (
         <DigitalProductsPreview products={digital} />
       )}
 
-      {/* ═══════════════════════════════════════════════════════════
-          FEATURED PHYSICAL PRODUCTS
-      ═══════════════════════════════════════════════════════════ */}
+      {/* PHYSICAL PRODUCTS */}
       {physical.length > 0 && (
         <PhysicalProductsPreview products={physical} />
       )}
 
-      {/* ═══════════════════════════════════════════════════════════
-          STATS
-      ═══════════════════════════════════════════════════════════ */}
+      {/* STATS */}
       <section className="bg-slate-50 py-16">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="grid grid-cols-2 sm:grid-cols-4 gap-6 text-center">
@@ -121,9 +110,7 @@ export default async function HomePage() {
         </div>
       </section>
 
-      {/* ═══════════════════════════════════════════════════════════
-          CTA
-      ═══════════════════════════════════════════════════════════ */}
+      {/* CTA */}
       <section className="bg-gradient-to-br from-emerald-600 via-emerald-700 to-slate-900 py-16">
         <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 text-center text-white">
           <h2 className="text-3xl sm:text-4xl font-bold mb-4">
@@ -158,6 +145,6 @@ export default async function HomePage() {
       </section>
 
       <PublicFooter />
-    </>
+    </LanguageProvider>
   );
 }
